@@ -70,6 +70,7 @@ const SECTIONS = [
       <li><b>Today in the league:</b> players born on today's date and flashbacks to the seasons 5, 10 and 15 years ago. (The league data has birth dates but no game dates.)</li>
       <li><b>Public profile:</b> on your profile page, copy a link with your avatar, level, banners, bests and ranks. It's a snapshot of that moment.</li>
       <li><b>Club colours:</b> Settings → Accent colour paints the arcade in your club's colours (adjusted so text stays readable).</li>
+      <li><b>Accessibility:</b> Settings → Contrast → High gives a black-and-white palette with yellow highlights, thicker borders and underlined links (it also turns on by itself when your system asks for more contrast). Screen readers hear page changes, game results, guess clues and online events; every page has a skip link, keyboard focus is always visible, and all games work with the keyboard.</li>
       <li><b>Install the app:</b> Settings → App, or your browser's "Install app" / "Add to Home Screen". Once installed, the single-player games work offline.</li>
     </ul>` },
   { id: "data", ic: "info", title: "Where the data comes from", body: `

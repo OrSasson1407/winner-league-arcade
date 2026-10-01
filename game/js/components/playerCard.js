@@ -30,7 +30,10 @@ export function playerCard(ps, opts = {}) {
   const s = ps.stats;
   const pos = ps.position || p.primary_position || "?";
   const label = `${p.name}, ${pos}, ${teamName(ps.team_id)} ${ps.season}${hideRating ? "" : `, rating ${rating}`}`;
-  return `<div class="pc ${size === "md" ? "" : size} tier-${tier} ${classes}" style="--club:${c1};--club2:${c2}" aria-label="${esc(label)}" ${attrs}>
+  // a card that is itself a button can't contain the profile button: render it next to the card instead
+  const interactive = /role="button"/.test(attrs);
+  const infoBtn = `<button class="pc-info${interactive ? " pc-info-out" : ""}" data-profile="${ps.player_id}" aria-label="Open ${esc(p.name)} profile" title="Player profile">i</button>`;
+  return `${interactive ? '<div class="pc-wrap">' : ""}<div class="pc ${size === "md" ? "" : size} tier-${tier} ${classes}" style="--club:${c1};--club2:${c2}" aria-label="${esc(label)}" ${attrs}>
     <div class="pc-top"><span class="pc-rating">${hideRating ? "?" : rating}</span><span class="pc-pos pos-${posFamily(pos)}">${esc(pos)}${ps.secondary_position ? "/" + esc(ps.secondary_position) : ""}</span></div>
     ${isIsraeli(p) ? `<span class="pc-flag" title="Israeli">${IL_FLAG}</span>` : ""}
     ${badge ? `<span class="pc-badge">${badge}</span>` : ""}
@@ -39,8 +42,8 @@ export function playerCard(ps, opts = {}) {
     <div class="pc-team"><i class="dot" style="background:${c1}"></i><span>${esc(teamName(ps.team_id))} · ${ps.season}</span></div>
     ${hideStats || !s ? "" : `<div class="pc-stats">
       <div><b>${fmt1(s.ppg)}</b><small>PPG</small></div><div><b>${fmt1(s.rpg)}</b><small>RPG</small></div><div><b>${fmt1(s.apg)}</b><small>APG</small></div></div>`}
-    ${info ? `<button class="pc-info" data-profile="${ps.player_id}" aria-label="Open ${esc(p.name)} profile" title="Player profile">i</button>` : ""}
-  </div>`;
+    ${info && !interactive ? infoBtn : ""}
+  </div>${info && interactive ? infoBtn : ""}${interactive ? "</div>" : ""}`;
 }
 
 /** Best season record of a player (highest rating with games), used for profile/hero cards. */

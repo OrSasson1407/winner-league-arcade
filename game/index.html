@@ -22,6 +22,7 @@
       if (s.cb) r.dataset.cb = "1";
       if (s.size && s.size !== "md") r.dataset.size = s.size;
       if (s.motion && s.motion !== "system") r.dataset.motion = s.motion;
+      if (s.contrast === "high" || (s.contrast !== "standard" && matchMedia("(prefers-contrast: more)").matches)) r.dataset.contrast = "high";
       try { // club colours computed last time, so the accent doesn't flash orange first
         var cv = JSON.parse(localStorage.getItem("wla:clubvars") || "null");
         if (cv && s.club && cv.club === s.club && cv.theme === theme) for (var k in cv.vars) r.style.setProperty(k, cv.vars[k]);
@@ -36,7 +37,7 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <a href="#/" class="sr-only" onclick="document.getElementById('view').focus(); return false;">Skip to content</a>
+  <nav class="skip-nav" aria-label="Skip link"><a href="#/" class="skip-link">Skip to content</a></nav>
   <header class="topbar">
     <a href="#/" class="brand" aria-label="Winner League Arcade home">
       <span id="logo-slot" class="logo-slot"></span>

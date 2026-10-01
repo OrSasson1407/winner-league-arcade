@@ -1,11 +1,12 @@
 // Higher or Lower: compare a stat between two real player-seasons.
 // Game types: Classic (one miss ends it), 3 Lives, Time attack (60 s). Pairs: random, or the same player in two seasons.
-import { db, isPlayable, pick, psByKey, psKey } from "../data.js";
+import { db, isPlayable, pick, playersById, psByKey, psKey } from "../data.js";
 import { animate, countUp, html, store, toast, track } from "../ui.js";
 import { playerCard } from "../components/playerCard.js";
 import { sound } from "../lib/fx.js";
 import { icon } from "../lib/icons.js";
 import { emit } from "../lib/achievements.js";
+import { announce } from "../lib/a11y.js";
 import { challengeFor, challengeRng } from "../lib/challenge.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
 
@@ -120,6 +121,7 @@ export function renderHigherLower(root, signal, params, query) {
     if (ok) state.score++;
     else { state.wrongs = (state.wrongs || 0) + 1; if (type !== "time") state.lives--; }
     emit("hl:answer", { ok, type, pairs, mode, score: state.score, tie: a === b, wrongs: state.wrongs });
+    announce(`${ok ? "Correct" : "Wrong"}. ${playersById.get(state.right.player_id)?.name} had ${b.toFixed(c.dec)} ${c.label.toLowerCase()}, versus ${a.toFixed(c.dec)}. Score ${state.score}.`);
     sound.play(ok ? "place" : "bad");
     if (!ok && type !== "time" && state.lives <= 0) { render(); return setTimeout(() => !signal.aborted && gameOver("Game over"), 900); }
     if (!ok && type === "lives") toast(`Wrong! ${state.lives} ${state.lives === 1 ? "life" : "lives"} left`);
@@ -155,7 +157,7 @@ export function renderHigherLower(root, signal, params, query) {
   function statusBar() {
     const best = store.get(bestKey(mode, type, pairs), 0);
     const label = type === "classic" ? "STREAK" : "SCORE";
-    const lives = type === "lives" ? `<span class="lives" aria-label="${state.lives} lives left">${Array.from({ length: LIVES }, (_, i) => `<i class="${i < state.lives ? "" : "lost"}">${icon("flame", { size: 18 })}</i>`).join("")}</span>` : "";
+    const lives = type === "lives" ? `<span class="lives" role="img" aria-label="${state.lives} lives left">${Array.from({ length: LIVES }, (_, i) => `<i class="${i < state.lives ? "" : "lost"}">${icon("flame", { size: 18 })}</i>`).join("")}</span>` : "";
     const clock = type === "time" ? `<div class="timer">${icon("timer", { size: 20 })}<b id="clock">${Math.max(0, Math.ceil((state.endsAt - Date.now()) / 1000))}s</b></div>` : "";
     return `<span class="streak">${label} <span class="led" style="color:var(--accent)">${state.score}</span></span>${lives}${clock}
       <span class="spacer"></span><span class="muted">Best (${TYPES[type]} · ${MODES[mode]}${pairs === "same" ? " · same player" : ""}): ${best}</span>`;

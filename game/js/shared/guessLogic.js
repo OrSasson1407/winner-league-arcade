@@ -51,6 +51,16 @@ export function compare(g, t) {
   };
 }
 
+/** A guess's clues as one sentence (screen readers). */
+export function clueSpeech(cells, cols) {
+  return cols.map(([k, label]) => {
+    const c = cells[k];
+    const verdict = c.c === "g" ? "match" : c.c === "y" ? "close" : "no";
+    const dir = c.arrow ? (c.arrow.includes("↑") ? ", answer is higher" : ", answer is lower") : "";
+    return `${label.replace("*", "")} ${c.v}: ${verdict}${dir}`;
+  }).join(". ");
+}
+
 export const COLS = [
   ["team", "Last team"], ["pos", "Pos"], ["height", "Height"], ["born", "Born"], ["nat", "Nationality"],
   ["jersey", "Jersey"], ["first", "First season*"], ["seasons", "Seasons"], ["clubs", "Clubs"], ["ppg", "Career PPG"], ["peak", "Peak rating"],

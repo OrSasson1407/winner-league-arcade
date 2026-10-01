@@ -15,6 +15,8 @@ import { openBoxScore, openLiveGame } from "../games/draft_live.js";
 import { connect, deadlineFrom, lastStats, latency, myCode, myRecord, netStatus, onNet, send } from "../online/net.js";
 import { GAME_ICONS, GAME_NAMES, addFriend, addHistory, getFriends, getHistory, headToHead, isFriend, refreshFriends, removeFriend, rivals } from "../online/social.js";
 import { buzz, countdown } from "../online/feel.js";
+import { announce } from "../lib/a11y.js";
+import { clueSpeech } from "../shared/guessLogic.js";
 import { drawResultCard } from "../online/card.js";
 import { shareOrDownload } from "../games/draft_card.js";
 import { CHAT, RANKS, cleanCode, rankOf } from "../shared/rating.js";
@@ -105,6 +107,7 @@ export function renderOnline(root, signal, params = []) {
         G = null; phase = "match";
         if (joinCode) history.replaceState(null, "", "#/online");
         sound.play("spin"); buzz(150);
+        if (!m.resumed) announce(`Match found: ${m.opp.name}. ${ONLINE_GAMES[m.game].name}, ${m.mode === "ranked" ? "ranked" : m.mode === "bot" ? "against a bot" : "friendly"}. Starting in 3 seconds.`, { assertive: true });
         stopCount?.(); stopCount = m.resumed ? null : countdown(M.startAt);
         return drawMatch();
       case "opp:away": if (M) { M.oppAway = Date.now() + m.ms; drawOppState(); } return;
@@ -382,6 +385,7 @@ export function renderOnline(root, signal, params = []) {
   function drawMatch() {
     if (!M) return;
     root.innerHTML = html`
+      <h1 class="sr-only">Online ${esc(ONLINE_GAMES[M.game].name)}: ${esc(M.you.name)} vs ${esc(M.opp.name)}</h1>
       ${duelBar()}
       <div id="arena" class="duel-arena"></div>
       <div class="react-bar" role="group" aria-label="Send a reaction">${REACTIONS.map((e) => `<button class="react-btn" data-e="${e}" aria-label="React ${e}">${e}</button>`).join("")}
@@ -455,7 +459,7 @@ export function renderOnline(root, signal, params = []) {
     el.textContent = CHAT[i];
     el.hidden = false;
     el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop");
-    if (who === "opp" && keep === 3500) sound.play("select");
+    if (who === "opp" && keep === 3500) { sound.play("select"); announce(`${M?.opp.name} says: ${CHAT[i]}`); }
     clearTimeout(el._t);
     el._t = setTimeout(() => { el.hidden = true; }, keep);
   }
@@ -499,7 +503,7 @@ export function renderOnline(root, signal, params = []) {
     });
     if (phase === "searching") { const offer = root.querySelector("#bot-offer"); if (offer && offer.hidden && Date.now() - searchStart > 30000) offer.hidden = false; }
   }
-  const timerBar = (deadline, total, urgent = false) => `<div class="duel-timer" data-deadline="${deadline}" data-total="${total}" data-urgent="${urgent ? 1 : 0}"><i></i><b></b></div>`;
+  const timerBar = (deadline, total, urgent = false) => `<div class="duel-timer" role="timer" aria-label="Time left" data-deadline="${deadline}" data-total="${total}" data-urgent="${urgent ? 1 : 0}"><i aria-hidden="true"></i><b></b></div>`;
   const youThem = (seat) => (seat === M.seat ? "You" : esc(M.opp.name));
 
   // ------------------------------------------------------------ Higher or Lower
@@ -516,6 +520,8 @@ export function renderOnline(root, signal, params = []) {
       M.maxBehind = Math.max(M.maxBehind, theirs(m.scores) - mine(m.scores));
       const me = mine(m.answers);
       sound.play(me.ok ? "place" : "bad");
+      const c = HL_CATS[G.cat];
+      announce(`${me.ok ? `Correct, plus ${me.pts}` : me.c ? "Wrong" : "No answer"}. ${playersById.get(G.b.player_id)?.name} had ${c.get(G.b).toFixed(c.dec)}. Score: you ${mine(m.scores)}, ${M.opp.name} ${theirs(m.scores)}.`);
       drawArena(); drawOppState();
     }
   }
@@ -566,6 +572,8 @@ export function renderOnline(root, signal, params = []) {
       G.reveal = m; M.scores = m.scores; G.oppNote = "";
       M.maxBehind = Math.max(M.maxBehind, theirs(m.scores) - mine(m.scores));
       sound.play(m.winner === M.seat ? "place" : "bad");
+      const who = m.winner === null ? "Nobody got it" : m.winner === M.seat ? "You got it, plus 3" : `${M.opp.name} got it first`;
+      announce(`${who}. It was ${playersById.get(m.answer)?.name}. Score: you ${mine(m.scores)}, ${M.opp.name} ${theirs(m.scores)}.`);
       drawArena(); drawOppState();
     }
   }
@@ -617,6 +625,7 @@ export function renderOnline(root, signal, params = []) {
     if (!G || G.t !== "guess") return;
     if (m.t === "guess:row") {
       G.rows.push(m.row); G.solved = m.solved; G.tries[M.seat] = m.tries;
+      announce(m.solved ? `Correct! Solved in ${m.tries}.` : `Guess ${m.tries}, ${playersById.get(m.row.pid)?.name}. ${clueSpeech(m.row.cells, G.cols)}.`);
       sound.play(m.solved ? "win" : "place");
       if (m.solved) confetti(1500);
       return drawArena();
@@ -625,6 +634,7 @@ export function renderOnline(root, signal, params = []) {
       G.opp.colors.push(m.colors); G.opp.solved = m.solved; G.tries[opp()] = m.tries;
       if (m.solved && !G.solved) M.oppSolvedFirst = true;
       setOppNote(m.solved ? "Solved it!" : `${m.tries} ${m.tries === 1 ? "try" : "tries"}`);
+      if (m.solved) announce(`${M.opp.name} solved it in ${m.tries}.`);
       updateScores();
       // only the opponent's board changes, so a half-typed guess isn't lost
       const board = root.querySelector(".opp-board");
@@ -656,7 +666,7 @@ export function renderOnline(root, signal, params = []) {
         <div class="card pad" style="display:grid;gap:12px;min-width:0">
           ${done ? `<p class="og-done">${G.solved ? `${icon("check", { size: 18, cls: "ic-good" })} Solved in ${G.rows.length}! ` : `${icon("x", { size: 18, cls: "ic-bad" })} Out of tries. `}<span class="muted">Waiting for ${esc(M.opp.name)}…</span></p>`
             : `<div class="search guess-search"><input id="g-in" class="input" placeholder="Type a player's name… (${left} ${left === 1 ? "try" : "tries"} left)" autocomplete="off" aria-label="Guess a player"></div>`}
-          <div class="grid-wrap"><table class="gtable wide"><thead><tr><th></th>${G.cols.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead>
+          <div class="grid-wrap"><table class="gtable wide"><thead><tr><th><span class="sr-only">Player</span></th>${G.cols.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead>
             <tbody>${G.rows.slice().reverse().map((row) => `<tr><td class="name"><b>${nameLink(row.pid, playersById.get(row.pid)?.name ?? row.pid)}</b></td>${G.cols.map(([k]) => `<td class="${row.cells[k].c}">${esc(row.cells[k].v)}${row.cells[k].arrow || ""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
           ${G.rows.length ? "" : `<p class="muted" style="margin:0">Green = match, yellow = close, arrows point toward the answer. * First season in this league.</p>`}
         </div>
@@ -679,6 +689,7 @@ export function renderOnline(root, signal, params = []) {
     if (m.last) lastPickToast(m.last);
     if (prevSpin !== `${m.spin.season}|${m.spin.team_id}`) sound.play("spin");
     if (m.turn === M.seat && m.last?.seat !== M.seat) { sound.play("place"); buzz([80, 40, 80]); }
+    if (m.turn === M.seat) announce(`Your pick. ${m.spin.team_name} ${m.spin.season}, ${G.roster.filter((ps) => !G.used.has(ps.player_id)).length} players available. 30 seconds.`);
     drawMatch();
   }
   function lastPickToast(last) {
@@ -722,7 +733,7 @@ export function renderOnline(root, signal, params = []) {
             const taken = G.used.has(ps.player_id);
             // a div, not a button: the card itself contains a button (profile info)
             const off = taken || !myTurn;
-            return `<div class="pool-pick ${G.selected === ps ? "sel" : ""} ${off ? "off" : ""}" data-i="${i}" ${off ? 'aria-disabled="true"' : 'role="button" tabindex="0"'}>${playerCard(ps, { size: "sm", classes: taken ? "taken" : "", badge: taken ? "Taken" : "" })}</div>`;
+            return `<div class="pool-pick ${G.selected === ps ? "sel" : ""} ${off ? "off" : ""}" data-i="${i}">${playerCard(ps, { size: "sm", classes: taken ? "taken" : "", badge: taken ? "Taken" : "", attrs: off ? 'role="button" aria-disabled="true" tabindex="-1"' : `role="button" tabindex="0" aria-pressed="${G.selected === ps}"` })}</div>`;
           }).join("")}</div>
         </div>
         <div class="card pad"><h3>${avatarHtml(M.opp, 24)} ${esc(M.opp.name)}</h3>${slotsHtml(opp(), false)}</div>
@@ -767,6 +778,7 @@ export function renderOnline(root, signal, params = []) {
     emit("online:finish", { game: M.game, result: m.result, reason: m.reason, mode: M.mode, rated: m.rated, streak: m.streak ?? 0,
       bestElo: m.rated ? bestElo : rec ? Math.max(...Object.values(rec.elo)) : 0, comeback: M.comeback, botLevel: M.opp.botLevel });
     if (M.leaving) { M = null; G = null; phase = "lobby"; toast("You left the match. It counts as a loss."); return drawLobby(); }
+    announce(`${m.result === "win" ? "Victory! You win" : m.result === "lose" ? `Defeat. ${M.opp.name} wins` : "Draw"}${sc.text ? `, ${sc.text}` : ""}.${m.rated && m.delta != null ? ` Rating ${m.delta >= 0 ? "up" : "down"} ${Math.abs(m.delta)}.` : ""}`, { assertive: true });
     if (m.result === "win") { confetti(M.comeback ? 4200 : 2600); sound.play("victory"); buzz([100, 50, 100, 50, 220]); }
     else sound.play(m.result === "draw" ? "place" : "defeat");
     drawEnd();

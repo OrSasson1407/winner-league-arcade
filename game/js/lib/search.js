@@ -83,7 +83,7 @@ export function openSearch() {
     dialog.innerHTML = `<div class="sm-head">${icon("search", { size: 20 })}
         <input id="gs-input" type="search" placeholder="Search players, clubs, seasons, pages…" autocomplete="off" aria-label="Search" aria-controls="gs-results" aria-autocomplete="list">
         <kbd>Esc</kbd></div>
-      <div id="gs-results" class="sm-results" role="listbox"></div>
+      <div id="gs-results" class="sm-results" role="listbox" aria-label="Search results" tabindex="0"></div>
       <div class="sm-foot muted"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Ctrl</kbd><kbd>K</kbd> anywhere</span></div>`;
     document.body.appendChild(dialog);
     dialog.addEventListener("click", (e) => { if (e.target === dialog) closeModal(dialog); });

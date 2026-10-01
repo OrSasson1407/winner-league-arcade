@@ -6,7 +6,7 @@ import { applyClubTheme } from "./clubTheme.js";
 import { db } from "../data.js";
 import { installRowHtml, onInstallChange, promptInstall } from "./install.js";
 
-const DEFAULTS = { theme: "dark", cb: false, size: "md", motion: "system", club: "" };
+const DEFAULTS = { theme: "dark", cb: false, size: "md", motion: "system", club: "", contrast: "system" };
 
 export function getSettings() {
   return { ...DEFAULTS, ...store.get("settings", {}) };
@@ -19,7 +19,9 @@ export function applySettings(s = getSettings()) {
   if (s.cb) r.dataset.cb = "1"; else delete r.dataset.cb;
   if (s.size !== "md") r.dataset.size = s.size; else delete r.dataset.size;
   if (s.motion !== "system") r.dataset.motion = s.motion; else delete r.dataset.motion;
-  applyClubTheme(s.club, theme);
+  const high = s.contrast === "high" || (s.contrast === "system" && matchMedia("(prefers-contrast: more)").matches);
+  if (high) r.dataset.contrast = "high"; else delete r.dataset.contrast;
+  applyClubTheme(high ? "" : s.club, theme); // high contrast uses its own fixed palette
 }
 
 function save(patch) {
@@ -50,6 +52,7 @@ export function initSettingsButton(btn) {
       <div class="field"><label for="club-theme">Accent colour</label>
         <div class="club-pick"><span class="club-sw" style="background:var(--accent)"></span>
         <select id="club-theme" class="input"><option value="">Arcade orange (default)</option>${[...db.teams].sort((a, b) => a.canonical_name.localeCompare(b.canonical_name)).map((t) => `<option value="${t.team_id}" ${s.club === t.team_id ? "selected" : ""}>${t.canonical_name}</option>`).join("")}</select></div></div>
+      <div class="field"><label>Contrast</label>${seg("contrast", [["system", "System"], ["standard", "Standard"], ["high", "High"]], s.contrast)}</div>
       <div class="field"><label>Colours</label>${seg("cb", [[false, "Standard"], [true, "Colour-blind safe"]], s.cb)}</div>
       <div class="field"><label>Text size</label>${seg("size", [["sm", "S"], ["md", "M"], ["lg", "L"], ["xl", "XL"]], s.size)}</div>
       <div class="field"><label>Animations</label>${seg("motion", [["system", "System"], ["full", "Full"], ["reduced", "Reduced"]], s.motion)}</div>
@@ -92,4 +95,5 @@ export function initSettingsButton(btn) {
   onInstallChange(() => { if (pop) render(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && pop) { close(); btn.focus(); } });
   matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if (getSettings().theme === "auto") applySettings(); });
+  matchMedia("(prefers-contrast: more)").addEventListener("change", () => { if (getSettings().contrast === "system") applySettings(); });
 }

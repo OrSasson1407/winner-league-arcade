@@ -49,7 +49,7 @@ export function renderToday(root, signal) {
         <h2 style="margin:0 0 12px">${icon("star")} Born on ${now.getDate()} ${MONTHS[now.getMonth()]}</h2>
         ${today.length ? html`<div class="card-grid browse today-grid">${today.slice(0, 12).map(({ p, s }) => {
           const b = bestSeason(s.records);
-          return html`<div class="today-card">${b ? playerCard(b, { size: "sm", attrs: `data-profile="${p.player_id}" role="button" tabindex="0"` }) : ""}
+          return html`<div class="today-card">${b ? playerCard(b, { size: "sm", info: false, attrs: `data-profile="${p.player_id}" role="button" tabindex="0" aria-label="${esc(p.name)}: open profile"` }) : ""}
             <div class="today-age"><b>${age(p) >= 0 ? `Turns ${age(p)}` : ""}</b><small class="muted">${s.seasonsPlayed} season${s.seasonsPlayed === 1 ? "" : "s"} · ${s.teams.length} club${s.teams.length === 1 ? "" : "s"} · ${s.totalGames} GP</small></div></div>`;
         }).join("")}</div>${today.length > 12 ? `<p class="muted">…and ${today.length - 12} more.</p>` : ""}`
           : `<p class="muted">No league player in the records was born on this date. Here's who's coming up this week.</p>`}

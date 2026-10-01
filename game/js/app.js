@@ -21,6 +21,7 @@ import { renderDaily } from "./pages/daily.js";
 import { renderPublicProfile } from "./pages/publicProfile.js";
 import { initSocial } from "./online/social.js";
 import { initInstall } from "./lib/install.js";
+import { initA11y, pageChanged } from "./lib/a11y.js";
 import { retroSync } from "./lib/achievements.js";
 import { closeSilently } from "./lib/modal.js";
 import { openSearch } from "./lib/search.js";
@@ -93,6 +94,7 @@ function route() {
   try {
     if (!render) problemScreen(view, { title: "Page not found", message: "This link doesn't match any page in the arcade." });
     else render(view, controller.signal, params.map(decodeURIComponent), query);
+    pageChanged(view);
   } catch (err) {
     console.error(err);
     problemScreen(view, { title: "Something went wrong", message: "This page hit an unexpected error. Trying again usually fixes it.", detail: String(err?.stack || err) });
@@ -169,6 +171,7 @@ applySettings();
 retroSync(); // unlock achievements already earned by existing records
 initSocial(); // online presence + friend invites anywhere in the arcade
 initInstall(); // installable app + offline play
+initA11y(); // screen reader announcements, heading order, keyboard access
 initSettingsButton(document.getElementById("settings-btn"));
 window.addEventListener("hashchange", route);
 route();

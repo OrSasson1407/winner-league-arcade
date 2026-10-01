@@ -46,7 +46,7 @@
   --line-soft: #e9dfcf;
   --text: #1b2233;
   --muted: #5b6477;
-  --accent: #d9600a;
+  --accent: #b34e06;
   --accent2: #ef8a3a;
   --accent-ink: #ffffff;
   --sel: #fde6d0;
@@ -1316,3 +1316,73 @@ dialog.confirm-modal p { margin: 8px 0 0; line-height: 1.5; }
 .pub-tiers { font-size: 13px; }
 @media (max-width: 860px) { .rec-layout { grid-template-columns: 1fr; } .rec-cats { position: static; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
 @media (max-width: 760px) { .home-duo, .daily-top, .pub-grid { grid-template-columns: 1fr; } .pub-who h1 { font-size: 30px; } }
+
+/* =====================================================================
+   v11: accessibility: skip link, high contrast mode, forced colours
+   ===================================================================== */
+.skip-nav { position: absolute; left: 0; top: 0; z-index: 100; }
+.skip-link { position: absolute; left: 12px; top: -60px; padding: 10px 16px; border-radius: 10px; font-weight: 800; text-decoration: none;
+  background: var(--accent); color: var(--accent-ink); transition: top .15s; }
+.skip-link:focus { top: 10px; }
+#view:focus { outline: none; }
+.pc-wrap { position: relative; min-width: 0; }
+.pc-wrap > .pc { height: 100%; }
+.pool-pick:focus-within .pc, .pc-cell:focus-within .pc { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+/* ---------------- high contrast (Settings → Contrast, or the system's "more contrast") */
+:root[data-contrast="high"] {
+  --bg: #000000; --bg2: #000000; --card: #000000; --card2: #0a0a0a; --card3: #161616;
+  --line: #ffffff; --line-soft: #9a9a9a; --text: #ffffff; --muted: #e6e6e6;
+  --accent: #ffd400; --accent2: #ffe55c; --accent-ink: #000000; --sel: #3d3300; --sel-line: #ffd400;
+  --good: #3ddc84; --close: #ffd400; --bad: #ff6b6b; --tile: #d6d6d6; --tile-ink: #000000;
+  --chart: #ffd400; --spot: transparent; --spot2: transparent; --court: transparent; --topbar: #000000;
+  --shadow: none; --r-mid: #ffffff; --r-low: #e6e6e6;
+  --pos-g: #7ab8ff; --pos-f: #4fe0a8; --pos-c: #ff9a6b;
+  --cmp-a: #7ab8ff; --cmp-b: #ff9a6b;
+}
+:root[data-contrast="high"][data-theme="light"] {
+  --bg: #ffffff; --bg2: #ffffff; --card: #ffffff; --card2: #f5f5f5; --card3: #e8e8e8;
+  --line: #000000; --line-soft: #555555; --text: #000000; --muted: #1f1f1f;
+  --accent: #8a3a00; --accent2: #a64700; --accent-ink: #ffffff; --sel: #ffe2c4; --sel-line: #8a3a00;
+  --good: #006b2e; --close: #7a4f00; --bad: #b00020; --tile: #3a3a3a; --tile-ink: #ffffff;
+  --chart: #8a3a00; --topbar: #ffffff; --r-mid: #000000; --r-low: #1f1f1f;
+  --pos-g: #0b4fa8; --pos-f: #006b45; --pos-c: #a33a00;
+  --cmp-a: #0b4fa8; --cmp-b: #a33a00;
+}
+[data-contrast="high"] body::before, [data-contrast="high"] body::after { display: none; }
+[data-contrast="high"] *, [data-contrast="high"] *::before, [data-contrast="high"] *::after { text-shadow: none !important; box-shadow: none !important; }
+[data-contrast="high"] .card, [data-contrast="high"] .pc, [data-contrast="high"] .pc.tier-legend,
+[data-contrast="high"] .fact-card, [data-contrast="high"] .recap-hero, [data-contrast="high"] .pub-hero, [data-contrast="high"] .ch-incoming,
+[data-contrast="high"] .ch-banner, [data-contrast="high"] .settings-pop, [data-contrast="high"] dialog, [data-contrast="high"] .invite-pop {
+  background: var(--card) !important; border: 2px solid var(--line) !important; }
+[data-contrast="high"] .pc.tier-legend { border-image: none; }
+[data-contrast="high"] .pc.tier-legend::after { display: none; }
+[data-contrast="high"] .btn, [data-contrast="high"] .seg button, [data-contrast="high"] .icon-btn, [data-contrast="high"] .input,
+[data-contrast="high"] .choice, [data-contrast="high"] .ch-game, [data-contrast="high"] .slot { border: 2px solid var(--line) !important; }
+[data-contrast="high"] .btn.primary, [data-contrast="high"] .seg button.on, [data-contrast="high"] .btn:hover { background: var(--accent) !important; color: var(--accent-ink) !important; border-color: var(--accent) !important; }
+[data-contrast="high"] .btn.ghost { background: transparent; }
+[data-contrast="high"] a:not(.btn):not(.card):not(.brand):not(.skip-link):not(.daily-card):not(.daily-home) { text-decoration: underline; text-underline-offset: 3px; }
+[data-contrast="high"] .link-name { text-decoration: underline; }
+[data-contrast="high"] :focus-visible { outline: 4px solid var(--accent) !important; outline-offset: 3px; }
+[data-contrast="high"] .muted, [data-contrast="high"] small { color: var(--muted); }
+[data-contrast="high"] .topbar { border-bottom: 2px solid var(--line); }
+[data-contrast="high"] .tabbar { border-top: 2px solid var(--line); }
+[data-contrast="high"] .tabbar a.active, [data-contrast="high"] .topnav a.active { background: var(--accent); color: var(--accent-ink); }
+[data-contrast="high"] .progress, [data-contrast="high"] .duel-timer { border: 2px solid var(--line); background: var(--bg); }
+[data-contrast="high"] .progress i, [data-contrast="high"] .duel-timer i { background: var(--accent) !important; }
+[data-contrast="high"] .duel-timer b { color: var(--text); mix-blend-mode: difference; }
+[data-contrast="high"] .gtable td { border: 2px solid var(--line); }
+[data-contrast="high"] .gtable td.g, [data-contrast="high"] .gtable td.y, [data-contrast="high"] .gtable td.n { color: #000; }
+[data-contrast="high"][data-theme="light"] .gtable td.g, [data-contrast="high"][data-theme="light"] .gtable td.y, [data-contrast="high"][data-theme="light"] .gtable td.n { color: #fff; }
+[data-contrast="high"] .rank-badge { background: var(--card); border: 2px solid var(--rk); }
+[data-contrast="high"] .og-word.win { color: var(--accent); }
+
+/* ---------------- Windows high contrast / forced colours */
+@media (forced-colors: active) {
+  .btn, .seg button, .icon-btn, .choice, .ch-game, .slot, .card, .pc, .input { border: 1px solid CanvasText; }
+  .btn.primary, .seg button.on, .ch-game.on, .choice.right { border: 3px solid Highlight; }
+  .progress i, .duel-timer i, .dcal.l4, .dh-dots i.on { background: Highlight; forced-color-adjust: none; }
+  .gtable td.g { outline: 3px solid Highlight; }
+  .gtable td.y { outline: 2px dashed Highlight; }
+  :focus-visible { outline: 3px solid Highlight; }
+}

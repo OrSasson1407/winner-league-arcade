@@ -9,6 +9,7 @@ import { posFamily, posPill } from "../lib/icons.js";
 import { myName } from "../lib/me.js";
 import { confirmDialog } from "../lib/modal.js";
 import { emit } from "../lib/achievements.js";
+import { announce } from "../lib/a11y.js";
 import { challengeFor, challengeRng } from "../lib/challenge.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
 import { clubColors } from "../lib/clubs.js";
@@ -302,6 +303,7 @@ export function renderDraft(root, signal, params, query) {
     S.used.add(ps.player_id);
     sound.play("place");
     if (byCpu) toast(`${t.name} picked ${playersById.get(ps.player_id).name} (${slot})`);
+    else announce(`${playersById.get(ps.player_id).name} placed at ${slot === SIXTH ? "sixth man" : slot}, value ${t.slots[slot].value}.`);
     S.at++;
     beginTurn();
   }

@@ -7,7 +7,8 @@ import { icon } from "../lib/icons.js";
 import { closeModal, openModal } from "../lib/modal.js";
 import { emit } from "../lib/achievements.js";
 import { challengeFor, challengeRng } from "../lib/challenge.js";
-import { COLS, attrs, compare, pool } from "../shared/guessLogic.js";
+import { COLS, attrs, clueSpeech, compare, pool } from "../shared/guessLogic.js";
+import { announce } from "../lib/a11y.js";
 import { markDaily } from "../lib/daily.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
 
@@ -121,6 +122,9 @@ export function renderGuess(root, signal, params, query) {
     if (state.over) endGame();
     persist();
     render();
+    const g = playersById.get(id);
+    announce(id === state.target.player_id ? `${g.name} is correct! Solved in ${tries()}.`
+      : `Guess ${state.guesses.length}, ${g.name}. ${clueSpeech(compare(attrs(g), state.t), COLS)}.${state.over ? ` Out of tries. It was ${state.target.name}.` : ""}`);
   }
 
   function buyHint(id) {
@@ -224,7 +228,7 @@ export function renderGuess(root, signal, params, query) {
             <span class="tries" aria-live="polite">${Array.from({ length: MAX_GUESSES }, (_, i) => `<i class="${i < state.guesses.length ? "used" : i >= allowed() ? "hint" : ""}"></i>`).join("")}<span class="muted">${left} left</span></span></div>`}
         ${hintsHtml()}
         <div class="legend"><span><i style="background:var(--good)"></i>Match</span><span><i style="background:var(--close)"></i>Close (height ±4 cm, born ±2, jersey ±2, PPG ±2, peak ±3, ±1 club or season, adjacent position, shared nationality, played for that team)</span><span>↑ ↓ the answer is higher / lower</span></div>
-        <div class="grid-wrap"><table class="gtable wide"><thead><tr><th></th>${COLS.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="grid-wrap"><table class="gtable wide"><thead><tr><th><span class="sr-only">Player</span></th>${COLS.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>
         <p class="muted" style="font-size:12px;margin:0">*First season in the database (it starts in 2010-11). Jersey = most-worn number. Peak = best game rating in one season.</p>
       </div>`;
     root.querySelector("#mode").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { mode = b.dataset.m; start(); } }, { signal });
