@@ -1,0 +1,16 @@
+{
+  "name": "winner-league-arcade",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Winner League Arcade: Israeli Premier League games with online 1v1",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
+  }
+}

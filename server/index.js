@@ -1,0 +1,258 @@
+// Winner League Arcade server: serves the game (static files) and runs online 1v1 at /ws.
+//   npm install && npm start            → http://localhost:5173/game/
+// Environment: PORT (default 5173), HOST (default 127.0.0.1 locally, 0.0.0.0 when PORT is set by a host).
+import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import zlib from "node:zlib";
+import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { WebSocketServer } from "ws";
+import { GAMES, createEngine } from "./duels.js";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const PORT = Number(process.env.PORT) || Number(process.argv[2]) || 5173;
+const HOST = process.env.HOST || (process.env.PORT || process.argv.includes("--lan") ? "0.0.0.0" : "127.0.0.1");
+const RECONNECT_GRACE = 20000;
+
+// ---------------------------------------------------------------- static files
+const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json",
+  ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".ico": "image/x-icon", ".txt": "text/plain", ".webmanifest": "application/manifest+json" };
+const TEXT = new Set([".html", ".js", ".mjs", ".css", ".json", ".svg", ".txt", ".webmanifest"]);
+const ALLOWED = ["game", "src"]; // only the game and its data helpers are public
+const gzCache = new Map(); // file -> { mtime, body }
+
+const server = http.createServer((req, res) => {
+  let url;
+  try { url = decodeURIComponent(new URL(req.url, "http://x").pathname); } catch { res.writeHead(400).end(); return; }
+  if (url === "/" || url === "/game") { res.writeHead(302, { Location: "/game/" }).end(); return; }
+  if (url === "/health") { res.writeHead(200, { "Content-Type": "text/plain" }).end("ok"); return; }
+  let file = path.normalize(path.join(ROOT, url));
+  const rel = path.relative(ROOT, file);
+  if (rel.startsWith("..") || path.isAbsolute(rel) || !ALLOWED.includes(rel.split(path.sep)[0])) { res.writeHead(404).end("Not found"); return; }
+  fs.stat(file, (err, st) => {
+    if (!err && st.isDirectory()) { file = path.join(file, "index.html"); st = fs.existsSync(file) ? fs.statSync(file) : null; }
+    if (err || !st) { res.writeHead(404).end("Not found"); return; }
+    const ext = path.extname(file).toLowerCase();
+    const headers = { "Content-Type": (TYPES[ext] || "application/octet-stream") + (TEXT.has(ext) ? "; charset=utf-8" : ""), "Cache-Control": "no-store, must-revalidate" };
+    if (TEXT.has(ext) && /\bgzip\b/.test(req.headers["accept-encoding"] || "")) {
+      let c = gzCache.get(file);
+      if (!c || c.mtime !== st.mtimeMs) { c = { mtime: st.mtimeMs, body: zlib.gzipSync(fs.readFileSync(file), { level: 6 }) }; gzCache.set(file, c); }
+      res.writeHead(200, { ...headers, "Content-Encoding": "gzip", "Content-Length": c.body.length }).end(c.body);
+    } else {
+      res.writeHead(200, { ...headers, "Content-Length": st.size });
+      fs.createReadStream(file).pipe(res);
+    }
+  });
+});
+
+// ---------------------------------------------------------------- online lobby
+const clients = new Map(); // sid -> client
+const queues = new Map(GAMES.map((g) => [g, null])); // game -> waiting client
+const invites = new Map(); // code -> { host, game, at }
+const rooms = new Map(); // id -> room
+const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+const send = (c, msg) => { if (c?.ws?.readyState === 1) c.ws.send(JSON.stringify(msg)); };
+const clean = (s, n) => String(s ?? "").replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, n);
+const publicProfile = (c) => ({ name: c.profile.name, icon: c.profile.icon, color: c.profile.color, frame: c.profile.frame, level: c.profile.level });
+
+function newCode() {
+  for (;;) {
+    const code = Array.from(crypto.randomBytes(5), (b) => CODE_CHARS[b % CODE_CHARS.length]).join("");
+    if (!invites.has(code)) return code;
+  }
+}
+
+function stats() {
+  const waiting = Object.fromEntries(GAMES.map((g) => [g, queues.get(g) ? 1 : 0]));
+  return { t: "stats", online: [...clients.values()].filter((c) => c.ws).length, playing: [...rooms.values()].filter((r) => !r.over).length * 2, waiting };
+}
+let statsTimer = null;
+function pushStats() { // batched: at most one broadcast per second
+  if (statsTimer) return;
+  statsTimer = setTimeout(() => {
+    statsTimer = null;
+    const s = stats();
+    for (const c of clients.values()) if (!c.room) send(c, s);
+  }, 1000);
+}
+
+function leaveLobby(c) {
+  for (const [g, w] of queues) if (w === c) queues.set(g, null);
+  for (const [code, inv] of invites) if (inv.host === c) invites.delete(code);
+}
+
+// ---------------------------------------------------------------- rooms
+function createRoom(game, a, b) {
+  leaveLobby(a); leaveLobby(b);
+  const room = {
+    id: crypto.randomUUID(), game, players: [a, b], timers: new Set(), over: false, rematch: new Set(), seq: 0, away: [null, null],
+    send(seat, msg) { send(this.players[seat], msg); },
+    broadcast(msg) { this.players.forEach((p) => send(p, msg)); },
+    timer(fn, ms) { const t = setTimeout(() => { this.timers.delete(t); if (!this.over) fn(); }, ms); this.timers.add(t); return t; },
+    clearTimers() { this.timers.forEach(clearTimeout); this.timers.clear(); },
+    names() { return this.players.map((p) => p.profile.name); },
+    finish(res) { finishRoom(this, res); },
+  };
+  rooms.set(room.id, room);
+  a.room = room; b.room = room;
+  startMatch(room);
+  pushStats();
+}
+
+function startMatch(room) {
+  room.over = false;
+  room.rematch.clear();
+  room.seq++;
+  room.engine = createEngine(room.game, room, `${room.id}-${room.seq}`);
+  room.players.forEach((p, seat) => send(p, { t: "match", room: room.id, game: room.game, seat, you: publicProfile(p), opp: publicProfile(room.players[1 - seat]), seq: room.seq }));
+  // a short countdown before the first round
+  room.timer(() => room.engine.start(), 3000);
+}
+
+function finishRoom(room, { winner, scores, reason, detail = null }) {
+  if (room.over) return;
+  room.over = true;
+  room.clearTimers();
+  room.players.forEach((p, seat) => send(p, {
+    t: "end", game: room.game, seat, winner, scores, reason, detail,
+    result: winner === null ? "draw" : winner === seat ? "win" : "lose",
+  }));
+  pushStats();
+}
+
+function forfeit(room, loserSeat, reason) {
+  if (room.over) return;
+  finishRoom(room, { winner: 1 - loserSeat, scores: null, reason });
+}
+
+function closeRoom(room, leaver) {
+  room.clearTimers();
+  rooms.delete(room.id);
+  room.players.forEach((p) => {
+    if (p.room === room) p.room = null;
+    if (p !== leaver) send(p, { t: "opp:left" });
+  });
+  pushStats();
+}
+
+function seatOf(c) { return c.room ? c.room.players.indexOf(c) : -1; }
+
+// ---------------------------------------------------------------- messages
+function onMessage(c, m) {
+  switch (m.t) {
+    case "ping": return send(c, { t: "pong" });
+    case "profile":
+      c.profile = { name: clean(m.name, 18) || "Guest", icon: clean(m.icon, 12) || "ball", color: /^#[0-9a-f]{6}$/i.test(m.color) ? m.color : "#ff7a1a",
+        frame: clean(m.frame, 12) || "none", level: Math.max(1, Math.min(999, Number(m.level) || 1)) };
+      return;
+    case "stats": return send(c, stats());
+    case "queue": {
+      if (!GAMES.includes(m.game) || c.room) return;
+      leaveLobby(c);
+      const other = queues.get(m.game);
+      if (other && other !== c && other.ws) { queues.set(m.game, null); return createRoom(m.game, other, c); }
+      queues.set(m.game, c);
+      send(c, { t: "queued", game: m.game });
+      return pushStats();
+    }
+    case "invite": {
+      if (!GAMES.includes(m.game) || c.room) return;
+      leaveLobby(c);
+      const code = newCode();
+      invites.set(code, { host: c, game: m.game, at: Date.now() });
+      return send(c, { t: "invited", code, game: m.game });
+    }
+    case "join": {
+      const code = clean(m.code, 8).toUpperCase();
+      const inv = invites.get(code);
+      if (!inv || !inv.host.ws) return send(c, { t: "error", code: "bad-code", msg: "That invite code isn't active. Ask your friend for a new one." });
+      if (inv.host === c) return send(c, { t: "error", code: "own-code", msg: "That's your own invite. Send it to a friend." });
+      if (c.room) return;
+      invites.delete(code);
+      return createRoom(inv.game, inv.host, c);
+    }
+    case "cancel": leaveLobby(c); send(c, { t: "cancelled" }); return pushStats();
+    case "leave": {
+      const room = c.room;
+      if (!room) return;
+      if (!room.over) forfeit(room, seatOf(c), "forfeit");
+      return closeRoom(room, c);
+    }
+    case "rematch": {
+      const room = c.room;
+      if (!room || !room.over) return;
+      room.rematch.add(c);
+      if (room.rematch.size === 2) { room.players.reverse(); return startMatch(room); } // swap seats
+      return send(room.players[1 - seatOf(c)], { t: "opp:rematch" });
+    }
+    case "react": { // quick emoji reactions between opponents
+      const room = c.room;
+      const EMOJI = ["👏", "🔥", "😅", "😮", "💪", "🏀"];
+      if (room && EMOJI.includes(m.e)) send(room.players[1 - seatOf(c)], { t: "react", e: m.e });
+      return;
+    }
+    default:
+      if (c.room && !c.room.over && typeof m.t === "string") c.room.engine.onMessage(seatOf(c), m);
+  }
+}
+
+// ---------------------------------------------------------------- connections
+const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 16 * 1024 });
+
+wss.on("connection", (ws, req) => {
+  const url = new URL(req.url, "http://x");
+  const sid = /^[a-zA-Z0-9-]{8,64}$/.test(url.searchParams.get("sid") || "") ? url.searchParams.get("sid") : crypto.randomUUID();
+  let c = clients.get(sid);
+  if (c?.ws && c.ws !== ws) { try { c.ws.close(4000, "replaced"); } catch {} }
+  if (!c) { c = { sid, ws: null, profile: { name: "Guest", icon: "ball", color: "#ff7a1a", frame: "none", level: 1 }, room: null, goneTimer: null }; clients.set(sid, c); }
+  c.ws = ws;
+  ws.alive = true;
+  clearTimeout(c.goneTimer);
+  send(c, { t: "welcome", sid, ...stats() });
+
+  // back in a running match after a dropped connection
+  if (c.room) {
+    const room = c.room, seat = seatOf(c);
+    send(c, { t: "match", room: room.id, game: room.game, seat, you: publicProfile(c), opp: publicProfile(room.players[1 - seat]), seq: room.seq, resumed: true });
+    room.send(1 - seat, { t: "opp:back" });
+    if (!room.over) room.engine.resync(seat);
+  }
+
+  ws.on("pong", () => { ws.alive = true; });
+  ws.on("message", (data) => {
+    let m;
+    try { m = JSON.parse(data); } catch { return; }
+    if (m && typeof m === "object") { try { onMessage(c, m); } catch (e) { console.error("message error", m.t, e); } }
+  });
+  ws.on("close", () => {
+    if (c.ws !== ws) return; // replaced by a newer connection
+    c.ws = null;
+    leaveLobby(c);
+    pushStats();
+    const room = c.room;
+    if (room) room.send(1 - seatOf(c), { t: "opp:away", ms: RECONNECT_GRACE });
+    c.goneTimer = setTimeout(() => {
+      if (c.ws) return;
+      if (c.room) { if (!c.room.over) forfeit(c.room, seatOf(c), "disconnect"); closeRoom(c.room, c); }
+      clients.delete(sid);
+      pushStats();
+    }, RECONNECT_GRACE);
+  });
+});
+
+// drop dead connections (sleeping laptops, lost Wi-Fi)
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!ws.alive) { ws.terminate(); continue; }
+    ws.alive = false;
+    ws.ping();
+  }
+  const old = Date.now() - 60 * 60 * 1000; // invites live for an hour
+  for (const [code, inv] of invites) if (inv.at < old) invites.delete(code);
+}, 25000);
+
+server.listen(PORT, HOST, () => {
+  console.log(`Winner League Arcade: http://localhost:${PORT}/game/  (online play at ws://…/ws, close this window to stop)`);
+});

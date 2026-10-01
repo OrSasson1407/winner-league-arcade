@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Winner League Arcade</title>
+  <meta name="color-scheme" content="dark light">
+  <script>
+    // Apply saved display settings before first paint (no theme flash).
+    (function () {
+      var s = {};
+      try { s = JSON.parse(localStorage.getItem("wla:settings") || "{}"); } catch (e) {}
+      var r = document.documentElement;
+      var theme = s.theme || "dark";
+      if (theme === "auto") theme = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      r.dataset.theme = theme;
+      if (s.cb) r.dataset.cb = "1";
+      if (s.size && s.size !== "md") r.dataset.size = s.size;
+      if (s.motion && s.motion !== "system") r.dataset.motion = s.motion;
+    })();
+  </script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23ff7a1a'/%3E%3Cpath d='M2 32h60M32 2v60M12 10c12 10 12 34 0 44M52 10c-12 10-12 34 0 44' stroke='%233b1d06' stroke-width='3' fill='none'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- Fonts load in the background so a slow connection never blocks the page. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <a href="#/" class="sr-only" onclick="document.getElementById('view').focus(); return false;">Skip to content</a>
+  <header class="topbar">
+    <a href="#/" class="brand" aria-label="Winner League Arcade home">
+      <span id="logo-slot" class="logo-slot"></span>
+      <span class="wordmark"><span class="wm-top">WINNER LEAGUE</span><span class="wm-ribbon">ARCADE</span></span>
+    </a>
+    <nav class="topnav" aria-label="Main">
+      <a href="#/games" data-nav="games">Games</a>
+      <a href="#/players" data-nav="players">Players</a>
+      <a href="#/clubs" data-nav="clubs">Clubs</a>
+      <a href="#/seasons" data-nav="seasons">Seasons</a>
+      <a href="#/online" data-nav="online">Online</a>
+      <a href="#/achievements" data-nav="achievements">Achievements</a>
+    </nav>
+    <div class="top-actions">
+      <button class="icon-btn" id="search-btn" aria-label="Search (Ctrl+K)" title="Search (Ctrl+K)"></button>
+      <a class="icon-btn" id="help-btn" href="#/help" data-nav="help" aria-label="Help center" title="Help center"></a>
+      <button class="icon-btn" id="motion-btn" aria-label="Pause all animations" title="Pause all animations"></button>
+      <button class="icon-btn" id="settings-btn" aria-label="Display settings" aria-haspopup="dialog" title="Settings"></button>
+      <a class="me-btn" id="me-btn" href="#/me" aria-label="Your profile" title="Your profile"></a>
+    </div>
+  </header>
+
+  <main id="view" tabindex="-1">
+    <div class="loader" id="loader">
+      <div class="bounce-stage" aria-hidden="true">
+        <span class="bounce-ball"></span>
+        <span class="bounce-shadow"></span>
+        <span class="bounce-floor"></span>
+      </div>
+      <p>Loading 17 seasons of Winner League history…</p>
+    </div>
+  </main>
+
+  <nav class="tabbar" id="tabbar" aria-label="Sections"></nav>
+
+  <footer class="foot">
+    Data: official Israeli Basketball Premier League site (bsl.org.il), 2010-11 – 2026-27.
+    Ratings are game-generated, not official.
+    · <a href="#/help">Help center</a> · <a href="#/help" id="shortcuts-link">Keyboard shortcuts (?)</a>
+  </footer>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script>
+    // Explain instead of spinning forever when the game can't start.
+    function showLoadProblem(msg) {
+      var l = document.getElementById("loader");
+      if (l) l.innerHTML = '<p style="max-width:540px;margin:40px auto;padding:22px 26px;border-radius:14px;text-align:center;' +
+        'line-height:1.6;font:16px/1.6 system-ui,sans-serif;background:#16213a;color:#eef2fa;border:1px solid #ff7a1a">' + msg + "</p>";
+    }
+    if (location.protocol !== "http:" && location.protocol !== "https:") {
+      showLoadProblem("The game can't run when <b>index.html</b> is opened directly from the folder (the browser blocks it).<br><br>" +
+        "Double-click <b>start_game.bat</b> in the <b>israel-bsl-database</b> folder instead. It opens the game at <b>http://localhost:5173/game/</b>.");
+    } else {
+      setTimeout(function () {
+        if (document.getElementById("loader")) showLoadProblem("The game is taking too long to load. Make sure the <b>start_game.bat</b> window is still open, then refresh this page (F5).");
+      }, 10000);
+    }
+  </script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
