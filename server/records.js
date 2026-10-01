@@ -1,0 +1,125 @@
+// Online records: ELO per game, wins/losses, win streak, and the leaderboard.
+// There is no database: records live in memory (saved to server/data/records.json when the disk
+// keeps it), and every player also keeps a copy as a token signed with the server's secret.
+// After a restart (e.g. a free host waking up) the player's browser sends the token back and the
+// record is restored; the signature means it can't be edited in the browser.
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { RATED_GAMES, START_ELO, eloUpdate, friendCode, rankOf } from "../game/js/shared/rating.js";
+
+const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "data");
+const FILE = path.join(DIR, "records.json");
+
+function loadSecret() {
+  if (process.env.WLA_SECRET) return process.env.WLA_SECRET;
+  const f = path.join(DIR, ".secret");
+  try { return fs.readFileSync(f, "utf8").trim(); } catch {}
+  const s = crypto.randomBytes(32).toString("hex");
+  try { fs.mkdirSync(DIR, { recursive: true }); fs.writeFileSync(f, s); } catch {}
+  return s;
+}
+const SECRET = loadSecret();
+const sign = (body) => crypto.createHmac("sha256", SECRET).update(body).digest("base64url");
+
+const records = new Map(); // sid -> record
+let dirty = false;
+
+export function blankRecord(sid) {
+  const per = (v) => Object.fromEntries(RATED_GAMES.map((g) => [g, v]));
+  return { v: 1, sid, elo: per(START_ELO), peak: per(START_ELO), w: per(0), l: per(0), d: per(0), streak: 0, best: 0, n: 0, ts: 0, profile: null };
+}
+
+export function tokenOf(rec) {
+  const { profile, ...data } = rec;
+  const body = Buffer.from(JSON.stringify(data)).toString("base64url");
+  return `${body}.${sign(body)}`;
+}
+
+function readToken(token, sid) {
+  if (typeof token !== "string" || token.length > 4000) return null;
+  const [body, sig] = token.split(".");
+  if (!body || !sig) return null;
+  const good = sign(body);
+  if (sig.length !== good.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null;
+  try {
+    const rec = JSON.parse(Buffer.from(body, "base64url").toString());
+    return rec.sid === sid && rec.v === 1 ? rec : null;
+  } catch { return null; }
+}
+
+/** The player's record, restored from their token when it's newer than what the server has. */
+export function recordFor(sid, token) {
+  let rec = records.get(sid);
+  const fromToken = token ? readToken(token, sid) : null;
+  if (fromToken && (!rec || fromToken.n > rec.n)) { rec = { ...blankRecord(sid), ...fromToken, profile: rec?.profile ?? null }; records.set(sid, rec); dirty = true; }
+  if (!rec) { rec = blankRecord(sid); records.set(sid, rec); }
+  return rec;
+}
+
+export function setProfile(rec, profile) {
+  rec.profile = { ...profile, code: friendCode(rec.sid) };
+  dirty = true;
+}
+
+/** Apply a rated result. winner: 0 | 1 | null (draw). Returns the rating change per seat. */
+export function applyResult(game, recs, winner) {
+  const [a, b] = recs;
+  const games = (r) => r.w[game] + r.l[game] + r.d[game];
+  const before = [a.elo[game], b.elo[game]];
+  const score = winner === null ? 0.5 : winner === 0 ? 1 : 0;
+  const [na, nb] = eloUpdate(before[0], before[1], score, games(a), games(b));
+  [[a, na], [b, nb]].forEach(([r, elo], seat) => {
+    r.elo[game] = elo;
+    r.peak[game] = Math.max(r.peak[game], elo);
+    if (winner === null) r.d[game]++;
+    else if (winner === seat) { r.w[game]++; r.streak++; r.best = Math.max(r.best, r.streak); }
+    else { r.l[game]++; r.streak = 0; }
+    r.n++; r.ts = Date.now();
+  });
+  dirty = true;
+  return [na - before[0], nb - before[1]];
+}
+
+/** Public summary for the browser (ranks, records), plus the signed token to keep. */
+export function recordMsg(rec) {
+  return { t: "record", token: tokenOf(rec), rec: { elo: rec.elo, peak: rec.peak, w: rec.w, l: rec.l, d: rec.d, streak: rec.streak, best: rec.best, code: friendCode(rec.sid) } };
+}
+
+export function leaderboard(game, meSid) {
+  const rows = [...records.values()].filter((r) => r.profile && (game === "all"
+    ? RATED_GAMES.some((g) => r.w[g] + r.l[g] + r.d[g] > 0)
+    : r.w[game] + r.l[game] + r.d[game] > 0));
+  const score = (r) => (game === "all" ? RATED_GAMES.reduce((s, g) => s + r.w[g], 0) : r.elo[game]);
+  rows.sort((x, y) => score(y) - score(x));
+  const view = (r, i) => {
+    const w = game === "all" ? RATED_GAMES.reduce((s, g) => s + r.w[g], 0) : r.w[game];
+    const l = game === "all" ? RATED_GAMES.reduce((s, g) => s + r.l[g], 0) : r.l[game];
+    const best = game === "all" ? Math.max(...RATED_GAMES.map((g) => r.elo[g])) : r.elo[game];
+    return { pos: i + 1, name: r.profile.name, icon: r.profile.icon, color: r.profile.color, frame: r.profile.frame, level: r.profile.level,
+      code: r.profile.code, elo: best, rank: rankOf(best).id, w, l, streak: r.streak, me: r.sid === meSid };
+  };
+  const top = rows.slice(0, 25).map(view);
+  const myIdx = rows.findIndex((r) => r.sid === meSid);
+  return { t: "leaders", game, rows: top, me: myIdx >= 25 ? view(rows[myIdx], myIdx) : null, total: rows.length };
+}
+
+/** Find a known player by friend code. */
+export function findByCode(code) {
+  for (const r of records.values()) if (r.profile?.code === code) return r;
+  return null;
+}
+
+// ---------------------------------------------------------------- persistence (best effort)
+try {
+  const saved = JSON.parse(fs.readFileSync(FILE, "utf8"));
+  for (const r of saved) if (r?.sid) records.set(r.sid, { ...blankRecord(r.sid), ...r });
+} catch {}
+export function saveRecords() {
+  if (!dirty) return;
+  dirty = false;
+  try { fs.mkdirSync(DIR, { recursive: true }); fs.writeFileSync(FILE, JSON.stringify([...records.values()].filter((r) => r.n > 0 || r.profile))); } catch {}
+}
+setInterval(saveRecords, 30000).unref();
+for (const sig of ["SIGINT", "SIGTERM"]) process.once(sig, () => { saveRecords(); process.exit(0); });

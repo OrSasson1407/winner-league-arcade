@@ -68,11 +68,11 @@ export function drawTeamCard(team, summary) {
   return c;
 }
 
-export async function shareOrDownload(canvas, fileName) {
+export async function shareOrDownload(canvas, fileName, title = "My All-Time Draft team") {
   const blob = await new Promise((r) => canvas.toBlob(r, "image/png"));
   const file = new File([blob], fileName, { type: "image/png" });
   if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: "My All-Time Draft team" }); return "shared"; } catch { /* fall back to download */ }
+    try { await navigator.share({ files: [file], title }); return "shared"; } catch { /* fall back to download */ }
   }
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);

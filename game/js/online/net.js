@@ -6,8 +6,10 @@ import { getMe, myName } from "../lib/me.js";
 import { levelInfo } from "../lib/progress.js";
 
 const listeners = new Set();
-let ws = null, status = "idle", retry = 0, retryTimer = null, wanted = false, outbox = [];
+let ws = null, status = "idle", retry = 0, retryTimer = null, wanted = false, persistent = false, outbox = [];
 export let lastStats = null;
+export let myCode = null;
+let rtt = 120; // round-trip time to the server (ms), measured with pings
 
 function sid() {
   let s = store.get("online:sid");
@@ -29,10 +31,22 @@ export function onNet(fn, signal) {
 
 export function profileMsg() {
   const me = getMe();
-  return { t: "profile", name: myName("Guest"), icon: me.icon, color: me.color, frame: me.frame, level: levelInfo().level };
+  return { t: "profile", name: myName("Guest"), icon: me.icon, color: me.color, frame: me.frame, level: levelInfo().level, rec: store.get("online:token") || undefined };
 }
 
-export function connect() {
+/** Ratings and record as last confirmed by the server ({ elo, peak, w, l, d, streak, best, code }). */
+export const myRecord = () => store.get("online:rec", null);
+
+/** Time left on a server timer, corrected for the trip from the server (clock sync). */
+export const latency = () => rtt;
+export const deadlineFrom = (ms) => Date.now() + Math.max(0, ms - rtt / 2);
+
+/**
+ * connect(): keep a connection (online page). connect({ quiet: true }) at app start: try to connect for
+ * friends' invites and presence, but give up silently if this page has no online server behind it.
+ */
+export function connect({ quiet = false } = {}) {
+  if (!quiet) persistent = true;
   wanted = true;
   if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
   clearTimeout(retryTimer);
@@ -51,12 +65,18 @@ export function connect() {
     let m;
     try { m = JSON.parse(e.data); } catch { return; }
     if (m.t === "stats" || m.t === "welcome") lastStats = m;
+    if (m.t === "welcome") myCode = m.code;
+    if (m.t === "record") { store.set("online:token", m.token); store.set("online:rec", m.rec); myCode = m.rec.code; }
+    if (m.t === "pong" && m.c) rtt = 0.7 * rtt + 0.3 * (Date.now() - m.c);
     fire(m);
   };
   ws.onclose = (e) => {
     ws = null;
     if (e.code === 4000) { setStatus("replaced"); wanted = false; return; } // opened in another tab
-    if (!opened && retry >= 2) { setStatus("unavailable"); } // no server behind this page (e.g. the Python server)
+    if (!opened && retry >= 2) { // no server behind this page (e.g. the Python server)
+      setStatus("unavailable");
+      if (!persistent) { wanted = false; return; }
+    }
     fail();
   };
   ws.onerror = () => {};
@@ -78,4 +98,6 @@ export function send(m) {
 document.addEventListener("me-changed", () => { if (ws?.readyState === 1) ws.send(JSON.stringify(profileMsg())); });
 // mobile browsers freeze background tabs; reconnect as soon as the tab is visible again
 document.addEventListener("visibilitychange", () => { if (!document.hidden && wanted && !ws) { retry = 0; connect(); } });
-setInterval(() => { if (ws?.readyState === 1) ws.send('{"t":"ping"}'); }, 20000);
+const ping = () => { if (ws?.readyState === 1) ws.send(JSON.stringify({ t: "ping", c: Date.now() })); };
+setInterval(ping, 10000);
+onNet((m) => { if (m.t === "status" && m.status === "online") setTimeout(ping, 300); });

@@ -10,6 +10,7 @@ export const GAMES = {
   guess: { name: "Guess the Player", short: "GUESS", color: "#9085e9" },
   hl: { name: "Higher or Lower", short: "HI · LO", color: "#199e70" },
   career: { name: "Career Path", short: "CAREER", color: "#3987e5", soon: true },
+  online: { name: "Online 1v1", short: "ONLINE", color: "#e66767" },
 };
 export const TIERS = { bronze: "Bronze", silver: "Silver", gold: "Gold", legend: "Legend" };
 
@@ -84,6 +85,28 @@ export const DEFS = [
   { id: "h_tie", game: "hl", tier: "bronze", icon: "whistle", title: "Dead Heat", desc: "Answer a pair where both numbers are exactly equal.", on: "hl:answer", test: (e) => e.tie },
   { id: "h_grind", game: "hl", tier: "gold", icon: "medal", title: "Grinder", desc: "500 correct answers in total.", on: "hl:answer", test: (e, c) => n(c, "hlCorrect") >= 500, prog: prog("hlCorrect", 500) },
   { id: "h_regular", game: "hl", tier: "bronze", icon: "calendar", title: "Regular", desc: "Play 25 games.", on: "hl:over", test: (e, c) => n(c, "hlGames") >= 25, prog: prog("hlGames", 25) },
+
+  // ---------------------------------------------------------------- Online 1v1 (bot games don't count unless stated)
+  { id: "o_first", game: "online", tier: "bronze", icon: "globe", title: "First Online Win", desc: "Win an online match against a real player.", on: "online:finish", test: (e, c) => n(c, "onWins") >= 1, prog: prog("onWins", 1) },
+  { id: "o_10", game: "online", tier: "silver", icon: "medal", title: "Online Regular", desc: "Win 10 online matches.", on: "online:finish", test: (e, c) => n(c, "onWins") >= 10, prog: prog("onWins", 10) },
+  { id: "o_50", game: "online", tier: "gold", icon: "trophy", title: "Online Star", desc: "Win 50 online matches.", on: "online:finish", test: (e, c) => n(c, "onWins") >= 50, prog: prog("onWins", 50) },
+  { id: "o_100", game: "online", tier: "legend", icon: "crown", title: "Online Legend", desc: "Win 100 online matches.", on: "online:finish", test: (e, c) => n(c, "onWins") >= 100, prog: prog("onWins", 100) },
+  { id: "o_games", game: "online", tier: "bronze", icon: "clock", title: "Showing Up", desc: "Play 25 online matches.", on: "online:finish", test: (e, c) => n(c, "onGames") >= 25, prog: prog("onGames", 25) },
+  { id: "o_streak3", game: "online", tier: "bronze", icon: "flame", title: "Heating Up", desc: "Win 3 ranked matches in a row.", on: "online:finish", test: (e) => e.rated && e.streak >= 3 },
+  { id: "o_streak10", game: "online", tier: "gold", icon: "rocket", title: "Unbeatable", desc: "Win 10 ranked matches in a row.", on: "online:finish", test: (e) => e.rated && e.streak >= 10 },
+  { id: "o_silver", game: "online", tier: "bronze", icon: "shield", title: "Silver Rank", desc: "Reach Silver rank (1100) in any game.", on: "online:finish", test: (e) => (e.bestElo ?? 0) >= 1100 },
+  { id: "o_gold", game: "online", tier: "silver", icon: "star", title: "Gold Rank", desc: "Reach Gold rank (1250) in any game.", on: "online:finish", test: (e) => (e.bestElo ?? 0) >= 1250 },
+  { id: "o_plat", game: "online", tier: "gold", icon: "bolt", title: "Platinum Rank", desc: "Reach Platinum rank (1400) in any game.", on: "online:finish", test: (e) => (e.bestElo ?? 0) >= 1400 },
+  { id: "o_champ", game: "online", tier: "legend", icon: "crown", title: "Champion Rank", desc: "Reach Champion rank (1700) in any game.", on: "online:finish", test: (e) => (e.bestElo ?? 0) >= 1700 },
+  { id: "o_comeback", game: "online", tier: "silver", icon: "refresh", title: "Comeback Kid", desc: "Win a match after trailing your opponent.", on: "online:finish", test: (e) => e.mode !== "bot" && e.result === "win" && e.comeback },
+  { id: "o_hl", game: "online", tier: "silver", icon: "chart", title: "Speed Duelist", desc: "Win 10 Higher or Lower duels.", on: "online:finish", test: (e, c) => n(c, "onWin_hl") >= 10, prog: prog("onWin_hl", 10) },
+  { id: "o_guess", game: "online", tier: "silver", icon: "search", title: "Race Winner", desc: "Win 10 Guess the Player races.", on: "online:finish", test: (e, c) => n(c, "onWin_guess") >= 10, prog: prog("onWin_guess", 10) },
+  { id: "o_career", game: "online", tier: "silver", icon: "arrowRight", title: "Quick Buzzer", desc: "Win 10 Career Path buzzer quizzes.", on: "online:finish", test: (e, c) => n(c, "onWin_career") >= 10, prog: prog("onWin_career", 10) },
+  { id: "o_draft", game: "online", tier: "silver", icon: "trophy", title: "War Room", desc: "Win 10 head-to-head drafts.", on: "online:finish", test: (e, c) => n(c, "onWin_draft") >= 10, prog: prog("onWin_draft", 10) },
+  { id: "o_allfour", game: "online", tier: "gold", icon: "games", title: "Four-Sport Athlete", desc: "Win an online match in each of the four games.", on: "online:finish", test: (e, c) => ["hl", "guess", "career", "draft"].every((g) => n(c, "onWin_" + g) >= 1), prog: (c) => [["hl", "guess", "career", "draft"].filter((g) => n(c, "onWin_" + g) >= 1).length, 4] },
+  { id: "o_friend", game: "online", tier: "bronze", icon: "users", title: "Squad Up", desc: "Add a friend by their player code.", on: "online:friend", test: (e) => e.count >= 1 },
+  { id: "o_friendly", game: "online", tier: "bronze", icon: "heart", title: "Friendly Fire", desc: "Play 5 matches with friends (invites).", on: "online:finish", test: (e, c) => n(c, "onFriendly") >= 5, prog: prog("onFriendly", 5) },
+  { id: "o_bot", game: "online", tier: "gold", icon: "target", title: "Machine Breaker", desc: "Beat the Legend Bot (hard).", on: "online:finish", test: (e) => e.mode === "bot" && e.botLevel === "hard" && e.result === "win" },
 ];
 export const byId = new Map(DEFS.map((d) => [d.id, d]));
 
@@ -105,6 +128,11 @@ function updateCounters(event, e) {
   }
   if (event === "hl:answer" && e.ok) inc("hlCorrect");
   if (event === "hl:over") inc("hlGames");
+  if (event === "online:finish" && e.mode !== "bot") {
+    inc("onGames");
+    if (e.mode === "friendly") inc("onFriendly");
+    if (e.result === "win") { inc("onWins"); inc("onWin_" + e.game); }
+  }
   store.set("ach:counters", c);
   return c;
 }

@@ -52,7 +52,11 @@ export function xpFor(event, e) {
     case "hl:answer": return e.ok ? 3 : 0;
     case "hl:over": return 10;
     case "career:finish": return 10 + e.score * 3;
-    case "online:finish": return e.result === "win" ? 60 : e.result === "draw" ? 35 : 20;
+    case "online:finish": {
+      if (e.mode === "bot") return e.result === "win" ? 30 : e.result === "draw" ? 20 : 10;
+      const streakBonus = e.rated && e.result === "win" ? Math.min(50, 10 * Math.max(0, (e.streak || 0) - 1)) : 0;
+      return (e.result === "win" ? 60 : e.result === "draw" ? 35 : 20) + streakBonus;
+    }
     default: return 0;
   }
 }
@@ -81,6 +85,11 @@ export const FRAMES = [
   { id: "champion", name: "Champion", req: "Win a simulated title (Title Run)", ok: (l, u) => u.ids.has("d_title") },
   { id: "court", name: "Hardwood", req: "Unlock 15 achievements", ok: (l, u) => u.count >= 15 },
   { id: "legend", name: "Legend", req: "Unlock any Legend achievement", ok: (l, u) => u.legend >= 1 },
+  { id: "rk-silver", name: "Silver Rank", req: "Reach Silver rank online", ok: (l, u) => u.ids.has("o_silver") },
+  { id: "rk-gold", name: "Gold Rank", req: "Reach Gold rank online", ok: (l, u) => u.ids.has("o_gold") },
+  { id: "rk-plat", name: "Platinum Rank", req: "Reach Platinum rank online", ok: (l, u) => u.ids.has("o_plat") },
+  { id: "rk-champ", name: "Champion Rank", req: "Reach Champion rank online", ok: (l, u) => u.ids.has("o_champ") },
+  { id: "rk-streak", name: "Hot Streak", req: "Win 10 ranked matches in a row", ok: (l, u) => u.ids.has("o_streak10") },
 ];
 
 export function frameUnlocked(frame, level, unlockedDefs) {

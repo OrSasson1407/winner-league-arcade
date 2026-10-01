@@ -52,7 +52,10 @@ const SECTIONS = [
       <li><b>Career Path:</b> 10 careers, 20 seconds each. The first right answer takes 3 points; a wrong answer locks you out of that round.</li>
       <li><b>All-Time Draft:</b> a snake draft from shared spins, 6 picks each (PG to C plus a sixth man), 30 seconds per pick (the best fit is picked for you when time runs out), one re-spin each. Then your two teams play a simulated game you can watch live.</li>
     </ul>
-    <p>Leaving a running match counts as a loss. If your connection drops you have about 20 seconds to come back. Online wins give 60 XP, draws 35, losses 20.</p>` },
+    <p><b>Ranked</b> (Find a ranked match): every game has its own rating, starting at 1000. Beating a stronger player earns more. Ranks: Bronze, Silver 1100, Gold 1250, Platinum 1400, Diamond 1550, Champion 1700. Matchmaking looks for someone near your rating and widens the search the longer you wait. <b>Friendly</b> games (invites) and <b>bot</b> games don't change your rating.</p>
+    <p><b>Friends:</b> everyone has a 6-character player code (Friends tab). Add friends by code or from the end screen, see who's online, and invite them: they get a pop-up anywhere in the arcade. <b>History</b> keeps your last 60 matches and your rivals' head-to-head records.</p>
+    <p>No one around? After 30 seconds of searching you can play a bot (Rookie, Veteran or Legend). Quick chat sends preset lines only.</p>
+    <p>Leaving a running match counts as a loss. If your connection drops you have about 20 seconds to come back. Online wins give 60 XP plus a streak bonus in ranked (up to +50), draws 35, losses 20; bot games give less. Your rating is stored on the server and as a signed copy in your browser, so it comes back even after the server restarts.</p>` },
   { id: "challenge", ic: "users", title: "Challenges, compare and recap", body: `
     <ul>
       <li><b>Challenge a friend:</b> create a code (e.g. WLA-G3K9F2A) for any game. Everyone who enters it gets exactly the same game: the same mystery player, the same pairs, the same spins or the same careers. Play, then send your result. Challenges never overwrite your saved games.</li>

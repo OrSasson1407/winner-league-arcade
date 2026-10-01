@@ -15,6 +15,7 @@ import { renderCompare } from "./pages/compare.js";
 import { renderRecap } from "./pages/recap.js";
 import { renderChallenge } from "./pages/challenge.js";
 import { renderOnline } from "./pages/online.js";
+import { initSocial } from "./online/social.js";
 import { retroSync } from "./lib/achievements.js";
 import { closeSilently } from "./lib/modal.js";
 import { openSearch } from "./lib/search.js";
@@ -157,6 +158,7 @@ document.addEventListener("click", (e) => {
 
 applySettings();
 retroSync(); // unlock achievements already earned by existing records
+initSocial(); // online presence + friend invites anywhere in the arcade
 initSettingsButton(document.getElementById("settings-btn"));
 window.addEventListener("hashchange", route);
 route();
