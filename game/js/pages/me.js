@@ -4,6 +4,7 @@ import { icon } from "../lib/icons.js";
 import { DEFS, bannerSvg, totals, unlockedMap } from "../lib/achievements.js";
 import { FRAMES, frameUnlocked, levelInfo } from "../lib/progress.js";
 import { esc, html, store, toast } from "../ui.js";
+import { profileLink } from "./publicProfile.js";
 
 export function renderMe(root, signal) {
   const draw = () => {
@@ -46,7 +47,12 @@ export function renderMe(root, signal) {
               <div class="fact"><small>Career Path best</small><b>${store.get("career:best", 0)}/30</b></div>
               <div class="fact"><small>Games played</small><b>${plays.reduce((a, b) => a + b, 0)}</b></div>
             </div></div>
+          <div class="card pad share-prof">
+            <div><b>${icon("link", { size: 16 })} Your public profile</b><small class="muted">A link with your avatar, level, banners and bests. It's a snapshot: share a new link after you improve.</small></div>
+            <div class="row"><button class="btn primary" id="share-prof">${icon("link", { size: 15 })} Copy profile link</button><a class="btn" id="view-prof" href="#">${icon("eye", { size: 15 })} Preview</a></div>
+          </div>
           <div class="card pad me-links">
+            <a class="btn" href="#/daily">${icon("calendar", { size: 16 })} Daily challenges</a>
             <a class="btn" href="#/recap">${icon("calendar", { size: 16 })} Monthly recap</a>
             <a class="btn" href="#/online">${icon("globe", { size: 16 })} Online 1v1</a>
             <a class="btn" href="#/challenge">${icon("users", { size: 16 })} Challenge a friend</a>
@@ -65,6 +71,11 @@ export function renderMe(root, signal) {
           </div>
         </div>
       </div>`;
+    root.querySelector("#share-prof").addEventListener("click", async () => {
+      const link = profileLink();
+      try { await navigator.clipboard.writeText(link); toast("Profile link copied: share it anywhere"); } catch { toast("Couldn't copy: use Preview and copy the address"); }
+    }, { signal });
+    root.querySelector("#view-prof").addEventListener("click", (e) => { e.preventDefault(); location.hash = profileLink().split("#")[1]; }, { signal });
     let t;
     root.querySelector("#nick").addEventListener("input", (e) => {
       clearTimeout(t);

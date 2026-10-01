@@ -52,6 +52,7 @@ export function xpFor(event, e) {
     case "hl:answer": return e.ok ? 3 : 0;
     case "hl:over": return 10;
     case "career:finish": return 10 + e.score * 3;
+    case "daily:done": return 15 + Math.min(35, 5 * Math.max(0, (e.streak || 1) - 1));
     case "online:finish": {
       if (e.mode === "bot") return e.result === "win" ? 30 : e.result === "draw" ? 20 : 10;
       const streakBonus = e.rated && e.result === "win" ? Math.min(50, 10 * Math.max(0, (e.streak || 0) - 1)) : 0;

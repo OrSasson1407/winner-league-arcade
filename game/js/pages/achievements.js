@@ -20,7 +20,7 @@ export function renderAchievements(root, signal, params, query = {}) {
     const tierCount = (t) => done.filter((d) => d.tier === t).length;
     root.innerHTML = html`
       <div class="game-head"><div><h1>${icon("trophy", { size: 30 })} Hall of Banners</h1>
-        <p>Every achievement earns a banner for your rafters. ${DEFS.length} to collect so far, 20 per game.</p></div></div>
+        <p>Every achievement earns a banner for your rafters. ${DEFS.length} to collect so far.</p></div></div>
       <div class="card rafters-card">
         <div class="rafters-head">
           <div class="ach-ring" style="--p:${pct}"><b class="led">${done.length}</b><small>of ${DEFS.length}</small></div>

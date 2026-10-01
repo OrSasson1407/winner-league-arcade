@@ -63,6 +63,15 @@ const SECTIONS = [
       <li><b>Monthly recap:</b> games played, XP, level-ups, best scores, banners and your most-viewed player for any month, with a shareable image.</li>
       <li><b>Fact of the day</b> on the home page comes straight from the data.</li>
     </ul>` },
+  { id: "daily", ic: "calendar", title: "Daily challenges, records and today", body: `
+    <ul>
+      <li><b>Daily challenges:</b> four puzzles a day (Draft, Guess, Higher or Lower, Career), the same for everyone. Your first result counts. Finish at least one a day to keep your streak; there are banners for 7, 30 and 100-day streaks.</li>
+      <li><b>All-time records:</b> career totals, career averages (100+ games) and single-season bests since 2010-11, with filters for Israelis, club and position. Totals are per-game averages × games played.</li>
+      <li><b>Today in the league:</b> players born on today's date and flashbacks to the seasons 5, 10 and 15 years ago. (The league data has birth dates but no game dates.)</li>
+      <li><b>Public profile:</b> on your profile page, copy a link with your avatar, level, banners, bests and ranks. It's a snapshot of that moment.</li>
+      <li><b>Club colours:</b> Settings → Accent colour paints the arcade in your club's colours (adjusted so text stays readable).</li>
+      <li><b>Install the app:</b> Settings → App, or your browser's "Install app" / "Add to Home Screen". Once installed, the single-player games work offline.</li>
+    </ul>` },
   { id: "data", ic: "info", title: "Where the data comes from", body: `
     <p>Players, teams and regular-season stats from 2010-11 to 2026-27 come from the official Israeli Basketball Premier League site (bsl.org.il). Missing values are left empty, never invented. 2026-27 is in progress: rosters only, no stats yet. Playoff and cup games are not included in the stats.</p>` },
   { id: "privacy", ic: "shield", title: "Your data and settings", body: `

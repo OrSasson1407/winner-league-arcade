@@ -1219,3 +1219,100 @@ dialog.confirm-modal p { margin: 8px 0 0; line-height: 1.5; }
 .avatar-chip.frame-rk-champ { position: relative; box-shadow: 0 0 0 2px var(--card), 0 0 16px rgba(225, 99, 194, .7); }
 .avatar-chip.frame-rk-champ::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; z-index: -1; background: conic-gradient(#e163c2, #ffb020, #e163c2, #5f9ff0, #e163c2); animation: spin 3s linear infinite; }
 .avatar-chip.frame-rk-streak { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px #ff3d00, 0 0 0 6px #ffb020, 0 0 16px 2px rgba(255, 80, 0, .7); animation: flameGlow 1s ease-in-out infinite alternate; }
+
+/* =====================================================================
+   v10: club themes, today, records, daily, public profile, app install
+   ===================================================================== */
+.club-pick { display: flex; gap: 8px; align-items: center; }
+.club-pick select { flex: 1; min-width: 0; }
+.club-sw { width: 22px; height: 22px; border-radius: 6px; flex: none; border: 2px solid var(--line); }
+.install-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+/* home */
+.home-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+.daily-home { display: flex; gap: 14px; align-items: center; padding: 14px 18px; text-decoration: none; color: inherit; transition: transform .15s, border-color .15s; }
+.daily-home:hover { transform: translateY(-2px); border-color: var(--accent); }
+.daily-home > div { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.daily-home small { font-size: 11px; font-weight: 800; letter-spacing: 1.5px; color: var(--accent); }
+.daily-home b { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dh-flame { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-size: 24px; flex: none; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--card2)); }
+.dh-dots { display: flex; gap: 5px; }
+.dh-dots i { width: 22px; height: 6px; border-radius: 3px; background: var(--bg2); border: 1px solid var(--line); }
+.dh-dots i.on { background: var(--accent); border-color: var(--accent); }
+.daily-home.full { border-color: var(--accent); }
+/* daily hub */
+.daily-top { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.daily-streak { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; align-items: center; }
+.daily-streak .ds-flame { font-size: 44px; grid-row: span 2; filter: grayscale(1); opacity: .5; }
+.daily-streak.hot .ds-flame { filter: none; opacity: 1; animation: bob 2s ease-in-out infinite; }
+.daily-streak b { font-size: 40px; color: var(--accent); margin-right: 8px; }
+.daily-streak span:not(.ds-flame) { font-weight: 800; }
+.daily-today { display: grid; gap: 6px; }
+.daily-today b { font-size: 36px; color: var(--accent); }
+.daily-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.daily-card { display: flex; gap: 12px; align-items: center; padding: 14px 16px; text-decoration: none; color: inherit; transition: transform .15s, border-color .15s; }
+.daily-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+.daily-card > div { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.daily-card small { font-size: 12px; }
+.dc-ic { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; flex: none; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--card2)); }
+.daily-card.done { border-color: color-mix(in srgb, var(--good) 60%, transparent); }
+.daily-card.done .dc-ic { color: #fff; background: var(--good); }
+.daily-cal { display: grid; grid-template-columns: repeat(14, 1fr); gap: 5px; max-width: 560px; margin: 8px 0; }
+.dcal { aspect-ratio: 1; border-radius: 5px; background: var(--bg2); border: 1px solid var(--line); display: inline-block; }
+.dcal.l1 { background: color-mix(in srgb, var(--accent) 30%, var(--bg2)); } .dcal.l2 { background: color-mix(in srgb, var(--accent) 55%, var(--bg2)); }
+.dcal.l3 { background: color-mix(in srgb, var(--accent) 78%, var(--bg2)); } .dcal.l4 { background: var(--accent); }
+.dcal.today { outline: 2px solid var(--text); outline-offset: 1px; }
+.dcal-legend { display: flex; gap: 4px; align-items: center; font-size: 12px; }
+.dcal-legend .dcal { width: 14px; }
+.daily-banner { border-color: var(--accent); }
+/* today */
+.today-grid { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.today-card { display: grid; gap: 8px; }
+.today-card [data-profile] { cursor: pointer; }
+.today-age { display: grid; text-align: center; }
+.today-age b { color: var(--accent); }
+.today-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin: 14px 0; }
+.today-week li { display: flex; gap: 8px; align-items: center; }
+.tw-date { min-width: 52px; font-weight: 800; color: var(--accent); font-size: 13px; }
+.today-week li .muted { margin-left: auto; font-size: 12px; }
+.flash-card small { font-weight: 800; letter-spacing: 1.5px; color: var(--accent); }
+.flash-card h3 a { color: inherit; }
+.flash-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 14px; }
+.flash-list .muted:first-child { display: inline-block; min-width: 76px; font-size: 12px; }
+/* records */
+.rec-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; align-items: start; }
+.rec-cats { display: grid; gap: 12px; position: sticky; top: 80px; }
+.rec-group { display: grid; gap: 2px; }
+.rec-group small { font-size: 11px; font-weight: 800; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; margin-bottom: 2px; }
+.rec-group button { text-align: left; padding: 6px 10px; border-radius: 8px; border: 0; background: none; color: var(--text); font: inherit; font-size: 14px; }
+.rec-group button:hover { background: var(--bg2); }
+.rec-group button.on { background: var(--sel); color: var(--accent); font-weight: 700; }
+.rec-filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.rec-filters select { width: auto; min-width: 180px; }
+.chk { display: inline-flex; gap: 6px; align-items: center; font-weight: 600; cursor: pointer; }
+.rec-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.rec-list li { position: relative; display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 10px; overflow: hidden; }
+.rec-list li:nth-child(odd) { background: var(--bg2); }
+.rec-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: var(--w); background: color-mix(in srgb, var(--accent) 60%, transparent); }
+.rec-pos { font-weight: 800; text-align: center; color: var(--muted); }
+.rec-list li.top .rec-pos { font-size: 18px; }
+.rec-who { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.rec-who small { width: 100%; font-size: 12px; }
+.rec-val { font-size: 18px; color: var(--accent); }
+/* me: share profile */
+.share-prof { display: grid; gap: 10px; }
+.share-prof > div:first-child { display: grid; gap: 4px; }
+/* public profile */
+.pub-hero { display: flex; gap: 22px; align-items: center; padding: 22px; margin-bottom: 16px; flex-wrap: wrap;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 18%, var(--card)), var(--card) 60%); }
+.pub-who { flex: 1; min-width: 220px; display: grid; gap: 4px; }
+.pub-who small:first-child { font-weight: 800; letter-spacing: 2px; }
+.pub-who h1 { margin: 0; font-size: 40px; }
+.pub-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.pub-ranks { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 8px; }
+.pub-ranks li { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.pub-banners { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin-top: 12px; }
+.pub-banners figure { margin: 0; display: grid; justify-items: center; gap: 4px; }
+.pub-banners figcaption { font-size: 10px; font-weight: 800; letter-spacing: 1px; color: var(--muted); }
+.pub-tiers { font-size: 13px; }
+@media (max-width: 860px) { .rec-layout { grid-template-columns: 1fr; } .rec-cats { position: static; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); } }
+@media (max-width: 760px) { .home-duo, .daily-top, .pub-grid { grid-template-columns: 1fr; } .pub-who h1 { font-size: 30px; } }

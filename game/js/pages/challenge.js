@@ -1,7 +1,8 @@
 // Challenge a friend (#/challenge, #/challenge/<code>): create a code or enter one.
 import { CH_GAMES, challengeLink, newCode, parseCode } from "../lib/challenge.js";
 import { icon } from "../lib/icons.js";
-import { copyLink, esc, html, store, toast } from "../ui.js";
+import { copyLink, esc, html, localDate, store, toast } from "../ui.js";
+import { DAILY_GAMES, dailyGameOf, markDaily } from "../lib/daily.js";
 
 const GAME_ICON = { D: "trophy", G: "search", H: "chart", C: "arrowRight" };
 
@@ -69,6 +70,8 @@ export function renderChallenge(root, signal, params = []) {
 
 /** Remember a challenge and (optionally) your result, for the "Recent challenges" list. */
 export function recordChallenge(code, result = "") {
+  const daily = dailyGameOf(code);
+  if (daily) { markDaily(daily, result); return; } // daily challenges have their own log
   const list = store.get("challenge:history", []).filter((h) => h.code !== code);
   list.unshift({ code, result, at: new Date().toISOString() });
   store.set("challenge:history", list.slice(0, 15));
@@ -76,6 +79,7 @@ export function recordChallenge(code, result = "") {
 
 /** Banner shown at the top of a game in challenge mode. */
 export function challengeBanner(ch) {
+  if (dailyGameOf(ch.code)) return `<div class="card ch-banner daily-banner">${icon("calendar", { size: 18 })}<span>Daily challenge · <b>${localDate()}</b> · ${esc(DAILY_GAMES[dailyGameOf(ch.code)].rules)}</span><span class="spacer"></span><a class="btn ghost" href="#/daily">All dailies</a></div>`;
   return `<div class="card ch-banner">${icon("users", { size: 18 })}<span>Challenge <b class="led">${ch.code}</b> · ${esc(ch.game.rules)}</span><span class="spacer"></span><a class="btn ghost" href="#/${ch.game.route}">Leave challenge</a></div>`;
 }
 

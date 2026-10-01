@@ -15,7 +15,12 @@ import { renderCompare } from "./pages/compare.js";
 import { renderRecap } from "./pages/recap.js";
 import { renderChallenge } from "./pages/challenge.js";
 import { renderOnline } from "./pages/online.js";
+import { renderToday } from "./pages/today.js";
+import { renderRecords } from "./pages/records.js";
+import { renderDaily } from "./pages/daily.js";
+import { renderPublicProfile } from "./pages/publicProfile.js";
 import { initSocial } from "./online/social.js";
+import { initInstall } from "./lib/install.js";
 import { retroSync } from "./lib/achievements.js";
 import { closeSilently } from "./lib/modal.js";
 import { openSearch } from "./lib/search.js";
@@ -46,11 +51,15 @@ const routes = {
   recap: renderRecap,
   challenge: renderChallenge,
   online: renderOnline,
+  today: renderToday,
+  records: renderRecords,
+  daily: renderDaily,
+  u: renderPublicProfile,
 };
 const GAME_ROUTES = new Set(["draft", "guess", "higher-lower", "career"]);
 // which top-level section each route belongs to (for nav highlighting)
 const SECTION = { "": "home", games: "games", draft: "games", guess: "games", "higher-lower": "games", career: "games",
-  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online" };
+  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", records: "players", daily: "games", u: "me" };
 
 const TABS = [["home", "#/", "home", "Home"], ["games", "#/games", "games", "Games"], ["players", "#/players", "players", "Players"], ["online", "#/online", "globe", "Online"],
   ["clubs", "#/clubs", "shield", "Clubs"], ["me", "#/me", "user", "Me"]];
@@ -159,6 +168,7 @@ document.addEventListener("click", (e) => {
 applySettings();
 retroSync(); // unlock achievements already earned by existing records
 initSocial(); // online presence + friend invites anywhere in the arcade
+initInstall(); // installable app + offline play
 initSettingsButton(document.getElementById("settings-btn"));
 window.addEventListener("hashchange", route);
 route();

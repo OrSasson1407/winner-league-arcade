@@ -15,7 +15,8 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]  # israel-bsl-database/
-TEXT_TYPES = {".html", ".js", ".mjs", ".css", ".json", ".svg", ".txt"}
+TEXT_TYPES = {".html", ".js", ".mjs", ".css", ".json", ".svg", ".txt", ".webmanifest"}
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 _gz_cache = {}  # path -> (mtime, compressed bytes)
 
 

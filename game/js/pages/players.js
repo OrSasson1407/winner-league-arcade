@@ -45,6 +45,7 @@ export function renderPlayers(root, signal, params = [], query = {}) {
       <button class="btn ghost" id="f-reset">${icon("refresh", { size: 16 })} Reset</button>
     </div>
     <div class="row" style="margin:14px 0"><b id="count" aria-live="polite">Loading players…</b><span class="spacer"></span>
+      <a class="btn ghost" href="#/records">${icon("trophy", { size: 15 })} All-time records</a>
       <a class="btn ghost" href="#/compare">${icon("users", { size: 15 })} Compare players</a>
       <button class="btn ghost" id="share">${icon("link", { size: 15 })} Copy link to these results</button></div>
     <div class="card-grid browse" id="grid">${skeletonCards(12)}</div>

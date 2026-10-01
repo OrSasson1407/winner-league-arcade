@@ -8,6 +8,7 @@ import { closeModal, openModal } from "../lib/modal.js";
 import { emit } from "../lib/achievements.js";
 import { challengeFor, challengeRng } from "../lib/challenge.js";
 import { COLS, attrs, compare, pool } from "../shared/guessLogic.js";
+import { markDaily } from "../lib/daily.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
 
 const MAX_GUESSES = 8;
@@ -34,7 +35,7 @@ const today = () => localDate();
 
 export function renderGuess(root, signal, params, query) {
   const ch = challengeFor(query, "guess"); // challenge mode: same mystery player for everyone
-  let mode = store.get("guess:mode", "daily");
+  let mode = ["daily", "free"].includes(query?.mode) ? query.mode : store.get("guess:mode", "daily");
   let level = store.get("guess:level", "normal");
   let state;
   const FREE_KEY = "guess:free"; // the unfinished Unlimited game, so a refresh doesn't lose it
@@ -108,6 +109,7 @@ export function renderGuess(root, signal, params, query) {
     if (state.won) { toast(`Got it in ${tries()}!`); confetti(); sound.play("win"); } else sound.play("bad");
     emit("guess:end", { won: state.won, tries: tries(), hints: state.hints.length, mode: ch ? "challenge" : mode, level: ch ? "normal" : level, streak });
     if (ch) recordChallenge(ch.code, state.won ? `solved in ${tries()}/8` : "not solved");
+    else if (mode === "daily") markDaily("guess", state.won ? `solved in ${tries()}/8` : "not solved");
   }
 
   function guess(id) {

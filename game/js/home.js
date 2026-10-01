@@ -7,6 +7,8 @@ import { icon, logoSvg } from "./lib/icons.js";
 import { myName } from "./lib/me.js";
 import { totals } from "./lib/achievements.js";
 import { factOfTheDay } from "./lib/facts.js";
+import { DAILY_GAMES, dailyStreak, todayStatus } from "./lib/daily.js";
+import { bornOn } from "./pages/today.js";
 
 export const GAMES = {
   draft: { href: "#/draft", title: "All-Time Draft", text: "Spin a real team-season, draft one player per round and build the best five in league history. Solo, vs the computer or up to 4 friends.",
@@ -90,6 +92,25 @@ export function renderHome(root, signal) {
       <div class="fact-body"><small>FROM THE ARCHIVES · FACT OF THE DAY</small><p id="fact-text"></p></div>
       <button class="btn ghost" id="fact-player">${icon("user", { size: 15 })} Player</button>
       <button class="btn ghost" id="fact-next" aria-label="Show another fact">${icon("refresh", { size: 15 })} Another</button>
+    </section>
+    <section class="home-duo">
+      ${(() => {
+        const done = todayStatus(), n = Object.keys(done).length, streak = dailyStreak();
+        return html`<a class="card daily-home ${n >= 4 ? "full" : ""}" href="#/daily">
+          <span class="dh-flame">${streak ? "🔥" : icon("calendar", { size: 24 })}</span>
+          <div><small>DAILY CHALLENGES</small><b>${n}/4 today${streak ? ` · ${streak}-day streak` : ""}</b>
+            <span class="dh-dots">${Object.keys(DAILY_GAMES).map((k) => `<i class="${done[k] ? "on" : ""}" title="${DAILY_GAMES[k].name}"></i>`).join("")}</span></div>
+          ${icon("arrowRight", { size: 18 })}</a>`;
+      })()}
+      ${(() => {
+        const d = new Date();
+        const born = bornOn(`${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+        return html`<a class="card daily-home" href="#/today">
+          <span class="dh-flame">${icon("star", { size: 24 })}</span>
+          <div><small>TODAY IN THE LEAGUE</small><b>${born.length ? `${esc(born[0].p.name)}${born.length > 1 ? ` + ${born.length - 1} more` : ""} born today` : "Birthdays & flashbacks"}</b>
+            <span class="muted" style="font-size:12px">Season flashbacks: 5, 10 and 15 years ago</span></div>
+          ${icon("arrowRight", { size: 18 })}</a>`;
+      })()}
     </section>
     <section class="me-strip" aria-label="Your stats">
       ${stats.map((s, i) => `<div class="card me"><b data-count="${i}">0</b><span>${s.l}</span></div>`).join("")}
