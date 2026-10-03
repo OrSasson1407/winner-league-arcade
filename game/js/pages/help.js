@@ -33,6 +33,10 @@ const SECTIONS = [
     </ul>` },
   { id: "career", ic: "arrowRight", title: "Career Path", body: `
     <p>You see a player's journey season by season and choose the right name from 4 options. A correct answer is worth 3 points, or 2 if you used the hint. 10 rounds, 30 points maximum.</p>` },
+  { id: "connections", ic: "link", title: "Connections", body: `
+    <p>16 players hide four groups of four: players from the same club or team-season, a stat (like 20+ points per game in a season), a height, a birth year or a jersey number. Select four and submit. Every player fits exactly one group, but many look like they fit two. Four mistakes and the groups are revealed. Colours go from easiest (yellow) to trickiest (purple). "Most often wore #" means the number a player wore in most of his seasons here.</p>` },
+  { id: "grid", ic: "games", title: "The Grid", body: `
+    <p>Each square needs a player who fits both its row and its column: a club, or an achievement like 8+ rebounds per game in a season (15+ games), 8+ seasons in the league or 2.05 m and taller. You have 9 guesses for 9 squares and can use each player once. Every square has at least three right answers. Rarity (0 to 100) rewards less obvious picks: it compares the player's games played with all the other right answers.</p>` },
   { id: "rating", ic: "star", title: "Ratings and card colours", body: `
     <p>The rating on each card (60–99) is <b>game-generated</b>, not an official league rating. It ranks every player-season against the others in the same season, using real efficiency (VAL) and points per game, with a small bonus for efficient shooting and a correction for players with very few games.</p>
     <ul><li>Card frames: <b>rainbow</b> legend 95+, <b>gold</b> 90+, <b>silver</b> 80+, <b>bronze</b> below 80.</li>

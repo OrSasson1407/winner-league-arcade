@@ -109,13 +109,13 @@ export const DEFS = [
   { id: "o_friendly", game: "online", tier: "bronze", icon: "heart", title: "Friendly Fire", desc: "Play 5 matches with friends (invites).", on: "online:finish", test: (e, c) => n(c, "onFriendly") >= 5, prog: prog("onFriendly", 5) },
   // ---------------------------------------------------------------- Daily challenges
   { id: "dy_first", game: "daily", tier: "bronze", icon: "calendar", title: "Daily Starter", desc: "Finish your first daily challenge.", on: "daily:done", test: (e) => e.total >= 1 },
-  { id: "dy_full", game: "daily", tier: "bronze", icon: "games", title: "Full House", desc: "Finish all 4 daily challenges in one day.", on: "daily:done", test: (e) => e.today >= 4 },
+  { id: "dy_full", game: "daily", tier: "bronze", icon: "games", title: "Full House", desc: "Finish every daily challenge in one day.", on: "daily:done", test: (e) => e.today >= 6 },
   { id: "dy_7", game: "daily", tier: "silver", icon: "flame", title: "One Week Strong", desc: "A 7-day daily streak.", on: "daily:done", test: (e) => e.streak >= 7, prog: () => [Math.min(7, store.get("daily:best", 0)), 7] },
   { id: "dy_30", game: "daily", tier: "gold", icon: "rocket", title: "Monthly Regular", desc: "A 30-day daily streak.", on: "daily:done", test: (e) => e.streak >= 30, prog: () => [Math.min(30, store.get("daily:best", 0)), 30] },
   { id: "dy_100", game: "daily", tier: "legend", icon: "crown", title: "Century", desc: "A 100-day daily streak.", on: "daily:done", test: (e) => e.streak >= 100, prog: () => [Math.min(100, store.get("daily:best", 0)), 100] },
   { id: "dy_25", game: "daily", tier: "silver", icon: "medal", title: "Daily Grinder", desc: "Finish 25 daily challenges.", on: "daily:done", test: (e) => e.total >= 25 },
   { id: "dy_100t", game: "daily", tier: "gold", icon: "trophy", title: "Daily Devotee", desc: "Finish 100 daily challenges.", on: "daily:done", test: (e) => e.total >= 100 },
-  { id: "dy_full7", game: "daily", tier: "gold", icon: "star", title: "Seven Full Houses", desc: "Finish all 4 dailies on 7 different days.", on: "daily:done", test: (e) => e.fullDays >= 7 },
+  { id: "dy_full7", game: "daily", tier: "gold", icon: "star", title: "Seven Full Houses", desc: "Finish every daily on 7 different days.", on: "daily:done", test: (e) => e.fullDays >= 7 },
   { id: "o_bot", game: "online", tier: "gold", icon: "target", title: "Machine Breaker", desc: "Beat the Legend Bot (hard).", on: "online:finish", test: (e) => e.mode === "bot" && e.botLevel === "hard" && e.result === "win" },
 ];
 export const byId = new Map(DEFS.map((d) => [d.id, d]));
@@ -173,6 +173,8 @@ const LOGGED = {
   "career:finish": (e) => ({ g: "career", score: e.score }),
   "online:finish": (e) => ({ g: "online", game: e.game, result: e.result }),
   "daily:done": (e) => ({ g: "daily", game: e.game, streak: e.streak }),
+  "conn:end": (e) => ({ g: "connections", won: !!e.won, mistakes: e.mistakes }),
+  "grid:end": (e) => ({ g: "grid", filled: e.filled, score: e.score }),
 };
 
 export function emit(event, data = {}) {

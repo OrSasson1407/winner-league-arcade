@@ -16,6 +16,8 @@ import { renderRecap } from "./pages/recap.js";
 import { renderChallenge } from "./pages/challenge.js";
 import { renderOnline } from "./pages/online.js";
 import { renderToday } from "./pages/today.js";
+import { renderConnections } from "./games/connections.js";
+import { renderGrid } from "./games/grid.js";
 import { renderRecords } from "./pages/records.js";
 import { renderDaily } from "./pages/daily.js";
 import { renderPublicProfile } from "./pages/publicProfile.js";
@@ -54,14 +56,16 @@ const routes = {
   challenge: renderChallenge,
   online: renderOnline,
   today: renderToday,
+  connections: renderConnections,
+  grid: renderGrid,
   records: renderRecords,
   daily: renderDaily,
   u: renderPublicProfile,
 };
-const GAME_ROUTES = new Set(["draft", "guess", "higher-lower", "career"]);
+const GAME_ROUTES = new Set(["draft", "guess", "higher-lower", "career", "connections", "grid"]);
 // which top-level section each route belongs to (for nav highlighting)
 const SECTION = { "": "home", games: "games", draft: "games", guess: "games", "higher-lower": "games", career: "games",
-  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", records: "players", daily: "games", u: "me" };
+  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", records: "players", daily: "games", u: "me" };
 
 const TABS = [["home", "#/", "home", "Home"], ["games", "#/games", "games", "Games"], ["players", "#/players", "players", "Players"], ["online", "#/online", "globe", "Online"],
   ["clubs", "#/clubs", "shield", "Clubs"], ["me", "#/me", "user", "Me"]];

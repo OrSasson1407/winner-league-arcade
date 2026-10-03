@@ -18,6 +18,8 @@ const PAGES = [
   { label: "Compare players", sub: "Two careers side by side", href: "#/compare", ic: "users", words: "compare versus vs head to head" },
   { label: "Monthly recap", sub: "Your month in the arcade", href: "#/recap", ic: "calendar", words: "recap month summary stats wrapped" },
   { label: "Challenge a friend", sub: "Same game, one code", href: "#/challenge", ic: "users", words: "challenge friend code versus duel" },
+  { label: "Connections", sub: "Four hidden groups of four players", href: "#/connections", ic: "link", words: "connections groups four puzzle" },
+  { label: "The Grid", sub: "3×3 board of clubs and achievements", href: "#/grid", ic: "games", words: "grid immaculate 3x3 squares board" },
   { label: "Daily challenges", sub: "Four puzzles a day, keep your streak", href: "#/daily", ic: "calendar", words: "daily challenge streak today puzzle" },
   { label: "Today in the league", sub: "Birthdays and season flashbacks", href: "#/today", ic: "star", words: "today birthday born history flashback on this day" },
   { label: "All-time records", sub: "Career totals and single-season bests", href: "#/records", ic: "trophy", words: "records leaders all time most points career totals best season stats leaderboard" },

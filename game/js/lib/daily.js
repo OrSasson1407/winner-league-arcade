@@ -10,7 +10,10 @@ export const DAILY_GAMES = {
   guess: { letter: "G", name: "Guess the Player", ic: "search", route: "guess", rules: "Today's mystery player (Daily mode)." },
   hl: { letter: "H", name: "Higher or Lower", ic: "chart", route: "higher-lower", rules: "Same pairs in the same order for everyone." },
   career: { letter: "C", name: "Career Path", ic: "arrowRight", route: "career", rules: "Today's 10 careers." },
+  connections: { letter: "N", name: "Connections", ic: "link", route: "connections", rules: "Today's 16 players, four groups.", own: true },
+  grid: { letter: "R", name: "The Grid", ic: "games", route: "grid", rules: "Today's 3×3 board.", own: true },
 };
+export const DAILY_COUNT = Object.keys(DAILY_GAMES).length;
 const BY_LETTER = Object.fromEntries(Object.entries(DAILY_GAMES).map(([k, g]) => [g.letter, k]));
 
 function seed6(text) {
@@ -20,7 +23,8 @@ function seed6(text) {
 }
 export const dailyCode = (gameKey, date = localDate()) => `WLA-${DAILY_GAMES[gameKey].letter}${seed6(`daily-${date}-${gameKey}`)}`;
 export function dailyLink(gameKey) {
-  return gameKey === "guess" ? "#/guess?mode=daily" : `#/${DAILY_GAMES[gameKey].route}?challenge=${dailyCode(gameKey)}`;
+  // games with their own Daily mode link to it; the others use a date-based challenge code
+  return gameKey === "guess" || DAILY_GAMES[gameKey].own ? `#/${DAILY_GAMES[gameKey].route}?mode=daily` : `#/${DAILY_GAMES[gameKey].route}?challenge=${dailyCode(gameKey)}`;
 }
 /** If this challenge code is today's daily, which game it is. */
 export function dailyGameOf(code) {
@@ -51,7 +55,7 @@ export function dailyStreak() {
 export function dailyStats() {
   const L = log();
   const days = Object.values(L);
-  return { total: days.reduce((a, d) => a + Object.keys(d).length, 0), fullDays: days.filter((d) => Object.keys(d).length >= 4).length, best: store.get("daily:best", 0) };
+  return { total: days.reduce((a, d) => a + Object.keys(d).length, 0), fullDays: days.filter((d) => Object.keys(d).length >= DAILY_COUNT).length, best: store.get("daily:best", 0) };
 }
 
 /** Record today's result for a game (first result of the day counts). */
@@ -67,5 +71,5 @@ export function markDaily(gameKey, result) {
   if (streak > store.get("daily:best", 0)) store.set("daily:best", streak);
   const s = dailyStats();
   emit("daily:done", { game: gameKey, streak, today: Object.keys(day).length, total: s.total, fullDays: s.fullDays });
-  toast(Object.keys(day).length >= 4 ? "All 4 daily challenges done today! 🔥" : `Daily challenge done · ${streak}-day streak 🔥`);
+  toast(Object.keys(day).length >= DAILY_COUNT ? `All ${DAILY_COUNT} daily challenges done today! 🔥` : `Daily challenge done · ${streak}-day streak 🔥`);
 }

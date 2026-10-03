@@ -7,7 +7,7 @@ import { icon, logoSvg } from "./lib/icons.js";
 import { myName } from "./lib/me.js";
 import { totals } from "./lib/achievements.js";
 import { factOfTheDay } from "./lib/facts.js";
-import { DAILY_GAMES, dailyStreak, todayStatus } from "./lib/daily.js";
+import { DAILY_COUNT, DAILY_GAMES, dailyStreak, todayStatus } from "./lib/daily.js";
 import { bornOn } from "./pages/today.js";
 import { levelInfo } from "./lib/progress.js";
 import { lastStats } from "./online/net.js";
@@ -22,7 +22,7 @@ function boardSlides(potd, potdSeason) {
   const fact = factOfTheDay(0);
   const slides = [
     { tag: "PLAYER OF THE DAY", ic: "star", text: `${potd.name}: ${potdSeason.season}, ${teamName(potdSeason.team_id)}, rating ${potdSeason.rating_mock}`, profile: potd.player_id },
-    { tag: "DAILY CHALLENGES", ic: "calendar", text: done >= 4 ? "Full house today! All 4 dailies done." : `${done}/4 done today${streak ? ` · 🔥 ${streak}-day streak` : " · start a streak"}`, href: "#/daily" },
+    { tag: "DAILY CHALLENGES", ic: "calendar", text: done >= DAILY_COUNT ? `Full house today! All ${DAILY_COUNT} dailies done.` : `${done}/${DAILY_COUNT} done today${streak ? ` · 🔥 ${streak}-day streak` : " · start a streak"}`, href: "#/daily" },
     { tag: "TODAY IN THE LEAGUE", ic: "whistle", text: born.length ? `Happy birthday ${born.slice(0, 2).map((x) => x.p.name).join(" & ")}${born.length > 2 ? ` + ${born.length - 2} more` : ""}` : "Season flashbacks: 5, 10 and 15 years ago", href: "#/today" },
     { tag: "FACT OF THE DAY", ic: "bulb", text: fact.text, href: fact.pid ? null : "#/today", profile: fact.pid },
     { tag: `LEVEL ${lv.level}`, ic: "medal", text: lv.max ? `${lv.title} · max level` : `${lv.title} · ${(lv.need - lv.into).toLocaleString()} XP to level ${lv.level + 1}`, href: "#/me" },
@@ -43,9 +43,13 @@ export const GAMES = {
     preview: () => `<div class="pv-hl"><span>14.2</span><span class="q">?</span></div><span class="pv-caption">▲ HIGHER · ▼ LOWER</span>` },
   career: { href: "#/career", title: "Career Path", text: "Follow a player's journey club by club, season by season, and name the player. 10 rounds.",
     preview: () => `<div class="pv-path"><i></i><b></b><i></i><b></b><i></i><b></b><i></i></div><span class="pv-caption">WHO IS IT?</span>` },
+  connections: { href: "#/connections", title: "Connections", text: "16 players, four hidden groups: a club, a team-season, a stat, a birth year… Find all four with fewer than four mistakes.",
+    preview: () => `<div class="pv-conn">${["y", "y", "g", "b", "p", "g", "b", "y", "b", "p", "y", "g", "g", "p", "b", "p"].map((c) => `<i class="${c}"></i>`).join("")}</div>` },
+  grid: { href: "#/grid", title: "The Grid", text: "A 3×3 board of clubs and achievements. Name a player for every square who fits both. Rarer answers score more.",
+    preview: () => `<div class="pv-grid">${"<i></i>".repeat(9)}</div><span class="pv-caption">3 × 3</span>` },
 };
 
-const GAME_ICONS = { draft: "trophy", guess: "search", "higher-lower": "chart", career: "arrowRight" };
+const GAME_ICONS = { draft: "trophy", guess: "search", "higher-lower": "chart", career: "arrowRight", connections: "link", grid: "games" };
 
 /** The four game tiles (home page + Games page). */
 export function gameTilesHtml() {
@@ -63,7 +67,7 @@ export function gameTilesHtml() {
 }
 
 export function renderGames(root) {
-  root.innerHTML = html`<div class="game-head"><div><h1>${icon("games", { size: 30 })} Games</h1><p>Four games built on 17 seasons of real league data.</p></div></div>${gameTilesHtml()}
+  root.innerHTML = html`<div class="game-head"><div><h1>${icon("games", { size: 30 })} Games</h1><p>Six games built on 17 seasons of real league data.</p></div></div>${gameTilesHtml()}
     <a class="card pad ch-banner og-promo" href="#/online">${icon("globe", { size: 22 })}<span><b>Online 1v1</b> · play any of these games against a random opponent or a friend with an invite code.</span><span class="spacer"></span><span class="btn primary">Play online</span></a>`;
 }
 
@@ -130,9 +134,9 @@ export function renderHome(root, signal) {
     <section class="home-duo">
       ${(() => {
         const done = todayStatus(), n = Object.keys(done).length, streak = dailyStreak();
-        return html`<a class="card daily-home ${n >= 4 ? "full" : ""}" href="#/daily">
+        return html`<a class="card daily-home ${n >= DAILY_COUNT ? "full" : ""}" href="#/daily">
           <span class="dh-flame">${streak ? "🔥" : icon("calendar", { size: 24 })}</span>
-          <div><small>DAILY CHALLENGES</small><b>${n}/4 today${streak ? ` · ${streak}-day streak` : ""}</b>
+          <div><small>DAILY CHALLENGES</small><b>${n}/${DAILY_COUNT} today${streak ? ` · ${streak}-day streak` : ""}</b>
             <span class="dh-dots">${Object.keys(DAILY_GAMES).map((k) => `<i class="${done[k] ? "on" : ""}" title="${DAILY_GAMES[k].name}"></i>`).join("")}</span></div>
           ${icon("arrowRight", { size: 18 })}</a>`;
       })()}
