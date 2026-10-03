@@ -1591,3 +1591,124 @@ dialog.confirm-modal p { margin: 8px 0 0; line-height: 1.5; }
   .gr-cell.done .link-name { font-size: 12px; }
 }
 [data-contrast="high"] .cn-group { border: 2px solid var(--line); }
+
+/* =====================================================================
+   v14: My Career
+   ===================================================================== */
+.mc-create { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+.mc-form { display: grid; gap: 6px; }
+.mc-two { display: grid !important; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.mc-range { width: 100%; accent-color: var(--accent); }
+.mc-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.mc-cards.two { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.mc-pick { display: grid; gap: 3px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg2); color: var(--text); font: inherit; cursor: pointer; }
+.mc-pick b { font-size: 14px; display: flex; gap: 6px; align-items: center; }
+.mc-pick small { color: var(--muted); font-size: 12px; line-height: 1.3; }
+.mc-pick.on { border: 2px solid var(--accent); background: var(--sel); }
+.mc-pick:hover:not([disabled]) { border-color: var(--accent); }
+.mc-pick[disabled] { opacity: .55; cursor: default; }
+.mc-alloc { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 14px; }
+.mc-al { display: grid; grid-template-columns: 1fr auto 34px auto; gap: 6px; align-items: center; font-size: 14px; }
+.mc-al b { text-align: center; font: 700 16px "Barlow Condensed", sans-serif; }
+.mc-al .icon-btn { width: 28px; height: 28px; font-weight: 800; }
+.mc-preview { display: grid; gap: 10px; justify-items: center; text-align: center; position: sticky; top: 80px; }
+.mc-ovr { display: grid; justify-items: center; }
+.mc-ovr small { font-size: 10px; font-weight: 800; letter-spacing: 1.5px; color: var(--muted); }
+.mc-ovr b { font-size: 40px; color: var(--accent); line-height: 1; }
+/* header */
+.mc-head { display: grid; grid-template-columns: auto 1fr auto minmax(180px, 260px); gap: 16px; align-items: center; padding: 14px 18px; margin-bottom: 14px;
+  border-left: 6px solid var(--club); background: linear-gradient(100deg, color-mix(in srgb, var(--club) 16%, var(--card)), var(--card) 55%); }
+.mc-id { display: grid; gap: 2px; min-width: 0; }
+.mc-id .mc-name { font-size: 32px; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mc-club { display: inline-flex; gap: 6px; align-items: center; font-weight: 700; font-size: 14px; }
+.mc-meters { display: grid; gap: 6px; }
+.mc-meters small { font-size: 11px; font-weight: 700; color: var(--muted); }
+.mc-meters .progress { height: 7px; }
+.mc-facts { display: flex; gap: 12px; font-size: 13px; font-weight: 700; flex-wrap: wrap; }
+.mc-facts span { display: inline-flex; gap: 4px; align-items: center; }
+.mc-face { box-shadow: 0 6px 16px rgba(0, 0, 0, .35); }
+.mc-tabs { margin-bottom: 14px; flex-wrap: wrap; }
+.mc-tabs button { display: inline-flex; gap: 6px; align-items: center; }
+.mc-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+/* next game + LED */
+.mc-next { display: grid; gap: 10px; justify-items: center; text-align: center; }
+.mc-vs { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; font-size: 18px; }
+.mc-vs b { font-family: "Barlow Condensed", sans-serif; font-size: 22px; }
+.mc-led { display: grid; gap: 10px; justify-items: center; padding: 16px; border-radius: 16px; background: #05070d; border: 2px solid #1d2a4a; color: #ffd46b;
+  background-image: radial-gradient(rgba(255, 255, 255, .06) 1px, transparent 1.2px); background-size: 4px 4px; box-shadow: inset 0 0 26px rgba(0, 0, 0, .85); }
+.mc-led-head { display: flex; gap: 10px; align-items: center; font: 700 12px Orbitron, sans-serif; letter-spacing: 1px; color: #93a1bf; }
+.mc-led-head b { padding: 2px 8px; border-radius: 6px; color: #05070d; background: #ff5a5a; }
+.mc-led.won .mc-led-head b { background: #3ddc84; }
+.mc-led-score { display: flex; gap: 16px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.mc-led-team { display: flex; gap: 10px; align-items: center; }
+.mc-led-team span { font: 700 15px "Barlow Condensed", sans-serif; color: #eef2fa; max-width: 140px; text-align: center; }
+.mc-led-team b { font-size: 46px; text-shadow: 0 0 12px rgba(255, 180, 40, .6); }
+.mc-led-dash { font-size: 30px; color: #93a1bf; }
+.mc-led-q { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font: 600 12px Orbitron, sans-serif; color: #93a1bf; }
+.mc-led-q b { color: #ffd46b; }
+.mc-line { color: #eef2fa; font-size: 14px; text-align: center; }
+.mc-line b { color: #ffd46b; }
+.mc-led .btn { background: #0d1322; border-color: #1d2a4a; color: #ffd46b; }
+.mc-games { list-style: none; padding: 0; margin: 0; display: grid; gap: 5px; }
+.mc-g { width: 100%; display: grid; grid-template-columns: auto 1fr; gap: 0 8px; text-align: left; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg2); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
+.mc-g b { grid-row: span 2; width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; font: 800 13px "Barlow Condensed", sans-serif; align-self: center; }
+.mc-g.w b { color: #fff; background: var(--good); } .mc-g.l b { color: #fff; background: var(--bad); }
+.mc-g small { color: var(--muted); font-size: 12px; }
+.mc-news { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; font-size: 13px; }
+.mc-table tr.me-row td { background: var(--sel); font-weight: 700; }
+.mc-table tr.cut td { border-bottom: 2px dashed var(--accent); }
+.mc-table td:nth-child(2) { display: flex; gap: 6px; align-items: center; }
+/* training */
+.mc-attrs { display: grid; gap: 7px; }
+.mc-attr { display: grid; grid-template-columns: 110px 1fr 32px auto; gap: 10px; align-items: center; font-size: 14px; }
+.mc-attr b { font: 700 17px "Barlow Condensed", sans-serif; text-align: right; }
+.mc-attr .btn { padding: 5px 10px; font-size: 13px; }
+.mc-attr .btn small { font-size: 11px; opacity: .8; margin-left: 2px; }
+.mc-badges { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.mc-badge { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg2); }
+.mc-badge small { color: var(--muted); font-size: 12px; }
+.mc-badge .btn { justify-self: start; padding: 5px 10px; font-size: 12px; }
+.mc-badge.t0 { border-color: #c47b44; } .mc-badge.t1 { border-color: #c3cad5; } .mc-badge.t2 { border-color: #f5c542; box-shadow: 0 0 0 1px #f5c542 inset; }
+/* offers */
+.mc-offers { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin-top: 10px; }
+.mc-offer { display: grid; gap: 10px; }
+.mc-offer.home { border-color: var(--accent); }
+.mc-offer .row > div { display: grid; }
+.mc-terms { display: flex; gap: 14px; flex-wrap: wrap; font: 700 18px "Barlow Condensed", sans-serif; }
+.mc-terms small { font: 600 11px Inter, sans-serif; color: var(--muted); }
+/* modals */
+.mc-event { display: grid; gap: 10px; max-width: 520px; }
+.mc-choices { display: grid; gap: 8px; }
+.mc-review { display: grid; gap: 10px; }
+.mc-review-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
+.mc-review-stats div { display: grid; justify-items: center; padding: 8px 4px; border-radius: 10px; background: var(--bg2); }
+.mc-review-stats small { font-size: 10.5px; font-weight: 800; color: var(--muted); letter-spacing: .5px; }
+.mc-review-stats b { font-size: 22px; color: var(--accent); }
+.mc-awards { display: flex; gap: 6px; flex-wrap: wrap; }
+.mc-growth { display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px; font-weight: 700; }
+.mc-growth span { padding: 3px 8px; border-radius: 8px; background: var(--bg2); }
+.mc-growth .up { color: var(--good); } .mc-growth .down { color: var(--bad); }
+/* career, trophies */
+.mc-recs { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.mc-recs li { display: grid; grid-template-columns: 90px 70px 1fr; gap: 8px; font-size: 14px; align-items: baseline; }
+.good-text { color: var(--good); font-weight: 800; }
+.mc-cabinet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.mc-trophy { display: grid; justify-items: center; gap: 2px; padding: 14px 6px; border-radius: 14px; background: var(--bg2); color: var(--muted); border: 1px solid var(--line); }
+.mc-trophy b { font-size: 28px; }
+.mc-trophy small { font-size: 12px; font-weight: 700; }
+.mc-trophy.got { color: #f5c542; border-color: color-mix(in srgb, #f5c542 50%, transparent); background: radial-gradient(circle at 50% 20%, rgba(245, 197, 66, .18), var(--bg2) 70%); }
+.mc-trophy.got b { color: var(--text); }
+.mc-awardlist, .mc-ms { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 5px; font-size: 14px; }
+.mc-ms li { color: var(--muted); } .mc-ms li.got { color: var(--text); }
+.mc-retired { display: grid; justify-items: center; gap: 8px; text-align: center; margin-bottom: 14px;
+  background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--accent) 22%, var(--card)), var(--card) 70%); }
+.mc-retired h1 { font-size: 46px; }
+.mc-jersey { width: 120px; height: 140px; display: grid; justify-items: center; align-content: center; gap: 0; color: var(--c2); background: var(--c);
+  clip-path: polygon(25% 0, 40% 8%, 60% 8%, 75% 0, 100% 14%, 92% 34%, 84% 30%, 84% 100%, 16% 100%, 16% 30%, 8% 34%, 0 14%); border: 0; }
+.mc-jersey span { font: 800 12px "Barlow Condensed", sans-serif; letter-spacing: 1px; margin-top: 14px; }
+.mc-jersey b { font: 800 50px "Barlow Condensed", sans-serif; line-height: 1; }
+.pv-mc { display: flex; gap: 4px; align-items: center; }
+.pv-mc b { font: 800 14px Orbitron, sans-serif; color: var(--accent); }
+.pv-mc i { width: 14px; height: 2px; background: var(--line); }
+@media (max-width: 900px) { .mc-create, .mc-grid { grid-template-columns: 1fr; } .mc-preview { position: static; } .mc-head { grid-template-columns: auto 1fr auto; } .mc-meters { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .mc-two { grid-template-columns: 1fr; } .mc-cabinet { grid-template-columns: repeat(2, 1fr); } .mc-attr { grid-template-columns: 86px 1fr 28px auto; } .mc-id .mc-name { font-size: 24px; } .mc-led-team b { font-size: 36px; } }

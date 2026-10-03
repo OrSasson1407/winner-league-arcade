@@ -52,6 +52,11 @@ export function xpFor(event, e) {
     case "hl:answer": return e.ok ? 3 : 0;
     case "hl:over": return 10;
     case "career:finish": return 10 + e.score * 3;
+    case "mc:game": return e.dnp ? 0 : 2 + (e.pts >= 20 ? 3 : 0) + (e.won ? 1 : 0);
+    case "mc:season": return 40;
+    case "mc:award": return 30;
+    case "mc:trophy": return e.type === "title" ? 120 : e.type === "cup" ? 60 : 40;
+    case "mc:retire": return 100 + (e.hof ? 200 : 0);
     case "conn:end": return e.won ? 45 - 8 * (e.mistakes || 0) : 10;
     case "grid:end": return 5 * (e.filled || 0) + (e.filled === 9 ? 25 : 0) + Math.round((e.score || 0) / 30);
     case "daily:done": return 15 + Math.min(35, 5 * Math.max(0, (e.streak || 1) - 1));

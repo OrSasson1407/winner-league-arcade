@@ -45,11 +45,13 @@ export const GAMES = {
     preview: () => `<div class="pv-path"><i></i><b></b><i></i><b></b><i></i><b></b><i></i></div><span class="pv-caption">WHO IS IT?</span>` },
   connections: { href: "#/connections", title: "Connections", text: "16 players, four hidden groups: a club, a team-season, a stat, a birth year… Find all four with fewer than four mistakes.",
     preview: () => `<div class="pv-conn">${["y", "y", "g", "b", "p", "g", "b", "y", "b", "p", "y", "g", "g", "p", "b", "p"].map((c) => `<i class="${c}"></i>`).join("")}</div>` },
+  mycareer: { href: "#/mycareer", title: "My Career", text: "Create a player, grow up in a club academy and play a whole career against the real teams of every season: contracts, awards, the Hall of Fame.",
+    preview: () => `<div class="pv-mc"><b>16</b><i></i><b>22</b><i></i><b>30</b><i></i><b>35</b></div><span class="pv-caption">ACADEMY → LEGEND</span>` },
   grid: { href: "#/grid", title: "The Grid", text: "A 3×3 board of clubs and achievements. Name a player for every square who fits both. Rarer answers score more.",
     preview: () => `<div class="pv-grid">${"<i></i>".repeat(9)}</div><span class="pv-caption">3 × 3</span>` },
 };
 
-const GAME_ICONS = { draft: "trophy", guess: "search", "higher-lower": "chart", career: "arrowRight", connections: "link", grid: "games" };
+const GAME_ICONS = { draft: "trophy", guess: "search", "higher-lower": "chart", career: "arrowRight", connections: "link", grid: "games", mycareer: "jersey" };
 
 /** The four game tiles (home page + Games page). */
 export function gameTilesHtml() {
@@ -67,7 +69,7 @@ export function gameTilesHtml() {
 }
 
 export function renderGames(root) {
-  root.innerHTML = html`<div class="game-head"><div><h1>${icon("games", { size: 30 })} Games</h1><p>Six games built on 17 seasons of real league data.</p></div></div>${gameTilesHtml()}
+  root.innerHTML = html`<div class="game-head"><div><h1>${icon("games", { size: 30 })} Games</h1><p>Seven games built on 17 seasons of real league data.</p></div></div>${gameTilesHtml()}
     <a class="card pad ch-banner og-promo" href="#/online">${icon("globe", { size: 22 })}<span><b>Online 1v1</b> · play any of these games against a random opponent or a friend with an invite code.</span><span class="spacer"></span><span class="btn primary">Play online</span></a>`;
 }
 

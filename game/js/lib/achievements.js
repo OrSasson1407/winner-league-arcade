@@ -12,6 +12,7 @@ export const GAMES = {
   career: { name: "Career Path", short: "CAREER", color: "#3987e5", soon: true },
   online: { name: "Online 1v1", short: "ONLINE", color: "#e66767" },
   daily: { name: "Daily", short: "DAILY", color: "#c98500" },
+  mycareer: { name: "My Career", short: "MY CAREER", color: "#0ea5e9" },
 };
 export const TIERS = { bronze: "Bronze", silver: "Silver", gold: "Gold", legend: "Legend" };
 
@@ -107,6 +108,26 @@ export const DEFS = [
   { id: "o_allfour", game: "online", tier: "gold", icon: "games", title: "Four-Sport Athlete", desc: "Win an online match in each of the four games.", on: "online:finish", test: (e, c) => ["hl", "guess", "career", "draft"].every((g) => n(c, "onWin_" + g) >= 1), prog: (c) => [["hl", "guess", "career", "draft"].filter((g) => n(c, "onWin_" + g) >= 1).length, 4] },
   { id: "o_friend", game: "online", tier: "bronze", icon: "users", title: "Squad Up", desc: "Add a friend by their player code.", on: "online:friend", test: (e) => e.count >= 1 },
   { id: "o_friendly", game: "online", tier: "bronze", icon: "heart", title: "Friendly Fire", desc: "Play 5 matches with friends (invites).", on: "online:finish", test: (e, c) => n(c, "onFriendly") >= 5, prog: prog("onFriendly", 5) },
+  // ---------------------------------------------------------------- My Career
+  { id: "mc_pro", game: "mycareer", tier: "bronze", icon: "clipboard", title: "Signed!", desc: "Sign your first pro contract.", on: "mc:pro", test: () => true },
+  { id: "mc_debut", game: "mycareer", tier: "bronze", icon: "jersey", title: "Debut", desc: "Play your first pro game.", on: "mc:game", test: (e) => !e.dnp },
+  { id: "mc_starter", game: "mycareer", tier: "bronze", icon: "star", title: "Starting Five", desc: "Earn a starter's role.", on: "mc:game", test: (e) => e.role === "starter" && !e.dnp },
+  { id: "mc_20", game: "mycareer", tier: "bronze", icon: "ball", title: "Twenty Piece", desc: "Score 20 points in a game.", on: "mc:game", test: (e) => e.pts >= 20 },
+  { id: "mc_40", game: "mycareer", tier: "gold", icon: "flame", title: "Forty Bomb", desc: "Score 40 points in a game.", on: "mc:game", test: (e) => e.pts >= 40 },
+  { id: "mc_dd", game: "mycareer", tier: "silver", icon: "hoop", title: "Double-Double", desc: "Reach double figures in two stats in one game.", on: "mc:game", test: (e) => ["pts", "reb", "ast", "stl", "blk"].filter((k) => e[k] >= 10).length >= 2 },
+  { id: "mc_td", game: "mycareer", tier: "gold", icon: "crown", title: "Triple-Double", desc: "Double figures in three stats in one game.", on: "mc:game", test: (e) => ["pts", "reb", "ast", "stl", "blk"].filter((k) => e[k] >= 10).length >= 3 },
+  { id: "mc_allstar", game: "mycareer", tier: "silver", icon: "star", title: "All-Star", desc: "Get picked for the All-Star game.", on: "mc:trophy", test: (e) => e.type === "allstar" },
+  { id: "mc_cup", game: "mycareer", tier: "silver", icon: "medal", title: "Cup Winner", desc: "Win the State Cup.", on: "mc:trophy", test: (e) => e.type === "cup" },
+  { id: "mc_title", game: "mycareer", tier: "gold", icon: "trophy", title: "Champion", desc: "Win the championship.", on: "mc:trophy", test: (e) => e.type === "title" },
+  { id: "mc_roy", game: "mycareer", tier: "silver", icon: "rocket", title: "Rookie of the Year", desc: "Win Rookie of the Year.", on: "mc:award", test: (e) => e.name === "Rookie of the Year" },
+  { id: "mc_mvp", game: "mycareer", tier: "gold", icon: "crown", title: "MVP", desc: "Win the MVP award.", on: "mc:award", test: (e) => e.name === "MVP" },
+  { id: "mc_1000", game: "mycareer", tier: "silver", icon: "target", title: "1,000 Club", desc: "Reach 1,000 career points.", on: "mc:season", test: (e) => e.pts >= 1000 },
+  { id: "mc_record", game: "mycareer", tier: "gold", icon: "flag", title: "Record Breaker", desc: "Pass the real all-time points leader since 2010-11 (3,460).", on: "mc:season", test: (e) => e.pts > 3460 },
+  { id: "mc_10", game: "mycareer", tier: "gold", icon: "calendar", title: "Decade of Hoops", desc: "Play 10 pro seasons.", on: "mc:season", test: (e) => e.seasons >= 10 },
+  { id: "mc_loan", game: "mycareer", tier: "bronze", icon: "arrowRight", title: "Loan Ranger", desc: "Go on loan to get more minutes.", on: "mc:loan", test: () => true },
+  { id: "mc_legend", game: "mycareer", tier: "legend", icon: "shield", title: "Club Legend", desc: "Have your jersey retired by a club.", on: "mc:retire", test: (e) => e.legends >= 1 },
+  { id: "mc_hof", game: "mycareer", tier: "legend", icon: "crown", title: "Hall of Famer", desc: "Retire into the Hall of Fame.", on: "mc:retire", test: (e) => e.hof },
+
   // ---------------------------------------------------------------- Daily challenges
   { id: "dy_first", game: "daily", tier: "bronze", icon: "calendar", title: "Daily Starter", desc: "Finish your first daily challenge.", on: "daily:done", test: (e) => e.total >= 1 },
   { id: "dy_full", game: "daily", tier: "bronze", icon: "games", title: "Full House", desc: "Finish every daily challenge in one day.", on: "daily:done", test: (e) => e.today >= 6 },
@@ -175,6 +196,8 @@ const LOGGED = {
   "daily:done": (e) => ({ g: "daily", game: e.game, streak: e.streak }),
   "conn:end": (e) => ({ g: "connections", won: !!e.won, mistakes: e.mistakes }),
   "grid:end": (e) => ({ g: "grid", filled: e.filled, score: e.score }),
+  "mc:season": (e) => ({ g: "mycareer", seasons: e.seasons, overall: e.overall }),
+  "mc:retire": (e) => ({ g: "mycareer", hof: !!e.hof }),
 };
 
 export function emit(event, data = {}) {

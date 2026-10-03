@@ -18,6 +18,7 @@ const PAGES = [
   { label: "Compare players", sub: "Two careers side by side", href: "#/compare", ic: "users", words: "compare versus vs head to head" },
   { label: "Monthly recap", sub: "Your month in the arcade", href: "#/recap", ic: "calendar", words: "recap month summary stats wrapped" },
   { label: "Challenge a friend", sub: "Same game, one code", href: "#/challenge", ic: "users", words: "challenge friend code versus duel" },
+  { label: "My Career", sub: "Create a player and play a whole career", href: "#/mycareer", ic: "jersey", words: "my career create player academy contract mvp hall of fame mycareer" },
   { label: "Connections", sub: "Four hidden groups of four players", href: "#/connections", ic: "link", words: "connections groups four puzzle" },
   { label: "The Grid", sub: "3×3 board of clubs and achievements", href: "#/grid", ic: "games", words: "grid immaculate 3x3 squares board" },
   { label: "Daily challenges", sub: "Four puzzles a day, keep your streak", href: "#/daily", ic: "calendar", words: "daily challenge streak today puzzle" },
