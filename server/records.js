@@ -97,7 +97,7 @@ export function leaderboard(game, meSid) {
     const w = game === "all" ? RATED_GAMES.reduce((s, g) => s + r.w[g], 0) : r.w[game];
     const l = game === "all" ? RATED_GAMES.reduce((s, g) => s + r.l[g], 0) : r.l[game];
     const best = game === "all" ? Math.max(...RATED_GAMES.map((g) => r.elo[g])) : r.elo[game];
-    return { pos: i + 1, name: r.profile.name, icon: r.profile.icon, color: r.profile.color, frame: r.profile.frame, level: r.profile.level,
+    return { pos: i + 1, name: r.profile.name, icon: r.profile.icon, color: r.profile.color, frame: r.profile.frame, level: r.profile.level, style: r.profile.style, av: r.profile.av,
       code: r.profile.code, elo: best, rank: rankOf(best).id, w, l, streak: r.streak, me: r.sid === meSid };
   };
   const top = rows.slice(0, 25).map(view);

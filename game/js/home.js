@@ -9,6 +9,27 @@ import { totals } from "./lib/achievements.js";
 import { factOfTheDay } from "./lib/facts.js";
 import { DAILY_GAMES, dailyStreak, todayStatus } from "./lib/daily.js";
 import { bornOn } from "./pages/today.js";
+import { levelInfo } from "./lib/progress.js";
+import { lastStats } from "./online/net.js";
+import { reducedMotion } from "./lib/settings.js";
+
+/** Slides for the home page's LED board (each links somewhere). */
+function boardSlides(potd, potdSeason) {
+  const d = new Date();
+  const born = bornOn(`${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  const done = Object.keys(todayStatus()).length, streak = dailyStreak();
+  const lv = levelInfo();
+  const fact = factOfTheDay(0);
+  const slides = [
+    { tag: "PLAYER OF THE DAY", ic: "star", text: `${potd.name}: ${potdSeason.season}, ${teamName(potdSeason.team_id)}, rating ${potdSeason.rating_mock}`, profile: potd.player_id },
+    { tag: "DAILY CHALLENGES", ic: "calendar", text: done >= 4 ? "Full house today! All 4 dailies done." : `${done}/4 done today${streak ? ` · 🔥 ${streak}-day streak` : " · start a streak"}`, href: "#/daily" },
+    { tag: "TODAY IN THE LEAGUE", ic: "whistle", text: born.length ? `Happy birthday ${born.slice(0, 2).map((x) => x.p.name).join(" & ")}${born.length > 2 ? ` + ${born.length - 2} more` : ""}` : "Season flashbacks: 5, 10 and 15 years ago", href: "#/today" },
+    { tag: "FACT OF THE DAY", ic: "bulb", text: fact.text, href: fact.pid ? null : "#/today", profile: fact.pid },
+    { tag: `LEVEL ${lv.level}`, ic: "medal", text: lv.max ? `${lv.title} · max level` : `${lv.title} · ${(lv.need - lv.into).toLocaleString()} XP to level ${lv.level + 1}`, href: "#/me" },
+  ];
+  if (lastStats?.online) slides.push({ tag: "ONLINE NOW", ic: "globe", text: `${lastStats.online} player${lastStats.online === 1 ? "" : "s"} online${lastStats.playing ? ` · ${lastStats.playing} in a match` : ""}. Find a ranked match`, href: "#/online" });
+  return slides;
+}
 
 export const GAMES = {
   draft: { href: "#/draft", title: "All-Time Draft", text: "Spin a real team-season, draft one player per round and build the best five in league history. Solo, vs the computer or up to 4 friends.",
@@ -65,7 +86,20 @@ export function renderHome(root, signal) {
   ];
   const ach = totals();
 
+  const slides = boardSlides(potd, potdSeason);
   root.innerHTML = html`
+    <section class="led-board" aria-roledescription="carousel" aria-label="Arcade board">
+      <span class="lb-live"><i></i>LIVE</span>
+      <div class="lb-track" aria-live="off">${slides.map((s, i) => html`<div class="lb-slide ${i === 0 ? "on" : ""}" role="group" aria-roledescription="slide" aria-label="${i + 1} of ${slides.length}" ${i ? 'aria-hidden="true"' : ""}>
+        ${s.profile ? `<button class="lb-link" data-profile="${s.profile}" ${i ? 'tabindex="-1"' : ""}>` : `<a class="lb-link" href="${s.href}" ${i ? 'tabindex="-1"' : ""}>`}
+          <span class="lb-tag">${icon(s.ic, { size: 14 })} ${esc(s.tag)}</span><span class="lb-text">${esc(s.text)}</span>
+        ${s.profile ? "</button>" : "</a>"}</div>`).join("")}</div>
+      <div class="lb-ctrl">
+        <button class="icon-btn" id="lb-prev" aria-label="Previous">${icon("arrowLeft", { size: 15 })}</button>
+        <button class="icon-btn" id="lb-pause" aria-label="Pause the board">${icon("pause", { size: 15 })}</button>
+        <button class="icon-btn" id="lb-next" aria-label="Next">${icon("arrowRight", { size: 15 })}</button>
+      </div>
+    </section>
     <section class="hero">
       <div>
         <div class="hero-logo">${logoSvg(84)}</div>
@@ -118,6 +152,31 @@ export function renderHome(root, signal) {
     </section>
     ${gameTilesHtml()}`;
   stats.forEach((s, i) => countUp(root.querySelector(`[data-count="${i}"]`), s.v, s.d));
+  // LED board: rotates every 6 s, pauses on hover/focus or with the pause button
+  {
+    const board = root.querySelector(".led-board");
+    const items = [...board.querySelectorAll(".lb-slide")];
+    let at = 0, paused = reducedMotion(), hold = false;
+    const show = (i) => {
+      at = (i + items.length) % items.length;
+      items.forEach((el, k) => {
+        el.classList.toggle("on", k === at);
+        el.setAttribute("aria-hidden", String(k !== at));
+        el.querySelector(".lb-link").tabIndex = k === at ? 0 : -1;
+      });
+    };
+    const drawPause = () => { const b = board.querySelector("#lb-pause"); b.innerHTML = icon(paused ? "play" : "pause", { size: 15 }); b.setAttribute("aria-label", paused ? "Play the board" : "Pause the board"); };
+    drawPause();
+    const timer = setInterval(() => { if (!paused && !hold && !document.hidden) show(at + 1); }, 6000);
+    signal.addEventListener("abort", () => clearInterval(timer));
+    board.addEventListener("mouseenter", () => { hold = true; }, { signal });
+    board.addEventListener("mouseleave", () => { hold = false; }, { signal });
+    board.addEventListener("focusin", () => { hold = true; }, { signal });
+    board.addEventListener("focusout", () => { hold = false; }, { signal });
+    board.querySelector("#lb-prev").addEventListener("click", () => show(at - 1), { signal });
+    board.querySelector("#lb-next").addEventListener("click", () => show(at + 1), { signal });
+    board.querySelector("#lb-pause").addEventListener("click", () => { paused = !paused; drawPause(); }, { signal });
+  }
   let factOffset = 0;
   const showFact = () => {
     const f = factOfTheDay(factOffset);

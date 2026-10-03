@@ -4,7 +4,34 @@ import { icon } from "../lib/icons.js";
 import { DEFS, bannerSvg, totals, unlockedMap } from "../lib/achievements.js";
 import { FRAMES, frameUnlocked, levelInfo } from "../lib/progress.js";
 import { esc, html, store, toast } from "../ui.js";
+import { EXTRAS, HAIRS, HAIR_COLORS, JERSEY_COLORS, SKINS, playerAvatarSvg, randomAv } from "../lib/avatarArt.js";
+import { clubColors } from "../lib/clubs.js";
+import { getSettings } from "../lib/settings.js";
 import { profileLink } from "./publicProfile.js";
+
+const toHex = (c) => { const x = document.createElement("canvas").getContext("2d"); x.fillStyle = c; return x.fillStyle; };
+
+/** The player-avatar builder (skin, hair, colours, number, extras). */
+function builderHtml(me) {
+  const a = me.av;
+  const sw = (key, list, cur, label) => `<div class="sw-grid" role="radiogroup" aria-label="${label}">${list.map((c, i) => {
+    const v = key === "skin" || key === "hc" ? i : c;
+    return `<button role="radio" aria-checked="${cur === v}" class="sw ${cur === v ? "on" : ""}" data-av="${key}" data-v="${v}" style="background:${c}" aria-label="${label} ${i + 1}"></button>`;
+  }).join("")}</div>`;
+  const opts = (key, map, cur) => `<div class="av-opts">${Object.entries(map).map(([k, l]) => `<button class="av-opt-txt ${cur === k ? "on" : ""}" data-av="${key}" data-v="${k}" aria-pressed="${cur === k}">
+    <span class="av-mini">${playerAvatarSvg({ ...a, [key]: k }, me.color)}</span>${l}</button>`).join("")}</div>`;
+  return html`<div class="av-builder">
+    <div class="field"><label>Skin</label>${sw("skin", SKINS, a.skin, "Skin tone")}</div>
+    <div class="field"><label>Hair</label>${opts("hair", HAIRS, a.hair)}</div>
+    <div class="field"><label>Hair colour</label>${sw("hc", HAIR_COLORS, a.hc, "Hair colour")}</div>
+    <div class="field"><label>Jersey</label>${sw("j1", JERSEY_COLORS, a.j1, "Jersey colour")}</div>
+    <div class="field"><label>Trim</label>${sw("j2", JERSEY_COLORS, a.j2, "Trim colour")}</div>
+    <div class="row av-row"><div class="field"><label for="av-num">Number</label><input id="av-num" class="input" type="number" min="0" max="99" value="${a.num}" style="width:90px"></div>
+      <button class="btn" data-av="club">${icon("shield", { size: 15 })} My club's colours</button>
+      <button class="btn ghost" data-av="random">${icon("dice", { size: 15 })} Random</button></div>
+    <div class="field"><label>Extras</label>${opts("x", EXTRAS, a.x)}</div>
+  </div>`;
+}
 
 export function renderMe(root, signal) {
   const draw = () => {
@@ -27,7 +54,12 @@ export function renderMe(root, signal) {
           </div>
           <div class="field"><label for="nick">Nickname</label>
             <input id="nick" class="input" maxlength="18" placeholder="e.g. Coach Or" value="${esc(me.nickname)}"></div>
-          <div class="field"><label>Avatar</label>
+          <div class="field"><label>Avatar style</label>
+            <div class="seg" id="av-style" role="radiogroup" aria-label="Avatar style">
+              <button role="radio" data-style="player" aria-checked="${me.style === "player"}" class="${me.style === "player" ? "on" : ""}">${icon("jersey", { size: 15 })} Player</button>
+              <button role="radio" data-style="icon" aria-checked="${me.style !== "player"}" class="${me.style !== "player" ? "on" : ""}">${icon("ball", { size: 15 })} Icon</button></div></div>
+          ${me.style === "player" ? builderHtml(me) : ""}
+          <div class="field" ${me.style === "player" ? "hidden" : ""}><label>Avatar</label>
             <div class="av-grid" role="radiogroup" aria-label="Avatar icon">${AVATAR_ICONS.map((n) => `<button role="radio" aria-checked="${me.icon === n}" class="av-opt ${me.icon === n ? "on" : ""}" data-icon="${n}" aria-label="${n}">${icon(n, { size: 22 })}</button>`).join("")}</div></div>
           <div class="field"><label>Frame</label>
             <div class="frame-grid" role="radiogroup" aria-label="Avatar frame">${FRAMES.map((f) => {
@@ -82,6 +114,16 @@ export function renderMe(root, signal) {
       t = setTimeout(() => { saveMe({ nickname: e.target.value }); root.querySelector(".me-preview h2").textContent = getMe().nickname || "Guest"; }, 250);
     }, { signal });
     root.querySelector("#nick").addEventListener("change", () => toast("Nickname saved"), { signal });
+    root.querySelector("#av-style").addEventListener("click", (e) => { const b = e.target.closest("[data-style]"); if (b) { saveMe({ style: b.dataset.style }); draw(); } }, { signal });
+    const setAv = (patch) => { saveMe({ av: { ...getMe().av, ...patch } }); draw(); };
+    root.querySelector(".av-builder")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-av]"); if (!b) return;
+      if (b.dataset.av === "random") return setAv(randomAv());
+      if (b.dataset.av === "club") { const club = getSettings().club; if (!club) return toast("Pick your club in Settings → Accent colour first"); const [c1, c2] = clubColors(club); return setAv({ j1: toHex(c1), j2: toHex(c2) }); }
+      const v = b.dataset.v;
+      setAv({ [b.dataset.av]: ["skin", "hc"].includes(b.dataset.av) ? Number(v) : v });
+    }, { signal });
+    root.querySelector("#av-num")?.addEventListener("change", (e) => setAv({ num: Math.max(0, Math.min(99, Number(e.target.value) || 0)) }), { signal });
     root.querySelector(".av-grid").addEventListener("click", (e) => { const b = e.target.closest("[data-icon]"); if (b) { saveMe({ icon: b.dataset.icon }); draw(); } }, { signal });
     root.querySelector(".frame-grid").addEventListener("click", (e) => { const b = e.target.closest("[data-frame]:not([disabled])"); if (b) { saveMe({ frame: b.dataset.frame }); draw(); } }, { signal });
     root.querySelector(".sw-grid").addEventListener("click", (e) => { const b = e.target.closest("[data-color]"); if (b) { saveMe({ color: b.dataset.color }); draw(); } }, { signal });

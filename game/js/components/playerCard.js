@@ -33,7 +33,8 @@ export function playerCard(ps, opts = {}) {
   // a card that is itself a button can't contain the profile button: render it next to the card instead
   const interactive = /role="button"/.test(attrs);
   const infoBtn = `<button class="pc-info${interactive ? " pc-info-out" : ""}" data-profile="${ps.player_id}" aria-label="Open ${esc(p.name)} profile" title="Player profile">i</button>`;
-  return `${interactive ? '<div class="pc-wrap">' : ""}<div class="pc ${size === "md" ? "" : size} tier-${tier} ${classes}" style="--club:${c1};--club2:${c2}" aria-label="${esc(label)}" ${attrs}>
+  return `${interactive ? '<div class="pc-wrap">' : ""}<div class="pc ${size === "md" ? "" : size} tier-${tier} ${classes}" style="--club:${c1};--club2:${c2}" ${hideRating || hideStats ? "" : `data-ps="${ps.player_id}|${ps.season}|${ps.team_id}"`} aria-label="${esc(label)}" ${attrs}>
+    ${tier === "legend" ? `<span class="pc-glow" aria-hidden="true"></span><span class="pc-sparks" aria-hidden="true">${"<i></i>".repeat(8)}</span>` : ""}
     <div class="pc-top"><span class="pc-rating">${hideRating ? "?" : rating}</span><span class="pc-pos pos-${posFamily(pos)}">${esc(pos)}${ps.secondary_position ? "/" + esc(ps.secondary_position) : ""}</span></div>
     ${isIsraeli(p) ? `<span class="pc-flag" title="Israeli">${IL_FLAG}</span>` : ""}
     ${badge ? `<span class="pc-badge">${badge}</span>` : ""}

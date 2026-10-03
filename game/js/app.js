@@ -22,11 +22,12 @@ import { renderPublicProfile } from "./pages/publicProfile.js";
 import { initSocial } from "./online/social.js";
 import { initInstall } from "./lib/install.js";
 import { initA11y, pageChanged } from "./lib/a11y.js";
+import { closeCardView, initCardView } from "./lib/cardView.js";
 import { retroSync } from "./lib/achievements.js";
 import { closeSilently } from "./lib/modal.js";
 import { openSearch } from "./lib/search.js";
 import { initShortcuts, openShortcuts } from "./lib/shortcuts.js";
-import { applySettings, getSettings, initSettingsButton } from "./lib/settings.js";
+import { applySettings, getSettings, initSettingsButton, reducedMotion } from "./lib/settings.js";
 import { icon, logoSvg } from "./lib/icons.js";
 import { avatarHtml, getMe } from "./lib/me.js";
 import { levelInfo } from "./lib/progress.js";
@@ -78,7 +79,35 @@ function problemScreen(view, { title, message, detail = "" }) {
   view.querySelector("#retry").addEventListener("click", () => route());
 }
 
+// Page transitions (View Transitions API where available): pages cross-fade, and the title of the
+// tile you clicked flies into the next page's heading.
+let morphFrom = null, firstPaint = true, vtActive = false;
+const MORPH_LINKS = ".game-card, .daily-card, .daily-home, .club-tile, .season-tile, .ch-game, .lb-link";
+document.addEventListener("click", (e) => {
+  const a = e.target.closest?.("a[href^='#/']");
+  morphFrom = a && a.matches(MORPH_LINKS) ? a.querySelector("h1, h2, h3, b") || a : null;
+}, true);
+
 function route() {
+  const motionOk = !firstPaint && document.startViewTransition && !reducedMotion() && !document.hidden;
+  firstPaint = false;
+  if (!motionOk) { morphFrom = null; return renderRoute(); }
+  const from = morphFrom && document.contains(morphFrom) ? morphFrom : null;
+  morphFrom = null;
+  if (from) from.style.viewTransitionName = "page-title";
+  const t = document.startViewTransition(() => {
+    if (from) from.style.viewTransitionName = "";
+    vtActive = true; renderRoute(); vtActive = false;
+    const h1 = document.querySelector("#view h1");
+    if (from && h1) h1.style.viewTransitionName = "page-title";
+  });
+  // a skipped transition (tab hidden, another navigation) rejects these promises: that's fine
+  t.ready.catch(() => {});
+  t.updateCallbackDone.catch((err) => console.error(err));
+  t.finished.catch(() => {}).finally(() => { const h1 = document.querySelector("#view h1"); if (h1) h1.style.viewTransitionName = ""; });
+}
+
+function renderRoute() {
   const [path, qs = ""] = location.hash.replace(/^#\/?/, "").split("?");
   const [key = "", ...params] = path.split("/");
   const query = Object.fromEntries(new URLSearchParams(qs));
@@ -88,8 +117,7 @@ function route() {
   document.querySelectorAll("dialog[open]").forEach(closeSilently); // page change: don't touch history
   view.innerHTML = "";
   view.classList.remove("enter");
-  void view.offsetWidth;
-  view.classList.add("enter");
+  if (!vtActive) { void view.offsetWidth; view.classList.add("enter"); } // the view transition animates instead
   const render = routes[key];
   try {
     if (!render) problemScreen(view, { title: "Page not found", message: "This link doesn't match any page in the arcade." });
@@ -164,6 +192,7 @@ document.addEventListener("click", (e) => {
   if (!t) return;
   e.preventDefault();
   e.stopPropagation();
+  closeCardView();
   openProfile(t.dataset.profile);
 }, true);
 
@@ -172,6 +201,7 @@ retroSync(); // unlock achievements already earned by existing records
 initSocial(); // online presence + friend invites anywhere in the arcade
 initInstall(); // installable app + offline play
 initA11y(); // screen reader announcements, heading order, keyboard access
+initCardView(); // press and hold a player card for the big view
 initSettingsButton(document.getElementById("settings-btn"));
 window.addEventListener("hashchange", route);
 route();

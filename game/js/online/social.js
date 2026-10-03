@@ -18,7 +18,7 @@ export function addFriend(f) {
   const code = cleanCode(f.code);
   if (!code) return false;
   const list = getFriends().filter((x) => x.code !== code);
-  list.unshift({ code, name: f.name || "Player " + code, icon: f.icon, color: f.color, frame: f.frame, added: new Date().toISOString() });
+  list.unshift({ code, name: f.name || "Player " + code, icon: f.icon, color: f.color, frame: f.frame, style: f.style, av: f.av, added: new Date().toISOString() });
   store.set("online:friends", list.slice(0, 100));
   emit("online:friend", { count: list.length });
   return true;
@@ -30,7 +30,7 @@ export function refreshFriends(list) {
   const byCode = new Map(list.filter((x) => x.known).map((x) => [x.code, x]));
   store.set("online:friends", getFriends().map((f) => (byCode.has(f.code) ? { ...f, ...pick(byCode.get(f.code)) } : f)));
 }
-const pick = ({ name, icon: ic, color, frame }) => ({ name, icon: ic, color, frame });
+const pick = ({ name, icon: ic, color, frame, style, av }) => ({ name, icon: ic, color, frame, style, av });
 
 // ---------------------------------------------------------------- history
 export const getHistory = () => store.get("online:history", []);

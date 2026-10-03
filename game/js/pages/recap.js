@@ -54,8 +54,8 @@ function drawShare(r) {
   bg.addColorStop(0, "#0b1220"); bg.addColorStop(1, "#1b2a52");
   g.fillStyle = bg; g.fillRect(0, 0, 1080, 1350);
   const me = getMe();
-  g.fillStyle = "#ff7a1a"; g.font = "600 30px Oswald, Inter, sans-serif"; g.fillText("WINNER LEAGUE ARCADE · MONTHLY RECAP", 70, 100);
-  g.fillStyle = "#eef2fa"; g.font = "700 82px Oswald, Inter, sans-serif"; g.fillText(monthName(r.key).toUpperCase(), 70, 200);
+  g.fillStyle = "#ff7a1a"; g.font = "600 30px Barlow Condensed, Inter, sans-serif"; g.fillText("WINNER LEAGUE ARCADE · MONTHLY RECAP", 70, 100);
+  g.fillStyle = "#eef2fa"; g.font = "700 82px Barlow Condensed, Inter, sans-serif"; g.fillText(monthName(r.key).toUpperCase(), 70, 200);
   g.fillStyle = "#93a1bf"; g.font = "500 32px Inter, sans-serif"; g.fillText(`${me.nickname || "Guest"} · Level ${r.levelEnd}`, 70, 252);
   const tiles = [
     ["Games played", Object.values(r.games).reduce((a, b) => a + b, 0)], ["XP earned", r.xp.toLocaleString()], ["Days active", r.days],
@@ -65,7 +65,7 @@ function drawShare(r) {
   tiles.forEach(([label, v], i) => {
     const x = 70 + (i % 3) * 320, y = 320 + Math.floor(i / 3) * 230;
     g.fillStyle = "#16213a"; g.beginPath(); g.roundRect(x, y, 300, 200, 22); g.fill();
-    g.fillStyle = "#ff7a1a"; g.font = "800 72px Orbitron, Oswald, sans-serif"; g.fillText(String(v), x + 26, y + 112);
+    g.fillStyle = "#ff7a1a"; g.font = "800 72px Orbitron, Barlow Condensed, sans-serif"; g.fillText(String(v), x + 26, y + 112);
     g.fillStyle = "#93a1bf"; g.font = "600 26px Inter, sans-serif"; g.fillText(label.toUpperCase(), x + 26, y + 165);
   });
   g.fillStyle = "#eef2fa"; g.font = "600 30px Inter, sans-serif";

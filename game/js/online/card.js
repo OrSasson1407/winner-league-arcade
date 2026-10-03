@@ -9,13 +9,13 @@ function avatar(g, p, x, y, r) {
   g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2);
   g.fillStyle = p.color || "#ff7a1a"; g.fill();
   g.lineWidth = 8; g.strokeStyle = "rgba(255,255,255,.85)"; g.stroke();
-  g.fillStyle = "#fff"; g.font = `800 ${Math.round(r * 0.9)}px Oswald, Arial, sans-serif`;
+  g.fillStyle = "#fff"; g.font = `800 ${Math.round(r * 0.9)}px Barlow Condensed, Arial, sans-serif`;
   g.textAlign = "center"; g.textBaseline = "middle";
   g.fillText((p.name || "?").trim()[0]?.toUpperCase() || "?", x, y + 4);
   g.restore();
 }
 
-function fit(g, text, max, size, weight = 700, family = "Oswald, Arial, sans-serif") {
+function fit(g, text, max, size, weight = 700, family = "Barlow Condensed, Arial, sans-serif") {
   let s = size;
   do g.font = `${weight} ${s}px ${family}`; while (g.measureText(text).width > max && (s -= 2) > 12);
 }
@@ -38,7 +38,7 @@ export function drawResultCard(m) {
   g.fillText("WINNER LEAGUE ARCADE · ONLINE 1V1", 540, 92);
   g.fillStyle = "#93a1bf"; g.font = "600 34px Inter, Arial, sans-serif";
   g.fillText(`${GAME_NAMES[m.game]} · ${m.mode === "ranked" ? "Ranked" : m.mode === "bot" ? "vs Bot" : "Friendly"}`, 540, 146);
-  g.fillStyle = col; g.font = "800 150px Oswald, Arial, sans-serif";
+  g.fillStyle = col; g.font = "800 150px Barlow Condensed, Arial, sans-serif";
   g.fillText(label, 540, 320);
   avatar(g, m.you, 260, 520, 110);
   avatar(g, m.opp, 820, 520, 110);

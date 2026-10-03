@@ -1,7 +1,7 @@
 // Service worker: lets the installed app open and play offline (single-player games).
 // Network first, so every update shows up right away when online; the cache is the fallback.
 // Online 1v1 (/ws) always needs a connection and is never cached.
-const CACHE = "wla-v1";
+const CACHE = "wla-v2";
 const CORE = ["./", "index.html", "css/style.css", "js/app.js", "data/game_db.js", "../src/database_helpers.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => {

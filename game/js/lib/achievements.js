@@ -266,10 +266,10 @@ export function bannerSvg(def, { locked = false, width = 120 } = {}) {
     <path d="M12 18 H108 V146 L60 174 L12 146 Z" fill="url(#${id}-f)" stroke="rgba(0,0,0,.35)" stroke-width="1.5"/>
     <path d="M18 24 H102 V142 L60 166 L18 142 Z" fill="none" stroke="${ink}" stroke-opacity=".35" stroke-width="1.2"/>
     <rect x="12" y="18" width="96" height="16" fill="${band}"/>
-    <text x="60" y="30" text-anchor="middle" font-family="Orbitron, Oswald, sans-serif" font-weight="800" font-size="8.5" letter-spacing="1.5" fill="#fff">${g.short}</text>
+    <text x="60" y="30" text-anchor="middle" font-family="Orbitron, Barlow Condensed, sans-serif" font-weight="800" font-size="8.5" letter-spacing="1.5" fill="#fff">${g.short}</text>
     <circle cx="60" cy="64" r="21" fill="rgba(0,0,0,.18)" stroke="${ink}" stroke-opacity=".55" stroke-width="1.5"/>
     <g transform="translate(46 50) scale(1.17)" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${iconPath}</g>
-    ${lines.map((l, i) => `<text x="60" y="${101 + i * 13}" text-anchor="middle" font-family="Oswald, Inter, sans-serif" font-weight="700" font-size="${l.length > 10 ? 11 : 12.5}" letter-spacing=".5" fill="${ink}">${l}</text>`).join("")}
+    ${lines.map((l, i) => `<text x="60" y="${101 + i * 13}" text-anchor="middle" font-family="Barlow Condensed, Inter, sans-serif" font-weight="700" font-size="${l.length > 10 ? 11 : 12.5}" letter-spacing=".5" fill="${ink}">${l}</text>`).join("")}
     <g fill="${ink}" fill-opacity="${locked ? ".35" : ".85"}">${Array.from({ length: stars }, (_, i) => {
       const x = 60 + (i - (stars - 1) / 2) * 11;
       return `<path transform="translate(${x - 4} 145) scale(.34)" d="M12 2l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17l-5.9 3 1.2-6.5L2.5 8.9 9.1 8z"/>`;

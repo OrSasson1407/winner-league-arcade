@@ -16,6 +16,8 @@ import { connect, deadlineFrom, lastStats, latency, myCode, myRecord, netStatus,
 import { GAME_ICONS, GAME_NAMES, addFriend, addHistory, getFriends, getHistory, headToHead, isFriend, refreshFriends, removeFriend, rivals } from "../online/social.js";
 import { buzz, countdown } from "../online/feel.js";
 import { announce } from "../lib/a11y.js";
+import { shot } from "../lib/shot.js";
+import { courtHtml } from "../lib/court.js";
 import { clueSpeech } from "../shared/guessLogic.js";
 import { drawResultCard } from "../online/card.js";
 import { shareOrDownload } from "../games/draft_card.js";
@@ -256,7 +258,7 @@ export function renderOnline(root, signal, params = []) {
           const st = x.playing ? "playing" : x.online ? "online" : "offline";
           const h2h = headToHead(f.code);
           return html`<div class="friend-row">
-            <span class="fr-av">${avatarHtml({ icon: f.icon || "ball", color: f.color || "#64748b", frame: f.frame || "none" }, 38)}<i class="dot-st ${st}"></i></span>
+            <span class="fr-av">${avatarHtml({ icon: f.icon || "ball", color: f.color || "#64748b", frame: f.frame || "none", style: f.style, av: f.av }, 38)}<i class="dot-st ${st}"></i></span>
             <div class="fr-info"><b>${esc(f.name)}</b><small class="muted">${st === "playing" ? "In a match" : st === "online" ? "Online now" : "Offline"} · ${f.code}${h2h.w + h2h.l + h2h.d ? ` · you ${h2h.w}-${h2h.l}${h2h.d ? `-${h2h.d}` : ""}` : ""}</small></div>
             <button class="btn ${st === "online" ? "primary" : ""}" data-inv="${f.code}" ${st === "online" && s === "online" ? "" : "disabled"}>${icon("play", { size: 14 })} Invite</button>
             <button class="icon-btn" data-rm="${f.code}" aria-label="Remove ${esc(f.name)}">${icon("close", { size: 15 })}</button>
@@ -302,7 +304,7 @@ export function renderOnline(root, signal, params = []) {
   function drawLeaders(body) {
     const L = leaders?.game === leadersGame ? leaders : null;
     const row = (r) => html`<tr class="${r.me ? "me-row" : ""}"><td class="pos">${r.pos <= 3 ? ["🥇", "🥈", "🥉"][r.pos - 1] : r.pos}</td>
-      <td><span class="lb-name">${avatarHtml({ icon: r.icon, color: r.color, frame: r.frame }, 30)}<span><b>${esc(r.name)}</b><small class="muted">Lv ${r.level}${r.streak >= 3 ? ` · 🔥${r.streak}` : ""}</small></span></span></td>
+      <td><span class="lb-name">${avatarHtml({ icon: r.icon, color: r.color, frame: r.frame, style: r.style, av: r.av }, 30)}<span><b>${esc(r.name)}</b><small class="muted">Lv ${r.level}${r.streak >= 3 ? ` · 🔥${r.streak}` : ""}</small></span></span></td>
       <td>${rankBadge(r.elo, { small: true })}</td><td><b>${leadersGame === "all" ? r.w : r.elo}</b></td><td class="muted">${r.w}-${r.l}</td></tr>`;
     body.innerHTML = html`<div class="card pad">
       <div class="row" style="margin-bottom:10px"><h3 style="margin:0">${icon("trophy")} Leaderboard</h3><span class="spacer"></span>
@@ -329,7 +331,7 @@ export function renderOnline(root, signal, params = []) {
         <h3>${icon("clock")} Recent matches</h3>
         ${list.length ? `<div class="hist-list">${list.map((h, i) => html`<div class="hist-row ${h.result}">
           <span class="hist-res">${h.result === "win" ? "W" : h.result === "lose" ? "L" : "D"}</span>
-          ${avatarHtml({ icon: h.opp?.icon || "ball", color: h.opp?.color || "#64748b", frame: h.opp?.frame || "none" }, 34)}
+          ${avatarHtml({ icon: h.opp?.icon || "ball", color: h.opp?.color || "#64748b", frame: h.opp?.frame || "none", style: h.opp?.style, av: h.opp?.av }, 34)}
           <div class="hist-info"><b>${esc(h.opp?.name || "?")}</b><small class="muted">${icon(GAME_ICONS[h.game], { size: 12 })} ${GAME_NAMES[h.game]} · ${esc(h.score || "")} · ${new Date(h.at).toLocaleDateString()}</small></div>
           ${modeChip(h.mode)}${h.mode === "ranked" && h.delta != null ? `<span class="elo-d ${h.delta >= 0 ? "up" : "down"}">${h.delta >= 0 ? "+" : ""}${h.delta}</span>` : ""}
           ${h.oppCode && h.mode !== "bot" ? `<button class="btn ghost" data-again="${i}" ${s === "online" ? "" : "disabled"} title="Invite to a rematch">${icon("refresh", { size: 14 })}<span class="hide-sm"> Challenge</span></button>` : ""}
@@ -338,7 +340,7 @@ export function renderOnline(root, signal, params = []) {
       <div class="card pad" style="align-content:start;display:grid;gap:10px">
         <h3>${icon("flame")} Rivals</h3>
         ${top.length ? top.map((r) => html`<div class="friend-row">
-          ${avatarHtml({ icon: r.opp?.icon || "ball", color: r.opp?.color || "#64748b", frame: r.opp?.frame || "none" }, 34)}
+          ${avatarHtml({ icon: r.opp?.icon || "ball", color: r.opp?.color || "#64748b", frame: r.opp?.frame || "none", style: r.opp?.style, av: r.opp?.av }, 34)}
           <div class="fr-info"><b>${esc(r.opp?.name || r.code)}</b><small class="muted">${r.n} match${r.n === 1 ? "" : "es"}</small></div>
           <b class="h2h ${r.w > r.l ? "up" : r.w < r.l ? "down" : ""}">${r.w}-${r.l}${r.d ? `-${r.d}` : ""}</b>
           ${isFriend(r.code) ? "" : `<button class="btn ghost" data-addr="${r.code}" title="Add friend">${icon("users", { size: 14 })}</button>`}
@@ -521,6 +523,7 @@ export function renderOnline(root, signal, params = []) {
       const me = mine(m.answers);
       sound.play(me.ok ? "place" : "bad");
       const c = HL_CATS[G.cat];
+      if (me.c) setTimeout(() => shot(me.ok, root.querySelector(".hl-side:last-of-type")), 30);
       announce(`${me.ok ? `Correct, plus ${me.pts}` : me.c ? "Wrong" : "No answer"}. ${playersById.get(G.b.player_id)?.name} had ${c.get(G.b).toFixed(c.dec)}. Score: you ${mine(m.scores)}, ${M.opp.name} ${theirs(m.scores)}.`);
       drawArena(); drawOppState();
     }
@@ -572,6 +575,7 @@ export function renderOnline(root, signal, params = []) {
       G.reveal = m; M.scores = m.scores; G.oppNote = "";
       M.maxBehind = Math.max(M.maxBehind, theirs(m.scores) - mine(m.scores));
       sound.play(m.winner === M.seat ? "place" : "bad");
+      if (m.winner === M.seat || G.wrong) setTimeout(() => shot(m.winner === M.seat, root.querySelector(".choices")), 30);
       const who = m.winner === null ? "Nobody got it" : m.winner === M.seat ? "You got it, plus 3" : `${M.opp.name} got it first`;
       announce(`${who}. It was ${playersById.get(m.answer)?.name}. Score: you ${mine(m.scores)}, ${M.opp.name} ${theirs(m.scores)}.`);
       drawArena(); drawOppState();
@@ -627,6 +631,7 @@ export function renderOnline(root, signal, params = []) {
       G.rows.push(m.row); G.solved = m.solved; G.tries[M.seat] = m.tries;
       announce(m.solved ? `Correct! Solved in ${m.tries}.` : `Guess ${m.tries}, ${playersById.get(m.row.pid)?.name}. ${clueSpeech(m.row.cells, G.cols)}.`);
       sound.play(m.solved ? "win" : "place");
+      if (m.solved) setTimeout(() => shot(true, root.querySelector(".gtable")), 30);
       if (m.solved) confetti(1500);
       return drawArena();
     }
@@ -701,18 +706,14 @@ export function renderOnline(root, signal, params = []) {
 
   function slotsHtml(seat, targetable) {
     const t = G.teams[seat];
-    return `<div class="slots">${G.slots.map((s, i) => {
-      const k = t.slots[s];
-      if (k) {
-        const ps = psByKey(k), p = playersById.get(ps.player_id);
-        return `<div class="slot filled ${s === SIXTH ? "bench" : ""}" style="border-left:5px solid ${clubColors(ps.team_id)[0]}"><div class="lbl pos-${posFamily(s)}">${slotLabel(s)}</div>
-          <div class="who"><b>${esc(p.name)}</b><small>${esc(teamName(ps.team_id))} ${ps.season}</small></div><div class="val">${slotValue(ps, s)}</div></div>`;
-      }
-      const can = targetable && G.selected;
-      return `<div class="slot ${can ? "target" : ""} ${s === SIXTH ? "bench" : ""}" ${can ? `data-slot="${s}" role="button" tabindex="0"` : ""}><div class="lbl pos-${posFamily(s)}">${slotLabel(s)}</div>
-        <div class="who muted">${can ? `Place here: ${slotValue(G.selected, s)}` : s === SIXTH ? "Bench (30%)" : "Empty"}</div></div>`;
-    }).join("")}</div>`;
+    return courtHtml(G.slots.map((s) => {
+      const k = t.slots[s], ps = k && psByKey(k);
+      const can = targetable && G.selected && !k;
+      return { slot: s, label: slotLabel(s), can, preview: can ? slotValue(G.selected, s) : null,
+        filled: ps && { name: playersById.get(ps.player_id).name, pid: ps.player_id, value: slotValue(ps, s), color: clubColors(ps.team_id)[0], sub: `${teamName(ps.team_id)} ${ps.season}` } };
+    }), { compact: true });
   }
+
 
   function drawDraft(a) {
     const myTurn = G.turn === M.seat;
@@ -771,7 +772,7 @@ export function renderOnline(root, signal, params = []) {
     addRecord(M.game, m.result);
     M.comeback = m.result === "win" && m.reason === "done" && (M.maxBehind > 0 || (M.game === "guess" && M.oppSolvedFirst));
     const sc = scoreLine(m);
-    addHistory({ game: M.game, mode: M.mode, result: m.result, opp: { name: M.opp.name, icon: M.opp.icon, color: M.opp.color, frame: M.opp.frame },
+    addHistory({ game: M.game, mode: M.mode, result: m.result, opp: { name: M.opp.name, icon: M.opp.icon, color: M.opp.color, frame: M.opp.frame, style: M.opp.style, av: M.opp.av },
       oppCode: M.opp.code, score: sc.text, delta: m.rated ? m.delta : null });
     const rec = myRecord();
     const bestElo = Math.max(m.elo ?? 0, ...Object.values(rec?.elo || {}));
@@ -862,7 +863,7 @@ export function renderOnline(root, signal, params = []) {
     updateScores();
     a.querySelector("#rematch")?.addEventListener("click", () => { M.sentRematch = true; send({ t: "rematch" }); drawEnd(); });
     a.querySelector("#add-friend")?.addEventListener("click", () => {
-      addFriend({ code: M.opp.code, name: M.opp.name, icon: M.opp.icon, color: M.opp.color, frame: M.opp.frame });
+      addFriend({ code: M.opp.code, name: M.opp.name, icon: M.opp.icon, color: M.opp.color, frame: M.opp.frame, style: M.opp.style, av: M.opp.av });
       toast(`${M.opp.name} added to friends`); drawEnd();
     });
     a.querySelector("#share").addEventListener("click", async () => {

@@ -11,10 +11,10 @@ export function drawTeamCard(team, summary) {
   g.fillStyle = bg; g.fillRect(0, 0, 1080, 1080);
 
   g.fillStyle = "#ff7a1a";
-  g.font = "600 30px Oswald, Inter, sans-serif";
+  g.font = "600 30px Barlow Condensed, Inter, sans-serif";
   g.fillText("WINNER LEAGUE ARCADE · ALL-TIME DRAFT", 70, 95);
   g.fillStyle = "#eef2fa";
-  g.font = "700 68px Oswald, Inter, sans-serif";
+  g.font = "700 68px Barlow Condensed, Inter, sans-serif";
   g.fillText(team.name.toUpperCase(), 70, 180);
   g.fillStyle = "#93a1bf";
   g.font = "500 28px Inter, sans-serif";
@@ -22,10 +22,10 @@ export function drawTeamCard(team, summary) {
 
   g.textAlign = "right";
   g.fillStyle = "#ff7a1a";
-  g.font = "700 120px Oswald, Inter, sans-serif";
+  g.font = "700 120px Barlow Condensed, Inter, sans-serif";
   g.fillText(summary.total.toFixed(1), 1010, 190);
   g.fillStyle = "#eef2fa";
-  g.font = "700 40px Oswald, Inter, sans-serif";
+  g.font = "700 40px Barlow Condensed, Inter, sans-serif";
   g.fillText(`GRADE ${summary.grade}`, 1010, 240);
   g.textAlign = "left";
 
@@ -39,7 +39,7 @@ export function drawTeamCard(team, summary) {
     g.fillStyle = c1;
     g.beginPath(); g.roundRect(70, y, 14, 118, [18, 0, 0, 18]); g.fill();
     g.fillStyle = "#ff7a1a";
-    g.font = "700 44px Oswald, Inter, sans-serif";
+    g.font = "700 44px Barlow Condensed, Inter, sans-serif";
     g.fillText(pos, 110, y + 74);
     g.fillStyle = "#eef2fa";
     g.font = "700 40px Inter, sans-serif";
@@ -49,7 +49,7 @@ export function drawTeamCard(team, summary) {
     g.fillText(`${teamName(s.ps.team_id)} · ${s.ps.season}`, 220, y + 94);
     g.textAlign = "right";
     g.fillStyle = s.value >= 92 ? "#fbbf24" : s.value >= 82 ? "#22c55e" : "#cbd5e1";
-    g.font = "700 56px Oswald, Inter, sans-serif";
+    g.font = "700 56px Barlow Condensed, Inter, sans-serif";
     g.fillText(String(s.value), 985, y + 78);
     g.textAlign = "left";
   });

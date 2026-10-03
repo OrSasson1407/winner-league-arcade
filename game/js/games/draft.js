@@ -1,6 +1,6 @@
 // All-Time Draft: spin a real team-season, pick one player, fill PG/SG/SF/PF/C.
 // Modes: solo, vs computer, 2-4 player draft room (snake order, shared spin per round).
-import { H, PLAYED_SEASONS, POSITIONS, db, isPlayable, pick, playersById, teamName } from "../data.js";
+import { H, PLAYED_SEASONS, POSITIONS, db, isPlayable, pick, playersById, shuffle, teamName } from "../data.js";
 import { esc, fmt1, html, localDate, ratingClass, store, toast, track } from "../ui.js";
 import { IL_FLAG, nameLink, playerCard } from "../components/playerCard.js";
 import { reducedMotion } from "../lib/settings.js";
@@ -10,6 +10,8 @@ import { myName } from "../lib/me.js";
 import { confirmDialog } from "../lib/modal.js";
 import { emit } from "../lib/achievements.js";
 import { announce } from "../lib/a11y.js";
+import { courtHtml } from "../lib/court.js";
+import { spinWheel } from "../lib/wheel.js";
 import { challengeFor, challengeRng } from "../lib/challenge.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
 import { clubColors } from "../lib/clubs.js";
@@ -318,21 +320,18 @@ export function renderDraft(root, signal, params, query) {
   }
 
   // ------------------------------------------------ rendering
-  function slotsHtml(t, targetable) {
-    return t.slotList.map((p, i) => {
+  /** The team's lineup on a half court (spots take the selected player when targetable). */
+  function courtOf(t, targetable) {
+    return courtHtml(t.slotList.map((p) => {
       const s = t.slots[p];
-      if (s) {
-        const pl = playersById.get(s.ps.player_id);
-        const [c1] = clubColors(s.ps.team_id);
-        return html`<div class="slot filled ${p === SIXTH ? "bench" : ""}" style="border-left:5px solid ${c1}"><div class="lbl pos-${posFamily(p)}">${slotLabel(p)}</div>
-          <div class="who"><b>${nameLink(pl.player_id)}</b><small>${esc(teamName(s.ps.team_id))} · ${s.ps.season}${cfg.budget ? ` · ${cost(s.ps)}c` : ""}</small></div>
-          <div class="val ${ratingClass(s.value)}">${cfg.blind && S.phase === "draft" ? "?" : s.value}</div></div>`;
-      }
-      const can = targetable && S.selected;
-      return html`<div class="slot ${can ? "target" : ""} ${p === SIXTH ? "bench" : ""}" data-slot="${p}"><div class="lbl pos-${posFamily(p)}">${slotLabel(p)}</div>
-        <div class="who muted">${can ? `Place here <kbd>${i + 1}</kbd>` : p === SIXTH ? "Bench (30%)" : "Empty"}</div>
-        <div class="val muted">${can && !cfg.blind ? slotValue(S.selected, p) : ""}</div></div>`;
-    }).join("");
+      const can = targetable && S.selected && !s;
+      return {
+        slot: p, label: slotLabel(p), can, hidden: cfg.blind && S.phase === "draft",
+        preview: can && !cfg.blind ? slotValue(S.selected, p) : null,
+        filled: s && { name: playersById.get(s.ps.player_id).name, pid: s.ps.player_id, value: s.value, color: clubColors(s.ps.team_id)[0],
+          sub: `${teamName(s.ps.team_id)} ${s.ps.season}${cfg.budget ? ` · ${cost(s.ps)}c` : ""}` },
+      };
+    }));
   }
 
   function poolCards(avail, human) {
@@ -393,7 +392,7 @@ export function renderDraft(root, signal, params, query) {
           <div class="row muted" style="font-size:13px;margin-top:6px">
             <span>Avg ${cfg.blind ? "?" : fmt1(sum.avg)}</span><span>·</span><span title="${esc(sum.links.map((l) => l.text).join("\n"))}">Chemistry +${fmt1(sum.chem)}</span>
             <span>·</span><b>${cfg.blind ? "?" : fmt1(sum.total)}</b></div>
-          <div class="slots" id="slots" style="margin-top:12px">${slotsHtml(t, human)}</div>
+          <div id="slots" style="margin-top:12px">${courtOf(t, human)}</div>
           ${sum.links.length ? `<div class="links">${sum.links.slice(0, 4).map((l) => `<div>${icon(l.type === "teammates" ? "link" : "arena", { size: 14 })} ${esc(l.text)}</div>`).join("")}</div>` : ""}
           <p class="muted" style="font-size:13px;margin-bottom:0">${human ? (S.selected ? "Choose a slot for <b>" + esc(playersById.get(S.selected.player_id).name) + "</b>." : "Select a player from the roster.") : "Waiting for the computer…"}</p>
         </div>
@@ -447,8 +446,13 @@ export function renderDraft(root, signal, params, query) {
     if (!strip) return;
     sound.play("spin");
     if (reducedMotion()) return;
-    // slot-machine reel: random team names scroll past, landing on the real spin
     const final = S.spin;
+    // spin wheel of club colours, landing on the real spin; the reel below scrolls in sync
+    const wheelHost = root.querySelector(".spin-wrap");
+    const seen = new Set([final.team_id]);
+    const others = shuffle(db.season_teams.slice(), Math.random).filter((t) => !seen.has(t.team_id) && seen.add(t.team_id)).slice(0, 11).map((t) => ({ id: t.team_id, name: t.team_name }));
+    const stopWheel = spinWheel(wheelHost, { final: { id: final.team_id, name: final.team_name }, others, season: final.season });
+    signal.addEventListener("abort", stopWheel);
     const fillers = Array.from({ length: 14 }, () => pick(db.season_teams).team_name);
     strip.innerHTML = [...fillers, final.team_name].map((n) => `<div>${esc(n)}</div>`).join("");
     strip.style.transition = "none";
@@ -541,7 +545,7 @@ export function renderDraft(root, signal, params, query) {
           <div class="row"><h2>${esc(t.name)}${winner ? ` ${icon("trophy", { size: 22, cls: "ic-gold" })}` : ""}</h2><span class="spacer"></span><span class="grade">${sum.grade}</span></div>
           <div class="row" style="margin:6px 0 4px"><span class="big-score">${fmt1(sum.total)}</span><span class="muted">${sum.label}</span></div>
           <div class="muted" style="font-size:13px;margin-bottom:12px">Average ${fmt1(sum.avg)} + chemistry ${fmt1(sum.chem)}${cfg.budget ? ` · ${BUDGET - t.budget}/${BUDGET} coins spent` : ""}</div>
-          <div class="slots">${slotsHtml(t, false)}</div>
+          ${courtOf(t, false)}
           ${sum.links.length ? `<div class="links">${sum.links.map((l) => `<div>${icon(l.type === "teammates" ? "link" : "arena", { size: 14 })} ${esc(l.text)}</div>`).join("")}</div>` : `<div class="links muted">No chemistry links</div>`}
           ${t.cpu ? "" : `<button class="btn" data-card="${t.idx}" style="margin-top:12px">${icon("camera", { size: 16 })} Team card</button>`}
         </div>`;

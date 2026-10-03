@@ -31,7 +31,7 @@ export function onNet(fn, signal) {
 
 export function profileMsg() {
   const me = getMe();
-  return { t: "profile", name: myName("Guest"), icon: me.icon, color: me.color, frame: me.frame, level: levelInfo().level, rec: store.get("online:token") || undefined };
+  return { t: "profile", name: myName("Guest"), icon: me.icon, color: me.color, frame: me.frame, style: me.style, av: me.style === "player" ? me.av : undefined, level: levelInfo().level, rec: store.get("online:token") || undefined };
 }
 
 /** Ratings and record as last confirmed by the server ({ elo, peak, w, l, d, streak, best, code }). */

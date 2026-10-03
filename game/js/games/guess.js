@@ -9,6 +9,7 @@ import { emit } from "../lib/achievements.js";
 import { challengeFor, challengeRng } from "../lib/challenge.js";
 import { COLS, attrs, clueSpeech, compare, pool } from "../shared/guessLogic.js";
 import { announce } from "../lib/a11y.js";
+import { shot } from "../lib/shot.js";
 import { markDaily } from "../lib/daily.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
 
@@ -123,6 +124,7 @@ export function renderGuess(root, signal, params, query) {
     persist();
     render();
     const g = playersById.get(id);
+    if (state.over) shot(state.won, root.querySelector(".gtable"));
     announce(id === state.target.player_id ? `${g.name} is correct! Solved in ${tries()}.`
       : `Guess ${state.guesses.length}, ${g.name}. ${clueSpeech(compare(attrs(g), state.t), COLS)}.${state.over ? ` Out of tries. It was ${state.target.name}.` : ""}`);
   }

@@ -9,6 +9,7 @@ import { posPill } from "../lib/icons.js";
 import { confirmDialog } from "../lib/modal.js";
 import { emit } from "../lib/achievements.js";
 import { announce } from "../lib/a11y.js";
+import { shot } from "../lib/shot.js";
 import { challengeFor, challengeRng } from "../lib/challenge.js";
 import { decoys, eligible } from "../shared/careerLogic.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
@@ -67,6 +68,7 @@ export function renderCareer(root, signal, params, query) {
     announce(right ? `Correct! It's ${target.name}. Score ${state.score}.` : `Wrong. It was ${target.name}. Score ${state.score}.`);
     render();
     animate(root.querySelector(`.choice[data-id="${id}"]`), right ? "glow" : "shake");
+    shot(right, root.querySelector(`.choice[data-id="${id}"]`));
   }
 
   function next() {

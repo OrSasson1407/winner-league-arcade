@@ -7,6 +7,7 @@ import { sound } from "../lib/fx.js";
 import { icon } from "../lib/icons.js";
 import { emit } from "../lib/achievements.js";
 import { announce } from "../lib/a11y.js";
+import { shot } from "../lib/shot.js";
 import { challengeFor, challengeRng } from "../lib/challenge.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
 
@@ -195,6 +196,7 @@ export function renderHigherLower(root, signal, params, query) {
     if (state.phase === "reveal" && state.result !== null) {
       const c = CATS[state.cat];
       countUp(root.querySelector("#val-right"), c.get(state.right), c.dec, type === "time" ? 300 : 650);
+      if (type !== "time") shot(state.result, root.querySelector("#side-right"));
       animate(root.querySelector("#side-right"), state.result ? "glow" : "shake");
     }
   }

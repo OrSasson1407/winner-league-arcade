@@ -12,6 +12,7 @@ import { GAMES, createEngine } from "./duels.js";
 import { BOT_LEVELS, createBot } from "./bot.js";
 import { applyResult, findByCode, leaderboard, recordFor, recordMsg, setProfile } from "./records.js";
 import { CHAT, cleanCode, friendCode, matchRange } from "../game/js/shared/rating.js";
+import { cleanAv } from "../game/js/lib/avatarArt.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.PORT) || Number(process.argv[2]) || 5173;
@@ -62,7 +63,7 @@ const send = (c, msg) => {
 };
 const clean = (s, n) => String(s ?? "").replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, n);
 const eloOf = (c, game) => (c.isBot ? null : c.rec?.elo[game] ?? 1000);
-const publicProfile = (c, game) => ({ name: c.profile.name, icon: c.profile.icon, color: c.profile.color, frame: c.profile.frame, level: c.profile.level,
+const publicProfile = (c, game) => ({ name: c.profile.name, icon: c.profile.icon, color: c.profile.color, frame: c.profile.frame, level: c.profile.level, style: c.profile.style, av: c.profile.av,
   code: c.isBot ? null : friendCode(c.sid), elo: eloOf(c, game), bot: !!c.isBot, botLevel: c.botLevel || null });
 const onlineByCode = (code) => { for (const c of clients.values()) if (c.ws && friendCode(c.sid) === code) return c; return null; };
 
@@ -187,7 +188,8 @@ function onMessage(c, m) {
     case "ping": return send(c, { t: "pong", c: m.c });
     case "profile": {
       c.profile = { name: clean(m.name, 18) || "Guest", icon: clean(m.icon, 12) || "ball", color: /^#[0-9a-f]{6}$/i.test(m.color) ? m.color : "#ff7a1a",
-        frame: clean(m.frame, 16) || "none", level: Math.max(1, Math.min(999, Number(m.level) || 1)) };
+        frame: clean(m.frame, 16) || "none", level: Math.max(1, Math.min(999, Number(m.level) || 1)),
+        style: m.style === "player" ? "player" : "icon", av: m.style === "player" ? cleanAv(m.av) : null };
       c.rec = recordFor(c.sid, m.rec);
       setProfile(c.rec, c.profile);
       send(c, recordMsg(c.rec));
@@ -250,7 +252,7 @@ function onMessage(c, m) {
         const r = on?.rec || findByCode(code);
         if (!r?.profile && !on) return { code, known: false };
         const p = on ? on.profile : r.profile;
-        return { code, known: true, online: !!on, playing: !!(on?.room && !on.room.over), name: p.name, icon: p.icon, color: p.color, frame: p.frame, level: p.level };
+        return { code, known: true, online: !!on, playing: !!(on?.room && !on.room.over), name: p.name, icon: p.icon, color: p.color, frame: p.frame, level: p.level, style: p.style, av: p.av };
       });
       return send(c, { t: "friends", list });
     }
@@ -259,7 +261,7 @@ function onMessage(c, m) {
       const on = onlineByCode(code);
       const r = on?.rec || findByCode(code);
       const p = on?.profile || r?.profile;
-      return send(c, p ? { t: "whois", code, found: true, name: p.name, icon: p.icon, color: p.color, frame: p.frame, level: p.level, online: !!on }
+      return send(c, p ? { t: "whois", code, found: true, name: p.name, icon: p.icon, color: p.color, frame: p.frame, level: p.level, style: p.style, av: p.av, online: !!on }
         : { t: "whois", code, found: false });
     }
     case "cancel": leaveLobby(c); send(c, { t: "cancelled" }); return pushStats();
