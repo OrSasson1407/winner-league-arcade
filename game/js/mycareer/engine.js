@@ -379,6 +379,8 @@ export function playRound(C) {
     }
   }
   S.round++;
+  S.prevRanks = S.ranks || null;
+  S.ranks = table(S).map((t) => t.id);
   out.coach = maybeFireCoach(C, rnd);
   // State Cup rounds
   const cupRounds = CUP_AT(rounds.length);
@@ -552,7 +554,7 @@ function allStar(C, rnd) {
 function seedPlayoffs(S) {
   const top = table(S).slice(0, 8).map((t) => t.id);
   const inIt = top.includes(S.team);
-  return { round: 0, series: [[top[0], top[7]], [top[3], top[4]], [top[1], top[6]], [top[2], top[5]]].map(([a, b]) => ({ a, b, w: [0, 0], games: [] })), champion: null, out: !inIt, outAt: inIt ? null : -1 };
+  return { round: 0, series: [[top[0], top[7]], [top[3], top[4]], [top[1], top[6]], [top[2], top[5]]].map(([a, b]) => ({ a, b, w: [0, 0], games: [] })), champion: null, out: !inIt, outAt: inIt ? null : -1, history: [], seeds: top };
 }
 const PO_NAMES = ["Quarter-finals", "Semi-finals", "Final"];
 /** Play the next playoff game day (every series in the round plays one game). */
@@ -580,6 +582,7 @@ export function playPlayoffDay(C) {
     }
   }
   if (P.series.every((s) => s.w[0] >= need || s.w[1] >= need)) {
+    (P.history ||= []).push(P.series.map((s) => ({ a: s.a, b: s.b, w: s.w.slice() })));
     const winners = P.series.map((s) => (s.w[0] >= need ? s.a : s.b));
     if (!winners.includes(S.team) && !P.out) { P.out = true; P.outAt = P.round; }
     if (P.round === 2) {
@@ -700,7 +703,7 @@ export function endSeason(C) {
     pro: true, season: S.label, simulated: S.simulated, team: club, loan: !!C.loan, age: C.age, role: S.role, overall: bestOverall(C),
     avg: aw.avg, standing: aw.standing, awards: aw.awards, title, cupWon, allStar: !!S.allStar?.picked,
     playoffs: !S.playoffs ? null : title ? "Champions" : S.playoffs.outAt === -1 ? "Missed the playoffs" : S.playoffs.outAt != null ? (S.playoffs.outAt === 2 ? "Lost in the Final" : `Out in the ${PO_NAMES[S.playoffs.outAt]}`) : null,
-    po: averages(S.games.filter((g) => g.playoff)), income,
+    po: averages(S.games.filter((g) => g.playoff)), income, attrs: { ...C.attrs },
   };
   C.history.push(summary);
   if (C.contract) C.contract.left--;

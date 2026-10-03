@@ -13,6 +13,8 @@ import { clubColors } from "../lib/clubs.js";
 import { leaders } from "./records.js";
 import * as E from "../mycareer/engine.js";
 import { maybeEvent, resolveEvent } from "../mycareer/events.js";
+import { badgeMedals, bracket, contractHtml, gauge, radar, scheduleGrid, standings } from "../mycareer/visuals.js";
+import { clubThemeVars } from "../lib/clubTheme.js";
 
 const KEY = "mc:save";
 const NATS = ["Israel", "United States", "Serbia", "Lithuania", "Greece", "France", "Spain", "Nigeria", "Canada", "Argentina", "Croatia", "Ukraine"];
@@ -49,7 +51,24 @@ export function renderMyCareer(root, signal) {
   const av = () => C?.av || (getMe().style === "player" ? getMe().av : DEFAULT_AV);
   const face = (size = 64) => `<span class="avatar-chip player mc-face" style="--av:${clubColors(C.club || C.academy.club)[0]};width:${size}px;height:${size}px" aria-hidden="true">${playerAvatarSvg(av(), clubColors(C.club || C.academy.club)[0])}</span>`;
 
+  const THEME_KEYS = ["--accent", "--accent2", "--accent-ink", "--sel", "--sel-line", "--club", "--club2"];
+  root.classList.add("mc-page");
+  signal.addEventListener("abort", () => { root.classList.remove("mc-page"); THEME_KEYS.forEach((k) => root.style.removeProperty(k)); });
+  /** The career screens wear your current club's colours (adjusted for contrast; off in high contrast). */
+  function clubTheme() {
+    THEME_KEYS.forEach((k) => root.style.removeProperty(k));
+    const team = C && (C.cur?.team || C.loan?.team || C.club || C.academy?.club);
+    if (!team || document.documentElement.dataset.contrast === "high") return;
+    const vars = clubThemeVars(team, document.documentElement.dataset.theme);
+    for (const [k, v] of Object.entries(vars || {})) root.style.setProperty(k, v);
+    const [c1, c2] = clubColors(team);
+    root.style.setProperty("--club", c1); root.style.setProperty("--club2", c2);
+  }
+  let meterBase = null; // gauges show the change since before the last game
+  let freshBadge = null;
+
   function draw() {
+    clubTheme();
     if (!C) return drawCreate();
     if (C.phase === "academy") return drawAcademy();
     if (C.phase === "turnpro" || (C.phase === "offseason" && (!C.contract || C.contract.left <= 0))) return drawOffers();
@@ -120,19 +139,31 @@ export function renderMyCareer(root, signal) {
   function header() {
     const team = C.cur?.team || C.club || C.academy.club;
     const ov = E.bestOverall(C);
-    return html`<h1 class="sr-only">My Career: ${esc(C.name)}</h1><div class="card mc-head" style="--club:${clubColors(team)[0]}">
-      ${face(72)}
-      <div class="mc-id"><small class="muted">${esc(C.pos)}/${esc(C.pos2)} · ${(C.height / 100).toFixed(2)} m · age ${C.age}${C.label ? ` · ${C.label}${C.cur?.simulated ? " (simulated season)" : ""}` : ""}</small>
-        <h2 class="mc-name">${esc(C.name)}</h2>
-        <span class="mc-club">${crestSvg(team, teamName(team), 22)} ${esc(teamName(team))}${C.loan ? " (on loan)" : C.phase === "academy" ? " academy" : ""}${C.cur ? ` · ${roleName(C.cur.role)}` : ""} <span class="pill mc-nat">${C.nat === "Israel" ? "Israeli" : "Foreign player"}</span></span></div>
-      <div class="mc-ovr"><small>OVERALL</small><b class="led">${ov}</b></div>
-      <div class="mc-meters">
-        <div><small>Coach trust</small><div class="progress"><i style="width:${C.trust}%"></i></div></div>
-        <div><small>Popularity</small><div class="progress"><i style="width:${C.pop}%"></i></div></div>
-        ${C.phase !== "academy" ? `<div><small>Team chemistry</small><div class="progress"><i style="width:${Math.round(C.chem?.[team] || 0)}%"></i></div></div>` : ""}
-        <div class="mc-facts"><span>${icon("coin", { size: 14 })} ${money(C.money)}</span><span>${icon("bolt", { size: 14 })} ${C.tp} TP</span></div>
+    const chem = Math.round(C.chem?.[team] || 0);
+    const S = C.cur;
+    const rec = S ? S.standings[S.team] : null;
+    const rank = S ? E.table(S).findIndex((t) => t.id === S.team) + 1 : 0;
+    const nx = S ? nextOpp() : null;
+    const chips = [
+      S ? `<div class="hub-chip"><small>${esc(S.label)}</small><b>${rec.w}-${rec.l}</b><span>#${rank} in the league</span></div>` : "",
+      nx && nx.opp ? `<div class="hub-chip"><small>Next game</small><span class="hub-opp">${crestSvg(nx.opp, teamName(nx.opp), 22)} ${nx.home === false ? "at" : "vs"} ${esc(teamName(nx.opp))}</span></div>` : "",
+      C.contract ? `<div class="hub-chip"><small>Contract</small><b>${money(C.contract.salary)}</b><span>${C.contract.left} season${C.contract.left === 1 ? "" : "s"} left</span></div>` : "",
+      `<div class="hub-chip"><small>Bank</small><b>${money(C.money)}</b><span>${icon("bolt", { size: 12 })} ${C.tp} training points</span></div>`,
+    ].filter(Boolean).join("");
+    return html`<h1 class="sr-only">My Career: ${esc(C.name)}</h1><section class="mc-hub" aria-label="Player hub">
+      <svg class="hub-court" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><circle cx="200" cy="100" r="34"/><path d="M200 0v200M0 40h70v120H0M400 40h-70v120h70M70 70a30 30 0 0 1 0 60M330 70a30 30 0 0 0 0 60"/></svg>
+      <div class="hub-main">
+        <div class="hub-face">${face(104)}</div>
+        <div class="hub-id"><small>${esc(C.pos)}/${esc(C.pos2)} · ${(C.height / 100).toFixed(2)} m · age ${C.age}${C.label ? ` · ${C.label}${S?.simulated ? " (simulated)" : ""}` : ""}</small>
+          <h2 class="mc-name">${esc(C.name)}</h2>
+          <span class="mc-club">${crestSvg(team, teamName(team), 24)} ${esc(teamName(team))}${C.loan ? " (on loan)" : C.phase === "academy" ? " academy" : ""}${S ? ` · ${roleName(S.role)}` : ""} <span class="pill mc-nat">${C.nat === "Israel" ? "Israeli" : "Foreign player"}</span></span></div>
+        <div class="hub-ovr"><small>OVERALL</small><b class="led">${ov}</b></div>
       </div>
-    </div>`;
+      <div class="hub-row">
+        <div class="hub-gauges">${gauge("Coach trust", C.trust, meterBase?.trust)}${gauge("Popularity", C.pop, meterBase?.pop)}${C.phase !== "academy" ? gauge("Chemistry", chem, meterBase?.chem) : ""}</div>
+        <div class="hub-chips">${chips}</div>
+      </div>
+    </section>`;
   }
   const TABS = [["season", "calendar", "Season"], ["table", "chart", "Table"], ["train", "bolt", "Training"], ["career", "clock", "Career"], ["trophies", "trophy", "Trophies"]];
   function tabs(active) {
@@ -180,26 +211,21 @@ export function renderMyCareer(root, signal) {
 
   // ---------------------------------------------------------------- training
   function trainHtml(compact = false) {
-    const badges = Object.entries(E.BADGES);
+    const lastAttrs = C.history.filter((h) => h.pro && h.attrs).slice(-1)[0]?.attrs || null;
     return html`<div class="mc-train">
+      ${compact ? "" : radar(C.attrs, lastAttrs)}
       <div class="mc-attrs">${Object.entries(E.ATTRS).map(([k, l]) => {
         const v = C.attrs[k], cost = E.trainCost(v), capped = v >= Math.min(99, E.ageCap(C.age));
         return `<div class="mc-attr"><span>${l}</span><div class="progress"><i style="width:${v}%"></i></div><b>${Math.floor(v)}</b>
           <button class="btn" data-train="${k}" ${C.tp < cost || capped ? "disabled" : ""} aria-label="Train ${l} (${cost} TP)">+1 <small>${capped ? "max" : `${cost} TP`}</small></button></div>`;
       }).join("")}</div>
-      ${compact ? "" : html`<h3 style="margin-top:14px">${icon("medal")} Badges</h3>
-        <div class="mc-badges">${badges.map(([id, b]) => {
-          const t = C.badges[id] ?? -1, next = t + 1;
-          const need = b.need + next * 6, ok = next <= 2 && C.attrs[b.attr] >= need && C.tp >= E.badgeCost(next);
-          return `<div class="mc-badge ${t >= 0 ? "t" + t : ""}"><b>${b.name}${t >= 0 ? ` · ${E.BADGE_TIERS[t]}` : ""}</b><small>${b.desc}</small>
-            ${next <= 2 ? `<button class="btn" data-badge="${id}" ${ok ? "" : "disabled"}>${E.BADGE_TIERS[next]} · ${E.badgeCost(next)} TP <small class="muted">(${E.ATTRS[b.attr]} ${need}+)</small></button>` : `<span class="muted">Maxed</span>`}</div>`;
-        }).join("")}</div>`}
+      ${compact ? "" : html`<h3 style="margin-top:14px">${icon("medal")} Badges</h3>${badgeMedals(C, { fresh: freshBadge, cost: E.badgeCost })}`}
     </div>`;
   }
   function bindTrain(redraw) {
     root.querySelectorAll("[data-train]").forEach((b) => b.addEventListener("click", () => { if (E.train(C, b.dataset.train)) { save(); sound.play("tick"); const y = scrollY; redraw(); scrollTo(0, y); } }, { signal }));
     root.querySelectorAll("[data-badge]").forEach((b) => b.addEventListener("click", () => {
-      if (E.buyBadge(C, b.dataset.badge)) { save(); sound.play("win"); toast(`Badge unlocked: ${E.BADGES[b.dataset.badge].name}`); emit("mc:badge", { id: b.dataset.badge }); const y = scrollY; redraw(); scrollTo(0, y); }
+      if (E.buyBadge(C, b.dataset.badge)) { save(); sound.play("win"); toast(`Badge unlocked: ${E.BADGES[b.dataset.badge].name}`); emit("mc:badge", { id: b.dataset.badge }); freshBadge = b.dataset.badge; const y = scrollY; redraw(); scrollTo(0, y); freshBadge = null; }
     }, { signal }));
   }
 
@@ -242,9 +268,9 @@ export function renderMyCareer(root, signal) {
       E.sign(C, o);
       if (firstPro) emit("mc:pro", {});
       C.phase = "offseason"; view = null; save(); sound.play("win");
-      toast(`Signed with ${o.name}: ${money(o.salary)} × ${o.years}`);
-      announce(`Signed with ${o.name}.`);
+      announce(`Signed with ${o.name}: ${money(o.salary)} per season for ${o.years} seasons.`);
       draw();
+      ceremony(o);
     }, { signal }));
   }
 
@@ -386,6 +412,7 @@ export function renderMyCareer(root, signal) {
     save();
   }
   function play(fn) {
+    meterBase = { trust: C.trust, pop: C.pop, chem: Math.round(C.chem?.[C.cur.team] || 0) };
     const out = fn();
     afterGames(out);
     if (C.cur.phase === "done") return finishSeason();
@@ -446,8 +473,8 @@ export function renderMyCareer(root, signal) {
             <div class="mc-review-stats">${[["GP", avg.gp], ["MIN", avg.min], ["PPG", avg.ppg], ["RPG", avg.rpg], ["APG", avg.apg], ["VAL", avg.val]].map(([l, v]) => `<div><small>${l}</small><b class="led">${v}</b></div>`).join("")}</div>
             <p class="muted" style="font-size:12px;margin:8px 0 0">Team strength ${S.base ?? "–"}${S.boost ? ` → ${r1(S.base + S.boost)} with you (${S.boost > 0 ? "+" : ""}${S.boost})` : ""}${S.coachChanges ? ` · coach changes this season: ${S.coachChanges}` : ""}</p>
             <p class="muted" style="font-size:12px;margin:4px 0 0">FG ${avg.fg ?? "–"}% · 3P ${avg.tp ?? "–"}% · FT ${avg.ft ?? "–"}% · State Cup: ${S.cup.winner ? (S.cup.winner === S.team ? "won!" : "out") : S.cup.alive ? `round ${S.cup.round + 1}` : "out"}${S.allStar ? ` · All-Star: ${S.allStar.picked ? "selected" : "not selected"}` : ""}</p></div>
-          <div class="card pad"><h3>${icon("clock")} Games</h3>
-            <ol class="mc-games">${S.games.slice().reverse().slice(0, 12).map((g, i) => `<li><button class="mc-g ${g.won ? "w" : "l"}" data-g="${S.games.length - 1 - i}"><b>${g.won ? "W" : "L"}</b> ${g.my}-${g.their} ${g.home ? "vs" : "at"} ${esc(teamName(g.opp))}<small>${g.line.dnp ? "DNP" : `${g.line.pts} pts · ${g.line.reb} reb · ${g.line.ast} ast`}${g.cup ? " · Cup" : g.playoff ? " · Playoffs" : ""}</small></button></li>`).join("") || `<li class="muted">No games yet.</li>`}</ol></div>
+          <div class="card pad"><h3>${icon("calendar")} Schedule</h3>${scheduleGrid(S)}
+            <p class="muted" style="font-size:12px;margin:8px 0 0">Tap a played game to see its scoreboard.</p></div>
           <div class="card pad">${depthHtml(S.label, S.team)}</div>
           ${C.log.length ? `<div class="card pad"><h3>${icon("info")} News</h3><ul class="clean mc-news">${C.log.slice(0, 6).map((l) => `<li>${esc(l.text)}</li>`).join("")}</ul></div>` : ""}
         </div>
@@ -472,6 +499,22 @@ export function renderMyCareer(root, signal) {
       <ol class="mc-depth">${rows.slice(0, 7).map((x, i) => `<li class="${x.me ? "me" : ""}"><span>${i + 1}</span>${x.me ? `<b>${esc(x.name)} (you)</b>` : `<button class="link-name" data-profile="${x.pid}">${esc(x.name)}</button>`}${x.foreign ? ` <small class="muted">foreign</small>` : ""}<b class="led">${x.r}</b></li>`).join("")}</ol>
       <p class="muted" style="font-size:12px;margin:6px 0 0">Your number includes coach trust, chemistry${C.nat === "Israel" ? " and the Israeli-player edge" : ""}.${dc.foreign ? ` Foreign players on the roster: ${dc.foreigners} (minutes for ${E.FOREIGN_LIMIT}).${dc.slotOk ? "" : " <b>You're not among the top foreigners yet: bench.</b>"}` : ""}</p>`;
   }
+  /** Signing ceremony: the contract, a signature, and the first photo in the new jersey. */
+  function ceremony(o) {
+    const [c1, c2] = clubColors(o.team);
+    const toHex = (c) => { const x = document.createElement("canvas").getContext("2d"); x.fillStyle = c; return x.fillStyle; };
+    const jersey = `<span class="avatar-chip player ct-av" style="--av:${c1};width:150px;height:150px">${playerAvatarSvg({ ...av(), j1: toHex(c1), j2: toHex(c2) }, c1)}</span>`;
+    const d = modal("Contract signed");
+    d.innerHTML = html`<button class="icon-btn profile-close" aria-label="Close">${icon("close", { size: 18 })}</button>
+      <div class="profile">${contractHtml(C, o, money, jersey, E.seasonLabel(C.debut, C.seasonNo))}
+        <div class="row" style="justify-content:center;margin-top:14px"><button class="btn primary" id="ct-go">${icon("arrowRight", { size: 15 })} Let's go</button></div></div>`;
+    const close = () => closeModal(d);
+    d.querySelector(".profile-close").addEventListener("click", close);
+    d.querySelector("#ct-go").addEventListener("click", close);
+    openModal(d);
+    setTimeout(() => { confetti(1800); sound.play("place"); }, 900);
+    d.querySelector("#ct-go").focus();
+  }
   function showNews(title, text) {
     const d = modal(title);
     d.innerHTML = html`<div class="profile mc-event"><small class="muted">BREAKING</small><h2>${icon("whistle", { size: 22 })} ${esc(title)}</h2><p>${esc(text)}</p>
@@ -482,11 +525,14 @@ export function renderMyCareer(root, signal) {
   }
 
   function tableHtml() {
-    const S = C.cur, rows = E.table(S);
-    return html`<div class="card pad"><h2>${icon("chart")} ${S.label} standings${S.simulated ? ` <span class="muted" style="font-size:14px">(simulated season)</span>` : ""}</h2>
-      <table class="stat-table mc-table"><thead><tr><th>#</th><th>Team</th><th>W</th><th>L</th><th>+/-</th></tr></thead>
-      <tbody>${rows.map((r, i) => `<tr class="${r.id === S.team ? "me-row" : ""} ${i === 7 ? "cut" : ""}"><td>${i + 1}</td><td>${crestSvg(r.id, r.name, 20)} ${esc(r.name)}</td><td><b>${r.w}</b></td><td>${r.l}</td><td>${r.diff > 0 ? "+" : ""}${r.diff}</td></tr>`).join("")}</tbody></table>
-      <p class="muted" style="font-size:12px">Top 8 make the playoffs (best of three). Team strengths come from each club's real roster that season.</p></div>`;
+    const S = C.cur;
+    return html`<div class="mc-stack">
+      <div class="card pad" style="min-width:0"><h2>${icon("chart")} ${S.label} standings${S.simulated ? ` <span class="muted" style="font-size:14px">(simulated season)</span>` : ""}</h2>
+        ${standings(S)}
+        <p class="muted" style="font-size:12px">▲▼ change since the last round. The top 8 (highlighted) make the playoffs, best of three. Team strengths come from each club's real roster that season.</p></div>
+      <div class="card pad" style="min-width:0"><h2>${icon("trophy")} Playoffs</h2>
+        ${S.playoffs ? bracket(S) : `<p class="muted">The bracket appears when the regular season ends. Finish in the top 8 to get in.</p>`}</div>
+    </div>`;
   }
 
   // ---------------------------------------------------------------- career & legacy
