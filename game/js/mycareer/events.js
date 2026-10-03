@@ -12,7 +12,7 @@ const EVENTS = [
     choices: [
       { label: "Credit the team", do: (C) => { C.trust += 3; C.pop += 2; return "The coach liked that. (Trust +3, popularity +2)"; } },
       { label: "\"I can do this every night\"", do: (C) => { C.pop += 5; C.trust -= 1; return "Bold. The fans love it. (Popularity +5, trust −1)"; } },
-      { label: "Call out the refs", do: (C) => { C.pop += 7; C.trust -= 5; C.money -= 5000; return "Viral clip, and a ₪5,000 fine. (Popularity +7, trust −5)"; } },
+      { label: "Call out the refs", do: (C) => { C.pop += 7; C.trust -= 5; C.money -= 1500; return "Viral clip, and a $1,500 fine. (Popularity +7, trust −5)"; } },
     ] },
   { id: "media-bad", when: (C, g) => g && !g.won && g.line.min > 10 && g.line.pts <= 4, title: "Tough questions",
     text: () => "A quiet night. A reporter asks if you're in a slump.",
@@ -60,7 +60,7 @@ const EVENTS = [
   { id: "charity-hospital", when: () => true, title: "Children's hospital visit",
     text: () => "The club organises a visit to a children's hospital.",
     choices: [
-      { label: "Go and bring jerseys", do: (C) => { C.pop += 5; C.money -= 3000; C.charity = (C.charity || 0) + 1; return "A day nobody there will forget. (Popularity +5)"; } },
+      { label: "Go and bring jerseys", do: (C) => { C.pop += 5; C.money -= 800; C.charity = (C.charity || 0) + 1; return "A day nobody there will forget. (Popularity +5)"; } },
       { label: "Skip it", do: (C) => { C.pop -= 1; return "Popularity −1."; } },
     ] },
   { id: "charity-camp", when: () => true, title: "Youth camp",
@@ -72,7 +72,7 @@ const EVENTS = [
   { id: "sponsor", when: (C) => C.pop >= 30, title: "Sponsor offer",
     text: () => "A sports drink wants you in an ad.",
     choices: [
-      { label: "Sign it", do: (C) => { const v = 10000 + Math.round(C.pop * 600); C.money += v; C.pop += 2; return `+₪${v.toLocaleString()}, popularity +2.`; } },
+      { label: "Sign it", do: (C) => { const v = 2500 + Math.round(C.pop * 160); C.money += v; C.pop += 2; return `+$${v.toLocaleString()}, popularity +2.`; } },
       { label: "Not now", do: () => "Maybe next season." },
     ] },
   { id: "fans", when: (C) => C.pop >= 15, title: "Fans outside the arena",

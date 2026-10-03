@@ -17,9 +17,10 @@ import { maybeEvent, resolveEvent } from "../mycareer/events.js";
 const KEY = "mc:save";
 const NATS = ["Israel", "United States", "Serbia", "Lithuania", "Greece", "France", "Spain", "Nigeria", "Canada", "Argentina", "Croatia", "Ukraine"];
 const TROPHY = { title: ["trophy", "Champion"], cup: ["medal", "State Cup"], allstar: ["star", "All-Star"] };
-const money = (v) => `₪${Math.round(v).toLocaleString()}`;
+const money = (v) => `${v < 0 ? "−" : ""}$${Math.abs(Math.round(v)).toLocaleString()}`;
 const roleName = (r) => E.ROLE_NAMES[r] || r;
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const r1 = (v) => Math.round(v * 10) / 10;
 
 let dialog = null;
 function modal(label) {
@@ -36,6 +37,13 @@ function modal(label) {
 
 export function renderMyCareer(root, signal) {
   let C = store.get(KEY, null);
+  if (C && (C.v || 1) < 2) { // saves from before salaries were in dollars
+    C.money = Math.round(C.money / 3.7);
+    if (C.contract) C.contract.salary = Math.round(C.contract.salary / 3.7 / 1000) * 1000;
+    C.chem ??= {}; C.trustBy ??= {}; C.injuries ??= [];
+    C.v = 2;
+    store.set(KEY, C);
+  }
   let tab = "season", lastGame = null, view = null;
   const save = () => store.set(KEY, C);
   const av = () => C?.av || (getMe().style === "player" ? getMe().av : DEFAULT_AV);
@@ -70,6 +78,7 @@ export function renderMyCareer(root, signal) {
             <div class="field"><label>Second position</label><div class="seg sm" id="mc-pos2">${E.POSITIONS.map((p) => `<button data-v="${p}" class="${p === f.pos2 ? "on" : ""}" aria-pressed="${p === f.pos2}">${p}</button>`).join("")}</div></div></div>
           <div class="field"><label for="mc-h">Height: <b>${(f.height / 100).toFixed(2)} m</b></label><input id="mc-h" type="range" min="175" max="222" value="${f.height}" class="mc-range">
             <small class="muted">Taller: more rebounds and blocks, less speed (and fewer threes above 2.05 m). Shorter: better passer, harder at the rim.</small></div>
+          ${f.nat !== "Israel" ? `<p class="mc-note">${icon("info", { size: 15 })} Foreign player: clubs can give real minutes to only ${E.FOREIGN_LIMIT} foreigners (a simplified version of the league's rules), so you'll need to beat the other foreigners on the roster. Israeli players get a small edge in minutes and salary.</p>` : ""}
           <div class="field"><label>Player type</label><div class="mc-cards" id="mc-arch">${Object.entries(E.ARCHETYPES).map(([k, a]) => `<button class="mc-pick ${k === f.arch ? "on" : ""}" data-v="${k}" aria-pressed="${k === f.arch}"><b>${a.name}</b><small>${a.desc}</small></button>`).join("")}</div></div>
           <div class="field"><label>Start</label><div class="mc-cards two" id="mc-diff">${Object.entries(E.DIFFICULTY).map(([k, d]) => `<button class="mc-pick ${k === f.diff ? "on" : ""}" data-v="${k}" aria-pressed="${k === f.diff}"><b>${d.name}</b><small>${d.desc}</small></button>`).join("")}</div></div>
           <div class="field"><label>Training points to spend <b class="led">${D.points - used}</b> <span class="muted">(max +10 per skill)</span></label>
@@ -115,11 +124,12 @@ export function renderMyCareer(root, signal) {
       ${face(72)}
       <div class="mc-id"><small class="muted">${esc(C.pos)}/${esc(C.pos2)} · ${(C.height / 100).toFixed(2)} m · age ${C.age}${C.label ? ` · ${C.label}${C.cur?.simulated ? " (simulated season)" : ""}` : ""}</small>
         <h2 class="mc-name">${esc(C.name)}</h2>
-        <span class="mc-club">${crestSvg(team, teamName(team), 22)} ${esc(teamName(team))}${C.loan ? " (on loan)" : C.phase === "academy" ? " academy" : ""}${C.cur ? ` · ${roleName(C.cur.role)}` : ""}</span></div>
+        <span class="mc-club">${crestSvg(team, teamName(team), 22)} ${esc(teamName(team))}${C.loan ? " (on loan)" : C.phase === "academy" ? " academy" : ""}${C.cur ? ` · ${roleName(C.cur.role)}` : ""} <span class="pill mc-nat">${C.nat === "Israel" ? "Israeli" : "Foreign player"}</span></span></div>
       <div class="mc-ovr"><small>OVERALL</small><b class="led">${ov}</b></div>
       <div class="mc-meters">
         <div><small>Coach trust</small><div class="progress"><i style="width:${C.trust}%"></i></div></div>
         <div><small>Popularity</small><div class="progress"><i style="width:${C.pop}%"></i></div></div>
+        ${C.phase !== "academy" ? `<div><small>Team chemistry</small><div class="progress"><i style="width:${Math.round(C.chem?.[team] || 0)}%"></i></div></div>` : ""}
         <div class="mc-facts"><span>${icon("coin", { size: 14 })} ${money(C.money)}</span><span>${icon("bolt", { size: 14 })} ${C.tp} TP</span></div>
       </div>
     </div>`;
@@ -204,7 +214,8 @@ export function renderMyCareer(root, signal) {
         <div class="field"><label>Agent</label><div class="mc-cards" id="mc-agent">${Object.entries(E.AGENTS).map(([k, a]) => `<button class="mc-pick ${C.agent === k ? "on" : ""}" data-v="${k}" aria-pressed="${C.agent === k}"><b>${a.name}</b><small>${a.desc} Fee ${Math.round(a.fee * 100)}%.</small></button>`).join("")}</div></div>
         <div class="mc-offers">${view.offers.map((o, i) => html`<div class="card pad mc-offer ${o.homeGrown ? "home" : ""}">
           <div class="row">${crestSvg(o.team, o.name, 36)}<div><b>${esc(o.name)}</b><small class="muted">${o.homeGrown ? "Your academy club" : o.own ? "Your current club" : ""}${o.loyal ? " · loyalty bonus" : ""}</small></div></div>
-          <div class="mc-terms"><span>${money(o.salary)}<small>/season</small></span><span>${o.years} yr${o.years > 1 ? "s" : ""}</span><span>${roleName(o.role)}</span></div>
+          <div class="mc-terms"><span>${money(o.salary)}<small>/season gross</small></span><span>${o.years} yr${o.years > 1 ? "s" : ""}</span><span>${roleName(o.role)}</span></div>
+          <small class="muted">≈ ${money(E.netPay(o.salary, C.agent))} net after ~${Math.round(E.taxRate(o.salary) * 100)}% tax and the agent's ${Math.round(E.AGENTS[C.agent].fee * 100)}% · ${E.FAM_NAMES[o.fam] || ""} depth: #${(o.rank ?? 0) + 1}${C.nat !== "Israel" ? ` · ${o.foreigners} foreigners on the roster (minutes for ${E.FOREIGN_LIMIT})` : ""}</small>
           <div class="row" style="flex-wrap:wrap">
             <button class="btn primary" data-sign="${i}">${icon("check", { size: 15 })} Sign</button>
             ${view.tried[i] ? `<span class="muted" style="font-size:12px">${esc(view.tried[i])}</span>` : html`
@@ -253,9 +264,11 @@ export function renderMyCareer(root, signal) {
         <div class="card pad">
           <h2>${icon("sun")} Summer · before ${nextLabel}</h2>
           ${last ? `<p class="muted">Last season: ${esc(teamName(last.team))}, ${last.avg.ppg} PPG, ${last.avg.rpg} RPG, ${last.avg.apg} APG${last.awards.length ? ` · ${last.awards.join(", ")}` : ""}.</p>` : `<p class="muted">Your pro career starts now.</p>`}
-          <p>Contract: <b>${esc(teamName(C.contract.team))}</b>, ${money(C.contract.salary)}/season, ${C.contract.left} season${C.contract.left === 1 ? "" : "s"} left. Expected role: <b>${roleName(expected)}</b>.</p>
+          <p>Contract: <b>${esc(teamName(C.contract.team))}</b>, ${money(C.contract.salary)}/season (≈ ${money(E.netPay(C.contract.salary, C.agent))} net), ${C.contract.left} season${C.contract.left === 1 ? "" : "s"} left. Expected role: <b>${roleName(expected)}</b>.</p>
+          ${depthHtml(nextLabel, C.loan?.team || C.contract.team)}
+          ${C.injury ? `<p class="bad-text">${icon("heart", { size: 15 })} Still recovering from a ${esc(C.injury.name.toLowerCase())}: about ${C.injury.games} more games.</p>` : ""}
           <div class="field"><label>Summer camp ${view?.camp ? `<span class="muted">(done)</span>` : ""}</label><div class="mc-cards two" id="mc-camp">${Object.entries(E.SUMMER_CAMPS).map(([k, c]) => `<button class="mc-pick" data-v="${k}" ${view?.camp ? "disabled" : ""}><b>${c.name}</b><small>${c.attrs.map((a) => E.ATTRS[a]).join(" & ")} +1 to +3${C.coach ? " (+1 coach)" : ""}</small></button>`).join("")}</div></div>
-          <div class="field"><label>Personal coach</label><button class="btn ${C.coach ? "primary" : ""}" id="mc-coach">${icon("whistle", { size: 15 })} ${C.coach ? "Hired (₪40,000/season) · fire" : "Hire for ₪40,000/season"}</button>
+          <div class="field"><label>Personal coach</label><button class="btn ${C.coach ? "primary" : ""}" id="mc-coach">${icon("whistle", { size: 15 })} ${C.coach ? `Hired (${money(E.COACH_COST)}/season) · fire` : `Hire for ${money(E.COACH_COST)}/season`}</button>
             <small class="muted">More training points after games, and a bigger summer camp.</small></div>
           ${expected === "bench" && !C.loan ? (weaker.length ? html`<div class="field"><label for="mc-loan">Not enough minutes? Go on loan for a season</label>
             <div class="row"><select id="mc-loan" class="input" style="flex:1">${weaker.map((t) => `<option value="${t.id}">${esc(t.name)} (${roleName(t.role)})</option>`).join("")}</select><button class="btn" id="mc-loan-go">Loan me out</button></div></div>`
@@ -316,7 +329,7 @@ export function renderMyCareer(root, signal) {
         <div class="mc-led-team"><b class="led" data-count="${g.their}">${g.their}</b><span>${esc(teamName(opp))}</span></div>
       </div>
       <div class="mc-led-q">${[0, 1, 2, 3].map((i) => `<span>Q${i + 1} <b>${g.q[0][i]}-${g.q[1][i]}</b></span>`).join("")}</div>
-      <div class="mc-line">${L.injured ? "Out injured" : L.dnp ? "Did not play (coach's decision)" : `<b>${esc(C.name)}</b> ${L.min} min · <b>${L.pts} pts</b> · ${L.reb} reb · ${L.ast} ast · ${L.stl} stl · ${L.blk} blk · ${L.fgm}/${L.fga} FG · ${L.tpm}/${L.tpa} 3P`}</div>
+      <div class="mc-line">${L.injured ? "Out injured" : L.dnp ? "Did not play (coach's decision)" : `<b>${esc(C.name)}</b> ${L.min} min · <b>${L.pts} pts</b> · ${L.reb} reb · ${L.ast} ast · ${L.stl} stl · ${L.blk} blk · ${L.fgm}/${L.fga} FG · ${L.tpm}/${L.tpa} 3P · ${L.pf ?? 0} PF${L.fouledOut ? " · <b>fouled out</b>" : ""}`}</div>
       <button class="btn" id="mc-box">${icon("chart", { size: 15 })} Box score</button>
     </div>`;
   }
@@ -350,9 +363,11 @@ export function renderMyCareer(root, signal) {
     const inj = C.injury;
     const d = modal("Injury");
     d.dataset.locked = "1";
-    d.innerHTML = html`<div class="profile mc-event"><small class="muted">MEDICAL REPORT</small><h2>${icon("heart", { size: 22 })} ${esc(inj.name)}</h2>
-      <p>The doctors say you'll miss about <b>${inj.games} game${inj.games === 1 ? "" : "s"}</b>.</p>
-      <div class="mc-choices"><button class="btn primary" data-r="0">Full recovery (${inj.games} games)</button><button class="btn" data-r="1">Rush back (${Math.max(1, Math.round(inj.games * 0.45))} games, risk of losing athleticism)</button></div></div>`;
+    d.innerHTML = html`<div class="profile mc-event"><small class="muted">MEDICAL REPORT</small><h2>${icon("heart", { size: 22 })} ${esc(inj.name)}${inj.again ? " (again)" : ""}</h2>
+      <p>${esc(inj.desc || "")} The doctors expect you to miss about <b>${inj.games} game${inj.games === 1 ? "" : "s"}</b>${inj.severe ? ", into next season (the summer counts as about 15 games of rehab)" : ""}.</p>
+      ${inj.ath ? `<p class="bad-text">Lasting effect: athleticism ${inj.ath}, defense ${Math.round(inj.ath / 2)}.</p>` : ""}
+      <div class="mc-choices"><button class="btn primary" data-r="0">${inj.severe ? "Surgery and full rehab" : `Full recovery (${inj.games} games)`}</button>
+        ${inj.noRush ? `<p class="muted" style="margin:0">${inj.severe ? "There's no rushing back from this one." : "League protocol: no early return."}</p>` : `<button class="btn" data-r="1">Rush back (${Math.max(1, Math.round(inj.games * 0.45))} games). For the next 10 games you're three times as likely to get hurt again.</button>`}</div></div>`;
     d.querySelectorAll("[data-r]").forEach((b) => b.addEventListener("click", () => { E.treatInjury(C, b.dataset.r === "1"); save(); closeModal(d); draw(); }));
     openModal(d);
     d.querySelector("[data-r]")?.focus();
@@ -366,6 +381,7 @@ export function renderMyCareer(root, signal) {
     }
     if (mine.length) { lastGame = mine[mine.length - 1]; sound.play(lastGame.won ? "place" : "bad"); }
     if (out.cup?.game) { lastGame = out.cup.game; toast(`State Cup ${out.cup.round}: ${out.cup.game.won ? "won" : "lost"}`); if (out.cup.winner === C.cur.team) { confetti(3000); sound.play("victory"); emit("mc:trophy", { type: "cup" }); } }
+    if (out.coach) { toast("Coaching change!"); announce(out.coach.text); }
     if (out.allStar) { if (out.allStar.picked) { toast("You're an All-Star!"); confetti(2000); emit("mc:trophy", { type: "allstar" }); } }
     save();
   }
@@ -375,6 +391,7 @@ export function renderMyCareer(root, signal) {
     if (C.cur.phase === "done") return finishSeason();
     draw();
     if (C.injury?.pending) return showInjury();
+    if (out.coach) return showNews("Coaching change", out.coach.text);
     const ev = lastGame && !C.injury ? maybeEvent(C, lastGame) : null;
     if (ev) showEvent(ev);
   }
@@ -427,9 +444,11 @@ export function renderMyCareer(root, signal) {
         <div style="display:grid;gap:14px;align-content:start">
           <div class="card pad"><h3>${icon("chart")} ${S.label} so far</h3>
             <div class="mc-review-stats">${[["GP", avg.gp], ["MIN", avg.min], ["PPG", avg.ppg], ["RPG", avg.rpg], ["APG", avg.apg], ["VAL", avg.val]].map(([l, v]) => `<div><small>${l}</small><b class="led">${v}</b></div>`).join("")}</div>
-            <p class="muted" style="font-size:12px;margin:8px 0 0">FG ${avg.fg ?? "–"}% · 3P ${avg.tp ?? "–"}% · FT ${avg.ft ?? "–"}% · State Cup: ${S.cup.winner ? (S.cup.winner === S.team ? "won!" : "out") : S.cup.alive ? `round ${S.cup.round + 1}` : "out"}${S.allStar ? ` · All-Star: ${S.allStar.picked ? "selected" : "not selected"}` : ""}</p></div>
+            <p class="muted" style="font-size:12px;margin:8px 0 0">Team strength ${S.base ?? "–"}${S.boost ? ` → ${r1(S.base + S.boost)} with you (${S.boost > 0 ? "+" : ""}${S.boost})` : ""}${S.coachChanges ? ` · coach changes this season: ${S.coachChanges}` : ""}</p>
+            <p class="muted" style="font-size:12px;margin:4px 0 0">FG ${avg.fg ?? "–"}% · 3P ${avg.tp ?? "–"}% · FT ${avg.ft ?? "–"}% · State Cup: ${S.cup.winner ? (S.cup.winner === S.team ? "won!" : "out") : S.cup.alive ? `round ${S.cup.round + 1}` : "out"}${S.allStar ? ` · All-Star: ${S.allStar.picked ? "selected" : "not selected"}` : ""}</p></div>
           <div class="card pad"><h3>${icon("clock")} Games</h3>
             <ol class="mc-games">${S.games.slice().reverse().slice(0, 12).map((g, i) => `<li><button class="mc-g ${g.won ? "w" : "l"}" data-g="${S.games.length - 1 - i}"><b>${g.won ? "W" : "L"}</b> ${g.my}-${g.their} ${g.home ? "vs" : "at"} ${esc(teamName(g.opp))}<small>${g.line.dnp ? "DNP" : `${g.line.pts} pts · ${g.line.reb} reb · ${g.line.ast} ast`}${g.cup ? " · Cup" : g.playoff ? " · Playoffs" : ""}</small></button></li>`).join("") || `<li class="muted">No games yet.</li>`}</ol></div>
+          <div class="card pad">${depthHtml(S.label, S.team)}</div>
           ${C.log.length ? `<div class="card pad"><h3>${icon("info")} News</h3><ul class="clean mc-news">${C.log.slice(0, 6).map((l) => `<li>${esc(l.text)}</li>`).join("")}</ul></div>` : ""}
         </div>
       </div>` : tab === "table" ? tableHtml() : tab === "train" ? `<div class="card pad">${trainHtml()}</div>` : tab === "career" ? careerHtml() : trophiesHtml()}`;
@@ -442,6 +461,24 @@ export function renderMyCareer(root, signal) {
     root.querySelector("#mc-box")?.addEventListener("click", () => openBox(lastGame), { signal });
     root.querySelectorAll("[data-g]").forEach((b) => b.addEventListener("click", () => { lastGame = S.games[Number(b.dataset.g)]; drawSeason(); root.querySelector(".mc-led")?.scrollIntoView({ block: "nearest" }); }, { signal }));
     root.querySelectorAll(".mc-led [data-count]").forEach((el) => countUp(el, Number(el.dataset.count), 0, 700));
+  }
+
+  /** Who you're competing with for minutes at your position group. */
+  function depthHtml(label, tid) {
+    const dc = E.depthChart(C, label, tid);
+    const rows = dc.rivals.map((ps) => ({ name: playersById.get(ps.player_id)?.name || ps.player_id, pid: ps.player_id, r: ps.rating_mock, foreign: !E.isIsraeliPlayer(ps.player_id) }));
+    rows.splice(dc.rank, 0, { me: true, name: C.name, r: Math.round(dc.myScore), foreign: C.nat !== "Israel" });
+    return html`<h3>${icon("users")} Depth chart · ${E.FAM_NAMES[dc.fam]} at ${esc(teamName(tid))}</h3>
+      <ol class="mc-depth">${rows.slice(0, 7).map((x, i) => `<li class="${x.me ? "me" : ""}"><span>${i + 1}</span>${x.me ? `<b>${esc(x.name)} (you)</b>` : `<button class="link-name" data-profile="${x.pid}">${esc(x.name)}</button>`}${x.foreign ? ` <small class="muted">foreign</small>` : ""}<b class="led">${x.r}</b></li>`).join("")}</ol>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Your number includes coach trust, chemistry${C.nat === "Israel" ? " and the Israeli-player edge" : ""}.${dc.foreign ? ` Foreign players on the roster: ${dc.foreigners} (minutes for ${E.FOREIGN_LIMIT}).${dc.slotOk ? "" : " <b>You're not among the top foreigners yet: bench.</b>"}` : ""}</p>`;
+  }
+  function showNews(title, text) {
+    const d = modal(title);
+    d.innerHTML = html`<div class="profile mc-event"><small class="muted">BREAKING</small><h2>${icon("whistle", { size: 22 })} ${esc(title)}</h2><p>${esc(text)}</p>
+      <div class="mc-choices"><button class="btn primary" id="mc-ok">OK</button></div></div>`;
+    d.querySelector("#mc-ok").addEventListener("click", () => { closeModal(d); draw(); });
+    openModal(d);
+    d.querySelector("#mc-ok").focus();
   }
 
   function tableHtml() {
@@ -469,10 +506,14 @@ export function renderMyCareer(root, signal) {
           <tbody>${pro.map((h) => `<tr><td>${h.season}${h.simulated ? "*" : ""}</td><td>${esc(teamName(h.team))}${h.loan ? " (loan)" : ""}</td><td>${h.age}</td><td>${roleName(h.role)}</td><td>${h.avg.gp}</td><td>${h.avg.ppg}</td><td>${h.avg.rpg}</td><td>${h.avg.apg}</td><td>${h.avg.val}</td><td><b>${h.overall}</b></td></tr>`).join("")}</tbody></table></div>
           <p class="muted" style="font-size:12px">* simulated season (after ${E.LAST_REAL}, rosters based on ${E.LAST_REAL}).</p>` : `<p class="muted">No pro seasons yet.</p>`}
       </div>
-      <div class="card pad"><h3>${icon("trophy")} Against the real records</h3>
+      <div style="display:grid;gap:16px;align-content:start"><div class="card pad"><h3>${icon("trophy")} Against the real records</h3>
         <p class="muted" style="font-size:13px;margin-top:0">Your career totals ranked among every real player since 2010-11 (regular season).</p>
         <ul class="clean mc-recs">${recs.map(([cat, l, v]) => { const r = recordRank(cat, v); return `<li><span>${l}</span><b>${v.toLocaleString()}</b><span class="${r.rank === 1 ? "good-text" : "muted"}">#${r.rank}${r.rank === 1 ? " · all-time record!" : ` · record ${Math.round(r.top.value).toLocaleString()} (${esc(playersById.get(r.top.pid)?.name || "")})`}</span></li>`; }).join("")}</ul>
         ${bestSeason ? (() => { const r = recordRank("sppg", bestSeason.avg.ppg); return `<p style="font-size:14px">Best scoring season: <b>${bestSeason.avg.ppg} PPG</b> (${bestSeason.season}) · would rank <b>#${r.rank}</b> among real single seasons.</p>`; })() : ""}
+      </div>
+      <div class="card pad"><h3>${icon("heart")} Injury history</h3>
+        ${(C.injuries || []).length ? `<ul class="clean mc-news">${C.injuries.slice().reverse().map((i) => `<li><b>${esc(i.name)}</b> <span class="muted">${i.season || ""} · age ${i.age} · ${i.games} games</span></li>`).join("")}</ul>` : `<p class="muted">Clean bill of health.</p>`}
+        <p class="muted" style="font-size:13px;margin:8px 0 0">Career earnings (net, after expenses): ${money(C.money)}</p></div>
       </div>
     </div>`;
   }

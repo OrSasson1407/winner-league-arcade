@@ -1712,3 +1712,12 @@ dialog.confirm-modal p { margin: 8px 0 0; line-height: 1.5; }
 .pv-mc i { width: 14px; height: 2px; background: var(--line); }
 @media (max-width: 900px) { .mc-create, .mc-grid { grid-template-columns: 1fr; } .mc-preview { position: static; } .mc-head { grid-template-columns: auto 1fr auto; } .mc-meters { grid-column: 1 / -1; } }
 @media (max-width: 560px) { .mc-two { grid-template-columns: 1fr; } .mc-cabinet { grid-template-columns: repeat(2, 1fr); } .mc-attr { grid-template-columns: 86px 1fr 28px auto; } .mc-id .mc-name { font-size: 24px; } .mc-led-team b { font-size: 36px; } }
+
+/* v15: My Career realism */
+.mc-note { display: flex; gap: 8px; align-items: flex-start; margin: 4px 0; padding: 10px 12px; border-radius: 12px; font-size: 13px; background: color-mix(in srgb, var(--accent) 10%, var(--bg2)); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+.mc-nat { font-size: 11px; padding: 1px 8px; }
+.mc-depth { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
+.mc-depth li { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 8px; align-items: center; padding: 5px 10px; border-radius: 9px; background: var(--bg2); font-size: 14px; }
+.mc-depth li > span { color: var(--muted); font-weight: 800; }
+.mc-depth li.me { background: var(--sel); border: 1px solid var(--accent); }
+.mc-depth .led { font-size: 15px; color: var(--accent); }

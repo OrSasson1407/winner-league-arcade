@@ -71,7 +71,7 @@ export function createPlayer({ name, pos, pos2, height, arch, diff, alloc = {}, 
   const attrs = Object.fromEntries(Object.keys(ATTRS).map((k) => [k, D.base + (ARCHETYPES[arch]?.boost[k] || 0) + Math.min(10, alloc[k] || 0)]));
   const academyStart = PLAYED_SEASONS.indexOf(debut) - 2;
   return {
-    v: 1, name: String(name || "Rookie").slice(0, 22), pos, pos2: pos2 || pos, height: clamp(Number(height) || 196, 170, 225), arch, diff, nat, av,
+    v: 2, chem: {}, trustBy: {}, injuries: [], name: String(name || "Rookie").slice(0, 22), pos, pos2: pos2 || pos, height: clamp(Number(height) || 196, 170, 225), arch, diff, nat, av,
     age: 16, attrs, badges: {}, tp: 6, money: 0, pop: 5, trust: 50, agent: "rookie", coach: false,
     phase: "academy", academy: { club: academy, year: 1, loan: null, log: [] },
     debut, seasonNo: 0, label: null, club: null, contract: null, loan: null,
@@ -164,27 +164,61 @@ export function teamsOf(label) {
   return H.getTeamsBySeason(ds).map((t) => ({ id: t.team_id, name: teamName(t.team_id), strength: r1(realTeamStrength(ds, t.team_id) + (drift ? (rnd() - 0.5) * 4 : 0)) }));
 }
 
-/** Role on a team: where you rank among its real rotation (your overall plus coach trust). */
-export function roleOn(C, label, tid) {
-  const roster = rosterOf(dataSeason(label), tid).slice(0, 10).map((ps) => ps.rating_mock);
-  const score = bestOverall(C) + (C.trust - 50) / 4;
-  const rank = roster.filter((r) => r > score).length;
-  return rank < 5 ? "starter" : rank < 9 ? "rotation" : "bench";
+// Position groups and how many starters / rotation players each group gets.
+const FAM = { PG: "G", SG: "G", SF: "W", PF: "B", C: "B" };
+export const FAM_NAMES = { G: "Guards", W: "Wings", B: "Bigs" };
+const SLOTS = { G: [2, 2], W: [1, 2], B: [2, 1] };
+/** Game rule (simplified from the league's foreign-player limits): at most 5 foreign players get real minutes. */
+export const FOREIGN_LIMIT = 5;
+export const isIsraeliPlayer = (pid) => { const p = playersById.get(pid); return p?.nationality === "Israel" || (p?.nationalities || []).includes("Israel"); };
+const posOf = (ps) => ps.position || playersById.get(ps.player_id)?.primary_position || "SF";
+
+/** Your score for minutes: overall, coach trust, team chemistry, and the Israeli-player advantage. */
+function minutesScore(C, tid) {
+  return bestOverall(C) + (C.trust - 50) / 4 + ((C.chem?.[tid] || 0) - 30) / 25 + (C.nat === "Israel" ? 2 : 0);
 }
+/** Where you'd stand on a team: competitors at your position group, and the foreign-player slots. */
+export function depthChart(C, label, tid) {
+  const roster = rosterOf(dataSeason(label), tid).slice(0, 11);
+  const score = minutesScore(C, tid);
+  const foreign = C.nat !== "Israel";
+  const foreigners = roster.filter((ps) => !isIsraeliPlayer(ps.player_id)).map((ps) => ps.rating_mock).sort((a, b) => b - a);
+  const slotOk = !foreign || foreigners.length < FOREIGN_LIMIT || score > foreigners[FOREIGN_LIMIT - 1];
+  const groups = [...new Set([FAM[C.pos], FAM[C.pos2]])].map((fam, i) => {
+    const rivals = roster.filter((ps) => FAM[posOf(ps)] === fam).sort((a, b) => b.rating_mock - a.rating_mock);
+    const myScore = score - (i > 0 ? 2 : 0); // playing your second position costs a little
+    const rank = rivals.filter((ps) => ps.rating_mock > myScore).length;
+    const [st, rot] = SLOTS[fam];
+    // a depth spot is not enough on its own: coaches don't give real minutes below a basic level
+    const role = rank < st && myScore >= 74 ? "starter" : rank < st + rot && myScore >= 68 ? "rotation" : "bench";
+    return { fam, rank, rivals, myScore, role };
+  });
+  const order = ["starter", "rotation", "bench"];
+  const best = groups.sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role) || a.rank - b.rank)[0];
+  return { ...best, foreign, foreigners: foreigners.length, slotOk, role: slotOk ? best.role : "bench" };
+}
+/** Role on a team (starter / rotation / bench). */
+export function roleOn(C, label, tid) { return depthChart(C, label, tid).role; }
 export const ROLE_NAMES = { starter: "Starter", rotation: "Rotation player", bench: "Bench" };
 
 // ---------------------------------------------------------------- one game
 const MIN_BY_ROLE = { starter: [27, 35], rotation: [14, 24], bench: [3, 12] };
 /** Your stat line in one game. */
+function poisson(lambda, rnd) { let k = 0, p = Math.exp(-lambda), sum = p; const u = rnd(); while (u > sum && k < 8) { k++; p *= lambda / k; sum += p; } return k; }
 export function statLine(C, role, rnd, { big = false } = {}) {
   const a = effective(C);
   const [lo, hi] = MIN_BY_ROLE[role];
   let min = Math.round(lo + rnd() * (hi - lo));
   if (role === "bench" && rnd() < 0.25 + Math.max(0, (35 - C.trust) / 100)) min = 0; // DNP
-  if (C.injury?.playing) min = Math.round(min * 0.85);
-  if (!min) return { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, dnp: true };
+  if (!min) return { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pf: 0, dnp: true };
+  // fouls: bigs and aggressive defenders foul more, smart players less. 5 fouls and you're out.
+  const pf = poisson((min / 36) * (2.9 + (a.def >= 75 ? 0.4 : 0) + (FAM[C.pos] === "B" ? 0.5 : 0) - (a.iq - 60) * 0.02), rnd);
+  const fouledOut = pf >= 5;
+  if (fouledOut) min = Math.max(6, Math.round(min * (0.6 + rnd() * 0.25)));
+  else if (pf === 4 && rnd() < 0.5) min = Math.round(min * 0.85); // foul trouble: the coach sits you
   const f = min / 36;
-  let form = Math.max(0.35, 1 + (rnd() + rnd() + rnd() - 1.5) * 0.45) * (big && badgeLv(C, "clutch") ? 1 + 0.05 * badgeLv(C, "clutch") : 1);
+  const chem = (C.chem?.[C.cur?.team] || 0) / 100;
+  let form = Math.max(0.35, 1 + (rnd() + rnd() + rnd() - 1.5) * 0.45) * (big && badgeLv(C, "clutch") ? 1 + 0.05 * badgeLv(C, "clutch") : 1) * (1 + chem * 0.06);
   if (C.fatigue > 0) { form *= 0.92; C.fatigue--; } // tired legs from an extra session or a night out
   const offense = (a.sht + a.thr + a.fin) / 3 + (C.arch === "scorer" ? 4 : 0);
   const pts36 = Math.max(3, 5 + (offense - 45) * 0.39 + badgeLv(C, "bucket") * 0.8 + badgeLv(C, "midrange") * 0.6 + badgeLv(C, "sniper") * 0.6);
@@ -205,7 +239,7 @@ export function statLine(C, role, rnd, { big = false } = {}) {
   const ast = Math.max(0, Math.round((0.8 + (a.pas - 40) * 0.12 + badgeLv(C, "general") * 0.5) * f * (0.6 + rnd() * 0.8)));
   const stl = Math.max(0, Math.round((0.4 + (a.def + a.ath - 80) * 0.012 + badgeLv(C, "lockdown") * 0.3) * f * (0.3 + rnd() * 1.4)));
   const blk = Math.max(0, Math.round((0.15 + (a.def - 50) * 0.018 + (C.height - 196) * 0.05 + badgeLv(C, "highflyer") * 0.25) * f * (0.2 + rnd() * 1.6)));
-  return { min, pts: realPts, reb, ast, stl, blk, fgm: twos + tpm, fga, tpm, tpa, ftm, fta };
+  return { min, pts: realPts, reb, ast, stl, blk, fgm: twos + tpm, fga, tpm, tpa, ftm, fta, pf: Math.min(5, pf), fouledOut };
 }
 export const gameScore = (l) => l.pts + 0.7 * l.reb + 0.7 * l.ast + l.stl + l.blk - 0.4 * (l.fga - l.fgm) - 0.3 * (l.fta - l.ftm);
 export const valOf = (l) => l.pts + l.reb + l.ast + l.stl + l.blk - (l.fga - l.fgm) - (l.fta - l.ftm);
@@ -213,7 +247,9 @@ export const valOf = (l) => l.pts + l.reb + l.ast + l.stl + l.blk - (l.fga - l.f
 /** Team strength with you in the lineup for this game. */
 function strengthWith(C, team, line) {
   const ov = bestOverall(C);
-  return team.strength + (ov - team.strength) * (line.min / 200) * 1.4 + (gameScore(line) - 10) * 0.08 + badgeLv(C, "general") * 0.15 + badgeLv(C, "lockdown") * 0.15;
+  // the season baseline already includes you (startSeason); this is tonight's swing
+  return team.strength + (ov - team.strength) * (line.min / 200) * 0.6 + (gameScore(line) - 10) * 0.08 + ((C.chem?.[team.id] || 0) / 100) * 1.2
+    + badgeLv(C, "general") * 0.15 + badgeLv(C, "lockdown") * 0.15;
 }
 function playScore(home, away, rnd, neutral = false) {
   const edge = neutral ? 0 : 1.5;
@@ -234,7 +270,7 @@ const quarters = (total, rnd) => {
 /** Play one of your games: your line, the score, quarter scores; teammates/opponents' box comes from the seed. */
 export function playGame(C, S, oppId, home, rnd, { neutral = false, big = false, label = "" } = {}) {
   const role = C.cur.role;
-  const line = C.injury && !C.injury.playing ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, dnp: true, injured: true } : statLine(C, role, rnd, { big });
+  const line = C.injury ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pf: 0, dnp: true, injured: true } : statLine(C, role, rnd, { big });
   const me = S.teams.find((t) => t.id === C.cur.team), opp = S.teams.find((t) => t.id === oppId);
   const mine = { s: line.min ? strengthWith(C, me, line) : me.strength }, theirs = { s: opp.strength - badgeLv(C, "lockdown") * 0.2 };
   const [hs, as] = home ? playScore(mine, theirs, rnd, neutral) : playScore(theirs, mine, rnd, neutral);
@@ -295,8 +331,25 @@ export function startSeason(C) {
   const cupTeams = teams.slice().sort(() => rnd() - 0.5).slice(0, 8);
   if (!cupTeams.some((t) => t.id === team)) cupTeams[7] = teams.find((t) => t.id === team);
   C.label = label;
+  // coach trust is per club; a new club (or a new coach) means starting over
+  C.trustBy ??= {};
+  C.chem ??= {};
+  C.trust = C.trustBy[team] ?? 50;
+  if (C.chem[team] == null) C.chem[team] = C.nat === "Israel" ? 15 : 8;
+  const prev = C.history[C.history.length - 1];
+  const coachChange = C.trustBy[team] != null && rnd() < (prev && prev.team === team && prev.standing > 8 ? 0.4 : 0.15);
+  if (coachChange) { C.trust = clamp(Math.round(50 + (C.trust - 50) * 0.35 + (rnd() - 0.5) * 10), 20, 80); C.log.unshift({ t: "coach", text: `New head coach at ${teamName(team)} this summer. Coach trust starts over (${C.trust}).` }); }
+  // you change the team: its strength for the season includes you, by how much you'll play
+  const me = teams.find((t) => t.id === team);
+  const role0 = roleOn(C, label, team);
+  // you push someone down the depth chart: the team gains what you add over that player
+  const dc0 = depthChart(C, label, team);
+  const pushed = dc0.rivals[Math.min(dc0.rank, dc0.rivals.length - 1)]?.rating_mock ?? me.strength;
+  const boost = r1(clamp((bestOverall(C) - pushed) * { starter: 0.3, rotation: 0.15, bench: 0 }[role0], -0.5, 4));
+  const base = me.strength;
+  me.strength = r1(me.strength + boost);
   C.cur = {
-    label, simulated: dataSeason(label) !== label, team, role: roleOn(C, label, team), teams, schedule, round: 0,
+    label, simulated: dataSeason(label) !== label, team, role: role0, teams, schedule, round: 0, base, boost, coachChanges: coachChange ? 1 : 0,
     standings: Object.fromEntries(teams.map((t) => [t.id, { w: 0, l: 0, pf: 0, pa: 0 }])),
     games: [], phase: "regular", cup: { teams: cupTeams.map((t) => t.id), round: 0, alive: true, results: [] },
     allStar: null, playoffs: null, events: [], startOverall: bestOverall(C),
@@ -326,6 +379,7 @@ export function playRound(C) {
     }
   }
   S.round++;
+  out.coach = maybeFireCoach(C, rnd);
   // State Cup rounds
   const cupRounds = CUP_AT(rounds.length);
   const ci = cupRounds.indexOf(S.round);
@@ -334,6 +388,24 @@ export function playRound(C) {
   if (S.round === Math.floor(rounds.length / 2) && !S.allStar) out.allStar = allStar(C, rnd);
   if (S.round >= rounds.length) { S.phase = "playoffs"; S.playoffs = seedPlayoffs(S); }
   return out;
+}
+/** Losing teams fire coaches. A new coach re-evaluates everyone: trust moves toward neutral, plus your recent form. */
+function maybeFireCoach(C, rnd) {
+  const S = C.cur, r = S.standings[S.team];
+  const played = r.w + r.l;
+  if (![7, 13, 19].includes(S.round) || played < 6) return null;
+  const pct = r.w / played;
+  if (pct >= 0.4 || rnd() > 0.45) return null;
+  const recent = S.games.slice(-5).filter((g) => !g.line.dnp);
+  const form = recent.length ? recent.reduce((a, g) => a + gameScore(g.line), 0) / recent.length : 0;
+  const expected = { starter: 14, rotation: 8, bench: 3 }[S.role];
+  const before = C.trust;
+  C.trust = clamp(Math.round(48 + (form - expected) * 1.5 + (rnd() - 0.5) * 12), 15, 85);
+  S.coachChanges = (S.coachChanges || 0) + 1;
+  S.role = roleOn(C, S.label, S.team);
+  const text = `${teamName(S.team)} fired the head coach after a ${r.w}-${r.l} start. The new coach's trust in you: ${C.trust} (was ${Math.round(before)}). Role: ${ROLE_NAMES[S.role]}.`;
+  C.log.unshift({ t: "coach", text });
+  return { text, trust: C.trust, before };
 }
 function record(S, h, a, hs, as) {
   const H_ = S.standings[h], A = S.standings[a];
@@ -350,10 +422,15 @@ function afterGame(C, g) {
   const l = g.line;
   if (C.injury) {
     C.injury.games--;
-    if (C.injury.games <= 0) { if (C.injury.rushed && Math.random() < 0.35) { C.attrs.ath = Math.max(20, C.attrs.ath - 2); C.log.unshift({ t: "injury", text: "The rushed comeback cost you some athleticism (−2)." }); } C.injury = null; }
+    if (C.injury.games <= 0) {
+      if (C.injury.rushed) C.reinjury = { name: C.injury.name, games: 10 }; // fragile for a while
+      C.log.unshift({ t: "injury", text: `Back from the ${C.injury.name.toLowerCase()}.` });
+      C.injury = null;
+    }
     return;
   }
   if (l.dnp) { C.trust = clamp(C.trust - 0.5, 0, 100); return; }
+  C.chem[C.cur.team] = clamp((C.chem[C.cur.team] || 0) + (l.min / 36) * 1.1, 0, 100);
   const gs = gameScore(l);
   const expected = { starter: 14, rotation: 8, bench: 3 }[C.cur.role];
   C.tp += 1 + (gs >= expected ? 1 : 0) + (gs >= expected * 1.6 ? 1 : 0) + (C.coach && Math.random() < 0.35 ? 1 : 0);
@@ -370,14 +447,11 @@ function afterGame(C, g) {
   if (dd >= 2 && !m.dd) m.dd = C.cur.label;
   if (dd >= 3 && !m.td) m.td = C.cur.label;
   if (C.totals.pts >= 1000 && !m.k1) m.k1 = C.cur.label;
-  // injuries
-  const risk = 0.014 + (C.injuryRisk || 0) + Math.max(0, C.age - 30) * 0.003 - badgeLv(C, "ironman") * 0.006 + (l.min > 34 ? 0.01 : 0);
+  // injuries: more likely with heavy minutes, age, a recent rushed comeback; less with Iron man
+  let risk = 0.017 + (C.injuryRisk || 0) + Math.max(0, C.age - 30) * 0.003 - badgeLv(C, "ironman") * 0.006 + (l.min > 34 ? 0.01 : 0);
+  if (C.reinjury) { risk *= 3; if (--C.reinjury.games <= 0) C.reinjury = null; }
   C.injuryRisk = 0;
-  if (Math.random() < risk) {
-    const sev = Math.random();
-    const games = sev < 0.6 ? 1 + Math.floor(Math.random() * 3) : sev < 0.9 ? 4 + Math.floor(Math.random() * 5) : 10 + Math.floor(Math.random() * 10);
-    C.injury = { games, total: games, name: games <= 3 ? "Ankle sprain" : games <= 8 ? "Hamstring strain" : "Knee injury", pending: true };
-  }
+  if (Math.random() < risk) injure(C, C.reinjury && Math.random() < 0.5 ? C.reinjury.name : null);
   // the coach re-thinks your role every few games
   if (C.cur.games.length % 5 === 0) {
     const before = C.cur.role;
@@ -386,11 +460,35 @@ function afterGame(C, g) {
   }
 }
 
-/** Injury decision: rest fully, or rush back sooner with a risk. */
+// Injury table: games out (before age and treatment), who gets it more, lasting effects.
+export const INJURIES = [
+  { name: "Ankle sprain", w: 30, games: [1, 4], desc: "Rolled it landing on a foot." },
+  { name: "Hamstring strain", w: 16, games: [3, 7], desc: "Felt it pull on a sprint." },
+  { name: "Groin strain", w: 8, games: [2, 6], desc: "Tight after a hard cut." },
+  { name: "Back spasms", w: 8, games: [1, 4], big: true, desc: "Couldn't get up from the bench." },
+  { name: "Concussion", w: 5, games: [1, 3], noRush: true, desc: "Took an elbow. League protocol decides the return." },
+  { name: "Broken finger", w: 6, games: [4, 8], desc: "Jammed it on a rebound." },
+  { name: "Knee sprain (MCL)", w: 8, games: [6, 12], big: true, desc: "Knee buckled in traffic." },
+  { name: "Plantar fasciitis", w: 5, games: [4, 10], desc: "Heel pain that won't go away." },
+  { name: "Torn ACL", w: 2.2, games: [45, 60], severe: true, ath: -5, desc: "Season-ending. Surgery and a long rehab." },
+  { name: "Torn Achilles", w: 1.3, games: [50, 70], severe: true, ath: -7, old: true, desc: "The one every player fears. Surgery, a long road back." },
+];
+function injure(C, forced = null) {
+  const big = FAM[C.pos] === "B" || C.height >= 205;
+  const pool = INJURIES.map((x) => ({ x, w: x.w * (x.big && big ? 1.5 : 1) * (x.old ? 1 + Math.max(0, C.age - 28) * 0.3 : 1) }));
+  let pick = forced && INJURIES.find((x) => x.name === forced);
+  if (!pick) { let u = Math.random() * pool.reduce((a, p) => a + p.w, 0); for (const p of pool) { u -= p.w; if (u <= 0) { pick = p.x; break; } } pick ??= INJURIES[0]; }
+  const [lo, hi] = pick.games;
+  const games = Math.max(1, Math.round((lo + Math.random() * (hi - lo)) * (1 + Math.max(0, C.age - 28) * 0.04) * (forced ? 1.5 : 1)));
+  if (pick.ath) { C.attrs.ath = Math.max(20, C.attrs.ath + pick.ath); C.attrs.def = Math.max(20, C.attrs.def + Math.round(pick.ath / 2)); }
+  C.injury = { name: pick.name, desc: pick.desc, games, total: games, severe: !!pick.severe, noRush: !!(pick.noRush || pick.severe), pending: true, ath: pick.ath || 0, again: !!forced };
+  (C.injuries ||= []).push({ name: pick.name, season: C.cur?.label, games, age: C.age });
+}
+/** Injury decision: rest fully, or rush back sooner (not possible for concussions or season-ending injuries). */
 export function treatInjury(C, rush) {
   if (!C.injury) return;
   C.injury.pending = false;
-  if (rush) { C.injury.games = Math.max(1, Math.round(C.injury.games * 0.45)); C.injury.rushed = true; }
+  if (rush && !C.injury.noRush) { C.injury.games = Math.max(1, Math.round(C.injury.games * 0.45)); C.injury.rushed = true; }
   if (badgeLv(C, "ironman")) C.injury.games = Math.max(1, C.injury.games - badgeLv(C, "ironman"));
 }
 
@@ -532,7 +630,16 @@ export const AGENTS = {
   connector: { name: "The Connector", fee: 0.06, money: 0.03, accept: 0, extra: 1, desc: "One extra offer, sometimes from a bigger club." },
   loyal: { name: "Family friend", fee: 0.05, money: 0, accept: 0.08, extra: 0, desc: "Teams trust him: deals close more easily; loyalty pays." },
 };
-export const value = (C) => Math.round(Math.max(60000, (bestOverall(C) - 55) ** 2 * 1100 + C.pop * 2500) / 1000) * 1000;
+/**
+ * Market value in US dollars per season (Winner League salaries are usually quoted in dollars).
+ * Rough game estimates: young bench players ~$25-60k, rotation ~$60-150k, starters ~$150-350k,
+ * stars more, and the richest clubs pay the most.
+ */
+export const value = (C) => Math.round((25000 * 1.075 ** (bestOverall(C) - 55) + C.pop * 800) * (C.nat === "Israel" ? 1.1 : 1) / 1000) * 1000;
+/** Simplified effective income tax on a season's salary (an estimate, not tax advice). */
+export const taxRate = (gross) => (gross < 60000 ? 0.22 : gross < 150000 ? 0.3 : gross < 350000 ? 0.38 : 0.44);
+export const netPay = (gross, agent) => Math.round(gross * (1 - taxRate(gross) - (AGENTS[agent]?.fee || 0)));
+export const COACH_COST = 12000;
 
 /** Contract offers for the coming season. */
 export function makeOffers(C, { homeGrown = null } = {}) {
@@ -544,14 +651,20 @@ export function makeOffers(C, { homeGrown = null } = {}) {
   const startAt = clamp(Math.round(((90 - ov) / 30) * (teams.length - 1)), 0, teams.length - 1);
   const pool = teams.slice(Math.max(0, startAt - 3), startAt + 4);
   const picks = [];
+  // foreign players only hear from clubs with a foreign slot they'd win
+  const eligible = (t) => C.nat === "Israel" || depthChart(C, label, t.id).slotOk;
   if (homeGrown) picks.push(teams.find((t) => t.id === homeGrown) || { id: homeGrown, name: teamName(homeGrown), strength: 82 });
   if (C.contract && !homeGrown && teams.some((t) => t.id === C.contract.team)) picks.push(teams.find((t) => t.id === C.contract.team));
-  for (const t of pool.sort(() => Math.random() - 0.5)) if (picks.length < n && !picks.some((p) => p.id === t.id)) picks.push(t);
+  for (const t of pool.sort(() => Math.random() - 0.5)) if (picks.length < n && !picks.some((p) => p.id === t.id) && eligible(t)) picks.push(t);
+  if (picks.length < 2) for (const t of teams.slice().reverse()) if (picks.length < 2 && !picks.some((p) => p.id === t.id) && eligible(t)) picks.push(t);
+  if (!picks.length) picks.push(teams[teams.length - 1]); // someone always takes a chance on you
+  const budget = (t) => { const i = teams.findIndex((x) => x.id === t.id); return i < 3 ? 1.5 : i < teams.length / 2 ? 1.1 : 0.8; };
   return picks.map((t) => {
     const loyal = (C.yearsAt[t.id] || 0) >= 3;
-    const v = value(C) * (0.85 + Math.random() * 0.25) * (1 + ag.money) * (homeGrown === t.id ? 0.8 : 1) * (loyal ? 0.95 : 1);
-    return { team: t.id, name: t.name, salary: Math.round(v / 1000) * 1000, years: 1 + Math.floor(Math.random() * 3), role: roleOn(C, label, t.id),
-      homeGrown: homeGrown === t.id, loyal, own: C.contract?.team === t.id };
+    const v = value(C) * budget(t) * (0.85 + Math.random() * 0.25) * (1 + ag.money) * (homeGrown === t.id ? 0.8 : 1) * (loyal ? 0.95 : 1);
+    const dc = depthChart(C, label, t.id);
+    return { team: t.id, name: t.name, salary: Math.round(v / 1000) * 1000, years: 1 + Math.floor(Math.random() * 3), role: dc.role,
+      homeGrown: homeGrown === t.id, loyal, own: C.contract?.team === t.id, foreigners: dc.foreigners, fam: dc.fam, rank: dc.rank };
   });
 }
 /** Ask for more (salary +x, a better role). Returns accepted offer or null (offer withdrawn). */
@@ -565,7 +678,8 @@ export function negotiate(C, offer, { more = 0, years = offer.years, role = offe
 export function sign(C, offer) {
   C.contract = { team: offer.team, salary: offer.salary, years: offer.years, left: offer.years, role: offer.role, promised: offer.promised || null };
   C.club = offer.team;
-  if (offer.promised) C.trust = Math.max(C.trust, offer.promised === "starter" ? 62 : 50);
+  C.trustBy ??= {};
+  if (offer.promised) C.trustBy[offer.team] = Math.max(C.trustBy[offer.team] ?? 50, offer.promised === "starter" ? 62 : 52);
   if (offer.loyal) C.pop = clamp(C.pop + 3, 0, 100);
 }
 
@@ -576,8 +690,11 @@ export function endSeason(C) {
   const aw = seasonAwards(C);
   const club = S.team;
   const cupWon = S.cup.winner === club, title = S.playoffs?.champion === club;
-  const income = C.contract ? Math.round(C.contract.salary * (1 - AGENTS[C.agent].fee)) : 0;
-  C.money += income - (C.coach ? 40000 : 0);
+  const income = C.contract ? netPay(C.contract.salary, C.agent) : 0;
+  C.money += income - (C.coach ? COACH_COST : 0);
+  (C.trustBy ??= {})[club] = Math.round(C.trust);
+  // the summer heals: about four months of recovery
+  if (C.injury) { C.injury.games -= 15; if (C.injury.games <= 0) C.injury = null; else C.injury.pending = false; }
   C.yearsAt[club] = (C.yearsAt[club] || 0) + 1;
   const summary = {
     pro: true, season: S.label, simulated: S.simulated, team: club, loan: !!C.loan, age: C.age, role: S.role, overall: bestOverall(C),
