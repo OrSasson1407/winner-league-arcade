@@ -15,6 +15,9 @@ import * as E from "../mycareer/engine.js";
 import { maybeEvent, resolveEvent } from "../mycareer/events.js";
 import { badgeMedals, bracket, contractHtml, gauge, radar, scheduleGrid, standings } from "../mycareer/visuals.js";
 import { clubThemeVars } from "../lib/clubTheme.js";
+import { bindMomentum, momentumHtml, watchGame } from "../mycareer/live.js";
+import { careerIntro, clearFlashes, newsFlash } from "../mycareer/flash.js";
+import { reducedMotion } from "../lib/settings.js";
 
 const KEY = "mc:save";
 const NATS = ["Israel", "United States", "Serbia", "Lithuania", "Greece", "France", "Spain", "Nigeria", "Canada", "Argentina", "Croatia", "Ukraine"];
@@ -53,7 +56,7 @@ export function renderMyCareer(root, signal) {
 
   const THEME_KEYS = ["--accent", "--accent2", "--accent-ink", "--sel", "--sel-line", "--club", "--club2"];
   root.classList.add("mc-page");
-  signal.addEventListener("abort", () => { root.classList.remove("mc-page"); THEME_KEYS.forEach((k) => root.style.removeProperty(k)); });
+  signal.addEventListener("abort", () => { clearFlashes(); root.classList.remove("mc-page"); THEME_KEYS.forEach((k) => root.style.removeProperty(k)); });
   /** The career screens wear your current club's colours (adjusted for contrast; off in high contrast). */
   function clubTheme() {
     THEME_KEYS.forEach((k) => root.style.removeProperty(k));
@@ -130,8 +133,12 @@ export function renderMyCareer(root, signal) {
     $("#mc-go").addEventListener("click", () => {
       C = E.createPlayer({ ...f, av: getMe().style === "player" ? getMe().av : null });
       view = null; save(); sound.play("place");
-      announce(`${C.name} joins the ${teamName(C.academy.club)} academy.`);
       draw();
+      const club = teamName(C.academy.club);
+      careerIntro({ name: C.name, year: `Summer ${Number(C.debut.slice(0, 4)) - 2}`, club,
+        sub: `${C.pos}/${C.pos2} · ${(C.height / 100).toFixed(2)} m · age ${C.age} · overall ${E.bestOverall(C)}`,
+        crest: crestSvg(C.academy.club, club, 96), avatar: face(150),
+        onDone: () => { announce(`${C.name} joins the ${club} academy.`); root.querySelector("#ac-play")?.focus(); } });
     }, { signal });
   }
 
@@ -169,8 +176,47 @@ export function renderMyCareer(root, signal) {
   function tabs(active) {
     return `<div class="seg mc-tabs" id="mc-tabs" role="tablist">${TABS.filter(([k]) => (C.cur || !["season", "table"].includes(k)) && !(C.retired && k === "train")).map(([k, ic, l]) => `<button role="tab" aria-selected="${k === active}" class="${k === active ? "on" : ""}" data-tab="${k}">${icon(ic, { size: 15 })} ${l}</button>`).join("")}</div>`;
   }
+  let tabRedraw = null, swipeBound = false;
+  function goTab(k, focus = false) {
+    const order = [...root.querySelectorAll("#mc-tabs [data-tab]")].map((b) => b.dataset.tab);
+    if (!order.includes(k) || k === tab || !tabRedraw) return;
+    const dir = order.indexOf(k) > order.indexOf(tab) ? 1 : -1;
+    tab = k; tabRedraw();
+    const panel = root.querySelector("#mc-tabs")?.nextElementSibling;
+    if (panel && !reducedMotion()) panel.classList.add(dir > 0 ? "mc-slide-l" : "mc-slide-r");
+    if (focus) root.querySelector(`#mc-tabs [data-tab="${k}"]`)?.focus();
+  }
   function bindTabs(redraw) {
-    root.querySelector("#mc-tabs")?.addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) { tab = b.dataset.tab; redraw(); } }, { signal });
+    tabRedraw = redraw;
+    const bar = root.querySelector("#mc-tabs");
+    bar?.addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) goTab(b.dataset.tab); }, { signal });
+    bar?.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      const order = [...bar.querySelectorAll("[data-tab]")].map((b) => b.dataset.tab);
+      e.preventDefault();
+      goTab(order[(order.indexOf(tab) + (e.key === "ArrowRight" ? 1 : -1) + order.length) % order.length], true);
+    }, { signal });
+    if (swipeBound) return;
+    swipeBound = true;
+    // swipe left/right on the career screen switches tabs (not on things that scroll sideways)
+    let sw = null;
+    const scrollsX = (el) => {
+      for (; el && el !== root; el = el.parentElement) {
+        if (el.matches?.("input, select, textarea, .mo-wrap")) return true;
+        if (el.scrollWidth > el.clientWidth + 4 && /auto|scroll/.test(getComputedStyle(el).overflowX)) return true;
+      }
+      return false;
+    };
+    root.addEventListener("touchstart", (e) => { const t = e.touches[0]; sw = e.touches.length === 1 && !scrollsX(e.target) ? { x: t.clientX, y: t.clientY, at: Date.now() } : null; }, { passive: true, signal });
+    root.addEventListener("touchend", (e) => {
+      const st = sw; sw = null;
+      if (!st || !root.querySelector("#mc-tabs")) return;
+      const t = e.changedTouches[0], dx = t.clientX - st.x, dy = t.clientY - st.y;
+      if (Math.abs(dx) < 70 || Math.abs(dy) > 45 || Date.now() - st.at > 700) return;
+      const order = [...root.querySelectorAll("#mc-tabs [data-tab]")].map((b) => b.dataset.tab);
+      const next = order[order.indexOf(tab) + (dx < 0 ? 1 : -1)];
+      if (next) goTab(next);
+    }, { passive: true, signal });
   }
 
   // ---------------------------------------------------------------- academy
@@ -231,7 +277,11 @@ export function renderMyCareer(root, signal) {
 
   // ---------------------------------------------------------------- contracts
   function drawOffers() {
-    if (!view?.offers) view = { offers: E.makeOffers(C, { homeGrown: C.phase === "turnpro" ? C.academy.club : null }), tried: {} };
+    if (!view?.offers) {
+      view = { offers: E.makeOffers(C, { homeGrown: C.phase === "turnpro" ? C.academy.club : null }), tried: {} };
+      const n = view.offers.length;
+      if (n) setTimeout(() => newsFlash({ kicker: "TRANSFER NEWS", tone: "info", ic: "clipboard", title: `${n} club${n === 1 ? "" : "s"} want${n === 1 ? "s" : ""} ${C.name}`, text: view.offers.map((o) => o.name).join(", ") }), 300);
+    }
     const first = C.phase === "turnpro";
     root.innerHTML = html`${header()}
       <div class="card pad">
@@ -259,7 +309,7 @@ export function renderMyCareer(root, signal) {
       const i = Number(b.dataset.neg), o = view.offers[i];
       const res = E.negotiate(C, o, { more: Number(b.dataset.more), role: b.dataset.role || o.role });
       if (res) { view.offers[i] = { ...res }; view.tried[i] = "Deal improved! Sign it while it's on the table."; sound.play("place"); }
-      else { view.offers.splice(i, 1); toast(`${o.name} walked away`); sound.play("bad"); if (!view.offers.length) view.offers = E.makeOffers(C).slice(0, 1).map((x) => ({ ...x, salary: Math.round(x.salary * 0.85 / 1000) * 1000 })); }
+      else { view.offers.splice(i, 1); newsFlash({ kicker: "TRANSFER NEWS", tone: "info", ic: "clipboard", title: `${o.name} walk away from the talks`, text: "They felt you asked for too much." }); sound.play("bad"); if (!view.offers.length) view.offers = E.makeOffers(C).slice(0, 1).map((x) => ({ ...x, salary: Math.round(x.salary * 0.85 / 1000) * 1000 })); }
       drawOffers();
     }, { signal }));
     root.querySelectorAll("[data-sign]").forEach((b) => b.addEventListener("click", () => {
@@ -318,7 +368,7 @@ export function renderMyCareer(root, signal) {
     root.querySelector("#mc-loan-go")?.addEventListener("click", () => {
       const t = root.querySelector("#mc-loan").value;
       C.loan = { team: t, season: nextLabel }; save(); emit("mc:loan", {});
-      toast(`Loaned to ${teamName(t)} for ${nextLabel}`); drawOffseason();
+      newsFlash({ kicker: "TRANSFER NEWS", tone: "info", ic: "arrowRight", title: `${C.name} loaned to ${teamName(t)}`, text: `A season-long loan for ${nextLabel}, for more minutes.` }); drawOffseason();
     }, { signal });
     root.querySelector("#mc-start")?.addEventListener("click", () => {
       E.startSeason(C); C.phase = "season"; view = null; tab = "season"; lastGame = null; save();
@@ -355,6 +405,7 @@ export function renderMyCareer(root, signal) {
         <div class="mc-led-team"><b class="led" data-count="${g.their}">${g.their}</b><span>${esc(teamName(opp))}</span></div>
       </div>
       <div class="mc-led-q">${[0, 1, 2, 3].map((i) => `<span>Q${i + 1} <b>${g.q[0][i]}-${g.q[1][i]}</b></span>`).join("")}</div>
+      ${momentumHtml(g, teamName(me), teamName(opp))}
       <div class="mc-line">${L.injured ? "Out injured" : L.dnp ? "Did not play (coach's decision)" : `<b>${esc(C.name)}</b> ${L.min} min · <b>${L.pts} pts</b> · ${L.reb} reb · ${L.ast} ast · ${L.stl} stl · ${L.blk} blk · ${L.fgm}/${L.fga} FG · ${L.tpm}/${L.tpa} 3P · ${L.pf ?? 0} PF${L.fouledOut ? " · <b>fouled out</b>" : ""}`}</div>
       <button class="btn" id="mc-box">${icon("chart", { size: 15 })} Box score</button>
     </div>`;
@@ -403,22 +454,37 @@ export function renderMyCareer(root, signal) {
     const mine = out.games || out;
     for (const g of mine) {
       emit("mc:game", { pts: g.line.pts, reb: g.line.reb, ast: g.line.ast, stl: g.line.stl, blk: g.line.blk, dnp: !!g.line.dnp, role: C.cur.role, won: g.won });
-      if (g.line.pts >= 30) toast(`${g.line.pts}-point night!`);
+      if (g.line.pts >= 30) newsFlash({ kicker: "TONIGHT", tone: "good", ic: "flame", title: `${g.line.pts}-point night for ${C.name}!`, text: `${g.line.pts} pts, ${g.line.reb} reb, ${g.line.ast} ast against ${teamName(g.opp)}.` });
     }
     if (mine.length) { lastGame = mine[mine.length - 1]; sound.play(lastGame.won ? "place" : "bad"); }
-    if (out.cup?.game) { lastGame = out.cup.game; toast(`State Cup ${out.cup.round}: ${out.cup.game.won ? "won" : "lost"}`); if (out.cup.winner === C.cur.team) { confetti(3000); sound.play("victory"); emit("mc:trophy", { type: "cup" }); } }
-    if (out.coach) { toast("Coaching change!"); announce(out.coach.text); }
-    if (out.allStar) { if (out.allStar.picked) { toast("You're an All-Star!"); confetti(2000); emit("mc:trophy", { type: "allstar" }); } }
+    if (out.cup?.game) { lastGame = out.cup.game; const cg = out.cup.game, cupLine = `${teamName(C.cur.team)} ${cg.my}-${cg.their} ${teamName(cg.opp)}`;
+      newsFlash({ kicker: "STATE CUP", tone: cg.won ? "good" : "info", ic: "medal", text: cupLine,
+        title: out.cup.winner === C.cur.team ? `${teamName(C.cur.team)} win the State Cup!` : cg.won ? "State Cup: through to the next round" : "State Cup: knocked out" });
+      if (out.cup.winner === C.cur.team) { confetti(3000); sound.play("victory"); emit("mc:trophy", { type: "cup" }); } }
+    if (out.allStar) { if (out.allStar.picked) { newsFlash({ kicker: "ALL-STAR GAME", tone: "good", ic: "star", title: `${C.name} is an All-Star!`, text: "Selected for this season's All-Star game." }); confetti(2000); emit("mc:trophy", { type: "allstar" }); } }
     save();
   }
-  function play(fn) {
+  const liveOn = () => store.get("mc:live", true) !== false;
+  function play(fn, { live = false } = {}) {
     meterBase = { trust: C.trust, pop: C.pop, chem: Math.round(C.chem?.[C.cur.team] || 0) };
+    const S = C.cur;
     const out = fn();
+    const mine = out.games || out;
+    if (live && liveOn() && mine.length === 1) {
+      const g = mine[0];
+      const b = E.boxScore(C, S, g);
+      const w = (l) => l.filter((x) => !x.me && x.min > 0).map((x) => ({ name: x.name, w: x.min }));
+      save(); // the result is already decided: watching it doesn't change anything
+      return watchGame({ C, S, g, names: { us: w(b.team), them: w(b.opp) }, jersey: av().num ?? 7, onDone: () => afterPlay(out) });
+    }
+    afterPlay(out);
+  }
+  function afterPlay(out) {
     afterGames(out);
     if (C.cur.phase === "done") return finishSeason();
     draw();
     if (C.injury?.pending) return showInjury();
-    if (out.coach) return showNews("Coaching change", out.coach.text);
+    if (out.coach) { newsFlash({ title: "Coaching change", text: out.coach.text }); return; }
     const ev = lastGame && !C.injury ? maybeEvent(C, lastGame) : null;
     if (ev) showEvent(ev);
   }
@@ -463,6 +529,7 @@ export function renderMyCareer(root, signal) {
             <div class="row" style="justify-content:center;flex-wrap:wrap">
               ${S.phase === "regular" ? `<button class="btn primary big-btn" id="mc-play">${icon("play", { size: 16 })} ${nx?.bye ? "Next round" : "Play the game"}</button><button class="btn" id="mc-sim">${icon("skip", { size: 15 })} Simulate to the playoffs</button>` : ""}
               ${S.phase === "playoffs" && !out ? `<button class="btn primary big-btn" id="mc-po">${icon("play", { size: 16 })} Play playoff game</button>` : ""}
+              ${!out && !C.injury ? `<label class="mc-live-tg"><input type="checkbox" id="mc-live" ${liveOn() ? "checked" : ""}> Watch games live</label>` : ""}
               ${S.phase === "playoffs" && out ? `<p class="muted">${S.playoffs.outAt === -1 ? "You missed the playoffs." : "You're out of the playoffs."}</p><button class="btn primary" id="mc-finish">${icon("skip", { size: 15 })} Finish the season</button>` : ""}
             </div>
           </div>
@@ -481,9 +548,11 @@ export function renderMyCareer(root, signal) {
       </div>` : tab === "table" ? tableHtml() : tab === "train" ? `<div class="card pad">${trainHtml()}</div>` : tab === "career" ? careerHtml() : trophiesHtml()}`;
     bindTabs(drawSeason);
     bindTrain(drawSeason);
-    root.querySelector("#mc-play")?.addEventListener("click", () => play(() => E.playRound(C)), { signal });
+    root.querySelector("#mc-play")?.addEventListener("click", () => play(() => E.playRound(C), { live: true }), { signal });
+    root.querySelector("#mc-live")?.addEventListener("change", (e) => store.set("mc:live", e.target.checked), { signal });
+    bindMomentum(root.querySelector(".mc-led .mc-momentum"), lastGame, signal);
     root.querySelector("#mc-sim")?.addEventListener("click", () => play(() => { const all = { games: [] }; let guard = 0; while (C.cur.phase === "regular" && guard++ < 60) { const o = E.playRound(C); all.games.push(...o.games); if (o.cup) all.cup = o.cup; if (o.allStar) all.allStar = o.allStar; if (C.injury?.pending) E.treatInjury(C, false); } return all; }), { signal });
-    root.querySelector("#mc-po")?.addEventListener("click", () => play(() => ({ games: E.playPlayoffDay(C) })), { signal });
+    root.querySelector("#mc-po")?.addEventListener("click", () => play(() => ({ games: E.playPlayoffDay(C) }), { live: true }), { signal });
     root.querySelector("#mc-finish")?.addEventListener("click", () => { E.simPlayoffs(C); finishSeason(); }, { signal });
     root.querySelector("#mc-box")?.addEventListener("click", () => openBox(lastGame), { signal });
     root.querySelectorAll("[data-g]").forEach((b) => b.addEventListener("click", () => { lastGame = S.games[Number(b.dataset.g)]; drawSeason(); root.querySelector(".mc-led")?.scrollIntoView({ block: "nearest" }); }, { signal }));
@@ -515,14 +584,7 @@ export function renderMyCareer(root, signal) {
     setTimeout(() => { confetti(1800); sound.play("place"); }, 900);
     d.querySelector("#ct-go").focus();
   }
-  function showNews(title, text) {
-    const d = modal(title);
-    d.innerHTML = html`<div class="profile mc-event"><small class="muted">BREAKING</small><h2>${icon("whistle", { size: 22 })} ${esc(title)}</h2><p>${esc(text)}</p>
-      <div class="mc-choices"><button class="btn primary" id="mc-ok">OK</button></div></div>`;
-    d.querySelector("#mc-ok").addEventListener("click", () => { closeModal(d); draw(); });
-    openModal(d);
-    d.querySelector("#mc-ok").focus();
-  }
+
 
   function tableHtml() {
     const S = C.cur;
