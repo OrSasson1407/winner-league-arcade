@@ -323,3 +323,8 @@ h2 { font-weight: 800; }
 .profile, .profile > *, #view > *, .card { min-width: 0; }
 .grid-wrap { max-width: 100%; overflow-x: auto; }
 .card:has(> .stat-table), .card:has(> table) { overflow-x: auto; }
+/* EuroLeague player cards on the Players page: no rating, an EL plate instead */
+.el-card .el-tag { font: 800 20px var(--f-display); letter-spacing: .06em; color: #fff; background: #12357a; padding: 0 8px; border-radius: 3px; }
+.el-card .pc-top { align-items: center; }
+.el-card .pc-stats small { letter-spacing: .06em; }
+a.pc-cell { text-decoration: none; color: inherit; }
