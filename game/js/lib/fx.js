@@ -9,6 +9,7 @@ export const sound = {
   set on(v) { store.set("sound", !!v); },
   toggle() { this.on = !this.on; return this.on; },
   play(name) {
+    haptic(name);
     if (!this.on) return;
     try {
       const a = audio();
@@ -27,6 +28,19 @@ export const sound = {
     } catch { /* audio unavailable */ }
   },
 };
+
+// Vibration on phones for the main moments (Settings → Vibration). Not every browser supports it (iOS doesn't).
+export const canVibrate = () => typeof navigator !== "undefined" && "vibrate" in navigator;
+export const haptics = {
+  get on() { return store.get("haptics", true); },
+  set on(v) { store.set("haptics", !!v); },
+};
+const BUZZ = { win: [18, 40, 18], victory: [20, 50, 20, 50, 40], bad: [70], defeat: [90, 60, 90], place: [12], select: [8], warn: [30, 40, 30] };
+export function haptic(name) {
+  if (!BUZZ[name] || !haptics.on || !canVibrate() || document.documentElement.dataset.motion === "reduced") return;
+  if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return; // browsers block it before the first tap
+  try { navigator.vibrate(BUZZ[name]); } catch { /* not allowed */ }
+}
 
 // [frequency Hz, start s, duration s, wave, volume]
 const SOUNDS = {

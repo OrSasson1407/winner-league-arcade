@@ -1,4 +1,5 @@
 // Player profile: opened as a modal from anywhere ([data-profile] clicks), or as a page (#/player/<id>).
+import { fmtHeight } from "./lib/units.js";
 import { H, db, playersById, teamName } from "./data.js";
 import { bestSeason, playerCard } from "./components/playerCard.js";
 import { clubColors } from "./lib/clubs.js";
@@ -110,7 +111,7 @@ export function profileHtml(pid) {
         ${p.name_he && p.name ? `<div class="muted" dir="rtl" lang="he">${esc(p.name_he)}</div>` : ""}
         <div class="facts">
           <div class="fact"><small>Position</small><b>${p.primary_position ? posPill(p.primary_position) : "–"}</b></div>
-          <div class="fact"><small>Height</small><b>${p.height_cm ? `${p.height_cm} cm` : "–"}</b></div>
+          <div class="fact"><small>Height</small><b>${fmtHeight(p.height_cm)}</b></div>
           <div class="fact"><small>Born</small><b>${p.birth_date ? `${p.birth_date.slice(0, 4)}${a !== null ? ` (age ${a})` : ""}` : "–"}</b></div>
           <div class="fact"><small>Nationality</small><b>${esc((p.nationalities || []).join(", ") || "–")}</b></div>
           <div class="fact"><small>Seasons</small><b>${new Set(played.map((r) => r.season)).size}</b></div>

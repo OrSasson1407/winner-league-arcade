@@ -3,6 +3,11 @@
 import { clubColors } from "./clubs.js";
 
 const P = {
+  bug: '<rect x="7" y="7" width="10" height="13" rx="5"/><path d="M12 7v13M9 4.5 10.5 7M15 4.5 13.5 7M3.5 11H7M17 11h3.5M4 17l3-1.5M20 17l-3-1.5"/>',
+  chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+  send: '<path d="M3.5 11.5 20.5 4l-7 17-2.6-7.1z"/><path d="m10.9 13.9 9.6-9.9"/>',
+  bell: '<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+  book: '<path d="M4 4.5h6a2 2 0 0 1 2 2V20a2 2 0 0 0-2-2H4z"/><path d="M20 4.5h-6a2 2 0 0 0-2 2V20a2 2 0 0 1 2-2h6z"/>',
   home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><circle cx="12" cy="15" r="3"/><path d="M9 15h6M12 12v6"/>',
   games: '<rect x="2.5" y="5" width="19" height="13" rx="2.5"/><path d="M12 5v13M7.5 3v2M16.5 3v2"/><path d="M6 9.5h3v5H6zM15 9.5h3v5h-3z"/>',
   players: '<path d="M8 3.5c.7 1.6 2.2 2.5 4 2.5s3.3-.9 4-2.5l3.5 1.8-1.2 4.2-1.8-.5V21H7.5V9l-1.8.5-1.2-4.2z"/><path d="M10.5 12.5h3v4"/>',

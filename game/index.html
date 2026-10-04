@@ -37,6 +37,10 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <script>
+    // Installed app (home-screen launch): a short splash with the logo while the arcade loads.
+    if (matchMedia("(display-mode: standalone)").matches || navigator.standalone) document.write('<div class="splash" id="splash" aria-hidden="true"><img src="icons/icon-192.png" alt="" width="112" height="112"><b>WINNER LEAGUE</b><span>ARCADE</span></div>');
+  </script>
   <nav class="skip-nav" aria-label="Skip link"><a href="#/" class="skip-link">Skip to content</a></nav>
   <header class="topbar">
     <a href="#/" class="brand" aria-label="Winner League Arcade home">
@@ -60,14 +64,15 @@
     </div>
   </header>
 
-  <main id="view" tabindex="-1">
+  <nav class="crumbs" id="crumbs" aria-label="Breadcrumb" hidden></nav>
+  <main id="view" tabindex="-1" aria-busy="true">
     <div class="loader" id="loader">
-      <div class="bounce-stage" aria-hidden="true">
-        <span class="bounce-ball"></span>
-        <span class="bounce-shadow"></span>
-        <span class="bounce-floor"></span>
+      <div class="sk-wrap" aria-hidden="true">
+        <div class="sk-head"><span class="sk sk-h1"></span><span class="sk sk-line" style="width:55%"></span></div>
+        <div class="sk-grid"><div class="card pad sk-card"><span class="sk sk-title"></span><span class="sk sk-line" style="width:90%"></span><span class="sk" style="height:80px;margin-top:10px"></span></div><div class="card pad sk-card"><span class="sk sk-title"></span><span class="sk sk-line" style="width:80%"></span><span class="sk" style="height:80px;margin-top:10px"></span></div><div class="card pad sk-card"><span class="sk sk-title"></span><span class="sk sk-line" style="width:70%"></span><span class="sk" style="height:80px;margin-top:10px"></span></div></div>
       </div>
-      <p>Loading 17 seasons of Winner League history…</p>
+      <div class="loader-note"><span class="bounce-stage mini" aria-hidden="true"><span class="bounce-ball"></span><span class="bounce-shadow"></span></span>
+        <p>Loading 17 seasons of Winner League history…</p></div>
     </div>
   </main>
 
@@ -76,7 +81,7 @@
   <footer class="foot">
     Data: official Israeli Basketball Premier League site (bsl.org.il), 2010-11 – 2026-27.
     Ratings are game-generated, not official.
-    · <a href="#/help">Help center</a> · <a href="#/help" id="shortcuts-link">Keyboard shortcuts (?)</a>
+    · <a href="#/help">Help center</a> · <a href="#/about">About</a> · <a href="#/privacy">Privacy</a> · <a href="#/about" id="fb-link">Send feedback</a> · <a href="#/help" id="shortcuts-link">Keyboard shortcuts (?)</a>
   </footer>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

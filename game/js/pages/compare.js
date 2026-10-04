@@ -1,4 +1,5 @@
 // Compare two players (#/compare?a=<id>&b=<id>): cards, career facts, a two-line chart, saved comparisons.
+import { fmtHeight } from "../lib/units.js";
 import { H, birthYear, careerSummary, db, namedPlayers, playersById, teamName } from "../data.js";
 import { bestSeason, playerCard } from "../components/playerCard.js";
 import { icon } from "../lib/icons.js";
@@ -32,7 +33,7 @@ function facts(pid) {
 
 const ROWS = [
   ["seasons", "Seasons", (v) => v, true], ["games", "Games", (v) => v, true], ["ppg", "Career PPG", fmt1, true], ["rpg", "Career RPG", fmt1, true],
-  ["apg", "Career APG", fmt1, true], ["best", "Peak rating", (v) => v, true], ["clubs", "Clubs", (v) => v, null], ["height", "Height (cm)", (v) => v ?? "–", null], ["born", "Born", (v) => v ?? "–", null],
+  ["apg", "Career APG", fmt1, true], ["best", "Peak rating", (v) => v, true], ["clubs", "Clubs", (v) => v, null], ["height", "Height", (v) => (v ? fmtHeight(v) : "–"), null], ["born", "Born", (v) => v ?? "–", null],
 ];
 
 function chartSvg(sa, sb, metric, byAge) {

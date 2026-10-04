@@ -1,5 +1,7 @@
 // Online 1v1 (#/online, #/online/join/<CODE>): lobby, random matchmaking, invite codes, and the
 // four duels. The server runs the game; this page only shows it and sends the player's moves.
+import { undoToast } from "../lib/ux.js";
+import { clueValue } from "../lib/units.js";
 import { careerSummary, namedPlayers, playersById, psByKey, teamName } from "../data.js";
 import { autocomplete, esc, fmt1, html, store, toast } from "../ui.js";
 import { nameLink, playerCard } from "../components/playerCard.js";
@@ -295,7 +297,9 @@ export function renderOnline(root, signal, params = []) {
     body.querySelectorAll("[data-inv]").forEach((b) => b.addEventListener("click", () => { lobbyMsg = ""; send({ t: "invite:friend", code: b.dataset.inv, game }); }, { signal }));
     body.querySelectorAll("[data-rm]").forEach((b) => b.addEventListener("click", async () => {
       const f = friends.find((x) => x.code === b.dataset.rm);
-      if (await confirmDialog({ title: `Remove ${f?.name || "friend"}?`, message: "You can add them again with their code.", ok: "Remove", danger: true })) { removeFriend(b.dataset.rm); drawLobby(); }
+      const before = getFriends();
+      removeFriend(b.dataset.rm); drawLobby();
+      undoToast(`${f?.name || "Friend"} removed`, () => { store.set("online:friends", before); drawLobby(); });
     }, { signal }));
     if (friends.length && !friendsInfo) send({ t: "friends", codes: friends.map((f) => f.code) });
   }
@@ -672,7 +676,7 @@ export function renderOnline(root, signal, params = []) {
           ${done ? `<p class="og-done">${G.solved ? `${icon("check", { size: 18, cls: "ic-good" })} Solved in ${G.rows.length}! ` : `${icon("x", { size: 18, cls: "ic-bad" })} Out of tries. `}<span class="muted">Waiting for ${esc(M.opp.name)}…</span></p>`
             : `<div class="search guess-search"><input id="g-in" class="input" placeholder="Type a player's name… (${left} ${left === 1 ? "try" : "tries"} left)" autocomplete="off" aria-label="Guess a player"></div>`}
           <div class="grid-wrap"><table class="gtable wide"><thead><tr><th><span class="sr-only">Player</span></th>${G.cols.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead>
-            <tbody>${G.rows.slice().reverse().map((row) => `<tr><td class="name"><b>${nameLink(row.pid, playersById.get(row.pid)?.name ?? row.pid)}</b></td>${G.cols.map(([k]) => `<td class="${row.cells[k].c}">${esc(row.cells[k].v)}${row.cells[k].arrow || ""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+            <tbody>${G.rows.slice().reverse().map((row) => `<tr><td class="name"><b>${nameLink(row.pid, playersById.get(row.pid)?.name ?? row.pid)}</b></td>${G.cols.map(([k]) => `<td class="${row.cells[k].c}">${esc(clueValue(k, row.cells[k]))}${row.cells[k].arrow || ""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
           ${G.rows.length ? "" : `<p class="muted" style="margin:0">Green = match, yellow = close, arrows point toward the answer. * First season in this league.</p>`}
         </div>
         ${oppBoardHtml()}

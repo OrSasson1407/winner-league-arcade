@@ -67,6 +67,7 @@ export function markDaily(gameKey, result) {
   day[gameKey] = String(result).slice(0, 40);
   L[date] = day;
   store.set("daily:log", L);
+  document.dispatchEvent(new CustomEvent("daily-changed"));
   const streak = dailyStreak();
   if (streak > store.get("daily:best", 0)) store.set("daily:best", streak);
   const s = dailyStats();

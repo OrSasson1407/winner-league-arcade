@@ -1,4 +1,5 @@
 // Guess the Player: Wordle-style clues about a hidden player, plus a hint shop and personal stats.
+import { clueValue, fmtHeight } from "../lib/units.js";
 import { POSITIONS, birthYear, careerSummary, namedPlayers, pick, playersById, seasonYear, seededRng, teamName } from "../data.js";
 import { autocomplete, esc, fmt1, html, localDate, store, toast, track } from "../ui.js";
 import { bestSeason, nameLink, playerCard } from "../components/playerCard.js";
@@ -202,7 +203,7 @@ export function renderGuess(root, signal, params, query) {
     const rows = state.guesses.map((g) => {
       const c = compare(attrs(g), t);
       const win = g.player_id === target.player_id;
-      return `<tr><td class="name"><b>${nameLink(g.player_id, g.name)}</b>${win ? ` ${icon("check", { size: 16, cls: "ic-good" })}` : ""}</td>${COLS.map(([k]) => `<td class="${c[k].c}">${esc(c[k].v)}${c[k].arrow || ""}</td>`).join("")}</tr>`;
+      return `<tr><td class="name"><b>${nameLink(g.player_id, g.name)}</b>${win ? ` ${icon("check", { size: 16, cls: "ic-good" })}` : ""}</td>${COLS.map(([k]) => `<td class="${c[k].c}">${esc(clueValue(k, c[k]))}${c[k].arrow || ""}</td>`).join("")}</tr>`;
     }).reverse().join("");
     const ts = careerSummary(target.player_id);
     const left = allowed() - state.guesses.length;
@@ -220,7 +221,7 @@ export function renderGuess(root, signal, params, query) {
           <div class="reveal">
             ${playerCard(bestSeason(ts.records), { classes: "flip-in" })}
             <div><div class="muted">${state.won ? `You got it in ${tries()}!` : "The answer was"}</div><h2>${esc(target.name)}</h2>
-              <div class="muted">${target.primary_position} · ${target.height_cm} cm · ${esc(target.nationality || "")} · ${ts.teams.map(teamName).map(esc).join(", ")}</div></div>
+              <div class="muted">${target.primary_position} · ${fmtHeight(target.height_cm)} · ${esc(target.nationality || "")} · ${ts.teams.map(teamName).map(esc).join(", ")}</div></div>
             <span class="spacer"></span>
             <button class="btn" id="share">Copy result</button>
             <button class="btn" id="stats2">${icon("chart", { size: 16 })} Your stats</button>

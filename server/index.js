@@ -26,11 +26,50 @@ const TEXT = new Set([".html", ".js", ".mjs", ".css", ".json", ".svg", ".txt", "
 const ALLOWED = ["game", "src"]; // only the game and its data helpers are public
 const gzCache = new Map(); // file -> { mtime, body }
 
+// ---------------------------------------------------------------- feedback ("Send feedback" in the app)
+// Stored in server/data/feedback.jsonl (when the host keeps the disk) and printed to the server log.
+// Read them with GET /api/feedback and the header "x-admin-key: <WLA_SECRET>".
+const FEEDBACK_FILE = path.join(ROOT, "server", "data", "feedback.jsonl");
+const fbHits = new Map(); // ip -> [timestamps]
+const fbRecent = [];
+function feedback(req, res) {
+  const json = (code, body) => res.writeHead(code, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify(body));
+  if (req.method === "GET") {
+    const key = req.headers["x-admin-key"];
+    if (!process.env.WLA_SECRET || key !== process.env.WLA_SECRET) return json(403, { error: "forbidden" });
+    let rows = fbRecent;
+    try { rows = fs.readFileSync(FEEDBACK_FILE, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch {}
+    return json(200, rows.slice(-300));
+  }
+  if (req.method !== "POST") return json(405, { error: "method" });
+  const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+  const now = Date.now();
+  const hits = (fbHits.get(ip) || []).filter((t) => now - t < 3600e3);
+  if (hits.length >= 6) return json(429, { error: "busy" });
+  let body = "";
+  req.on("data", (c) => { body += c; if (body.length > 8000) req.destroy(); });
+  req.on("end", () => {
+    let d;
+    try { d = JSON.parse(body); } catch { return json(400, { error: "bad json" }); }
+    const kind = ["bug", "idea", "other"].includes(d.kind) ? d.kind : "other";
+    const cleanText = (v, n) => String(v ?? "").replace(/[\u0000-\u0009\u000b-\u001f<>]/g, "").trim().slice(0, n);
+    const message = cleanText(d.message, 1500);
+    if (message.length < 3) return json(400, { error: "empty" });
+    hits.push(now); fbHits.set(ip, hits);
+    const row = { at: new Date(now).toISOString(), kind, message, tech: cleanText(d.tech, 1500) };
+    fbRecent.push(row); if (fbRecent.length > 300) fbRecent.shift();
+    console.log("[feedback]", JSON.stringify(row));
+    fs.mkdir(path.dirname(FEEDBACK_FILE), { recursive: true }, () => fs.appendFile(FEEDBACK_FILE, JSON.stringify(row) + "\n", () => {}));
+    json(200, { ok: true });
+  });
+}
+
 const server = http.createServer((req, res) => {
   let url;
   try { url = decodeURIComponent(new URL(req.url, "http://x").pathname); } catch { res.writeHead(400).end(); return; }
   if (url === "/" || url === "/game") { res.writeHead(302, { Location: "/game/" }).end(); return; }
   if (url === "/health") { res.writeHead(200, { "Content-Type": "text/plain" }).end("ok"); return; }
+  if (url === "/api/feedback") { feedback(req, res); return; }
   let file = path.normalize(path.join(ROOT, url));
   const rel = path.relative(ROOT, file);
   if (rel.startsWith("..") || path.isAbsolute(rel) || !ALLOWED.includes(rel.split(path.sep)[0])) { res.writeHead(404).end("Not found"); return; }

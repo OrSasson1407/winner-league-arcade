@@ -1,27 +1,5 @@
 // Hash router + app chrome (logo, nav, mobile tab bar, settings, pause-animations, profile button).
-import { renderGames, renderHome } from "./home.js";
-import { renderDraft } from "./games/draft.js";
-import { renderGuess } from "./games/guess.js";
-import { renderHigherLower } from "./games/higherlower.js";
-import { renderCareer } from "./games/career.js";
-import { openProfile, renderProfilePage } from "./profile.js";
-import { renderPlayers } from "./pages/players.js";
-import { renderClub, renderClubs } from "./pages/clubs.js";
-import { renderSeason, renderSeasons } from "./pages/seasons.js";
-import { renderMe } from "./pages/me.js";
-import { renderHelp } from "./pages/help.js";
-import { renderAchievements } from "./pages/achievements.js";
-import { renderCompare } from "./pages/compare.js";
-import { renderRecap } from "./pages/recap.js";
-import { renderChallenge } from "./pages/challenge.js";
-import { renderOnline } from "./pages/online.js";
-import { renderToday } from "./pages/today.js";
-import { renderConnections } from "./games/connections.js";
-import { renderGrid } from "./games/grid.js";
-import { renderMyCareer } from "./pages/mycareer.js";
-import { renderRecords } from "./pages/records.js";
-import { renderDaily } from "./pages/daily.js";
-import { renderPublicProfile } from "./pages/publicProfile.js";
+import { openProfile } from "./profile.js";
 import { initSocial } from "./online/social.js";
 import { initInstall } from "./lib/install.js";
 import { initA11y, pageChanged } from "./lib/a11y.js";
@@ -35,39 +13,60 @@ import { icon, logoSvg } from "./lib/icons.js";
 import { avatarHtml, getMe } from "./lib/me.js";
 import { levelInfo } from "./lib/progress.js";
 import { esc, store, toast } from "./ui.js";
+import { crumbsFor, renderCrumbs, showError, skeletonHtml } from "./lib/ux.js";
+import { openFeedback } from "./lib/feedback.js";
+import { openOnboarding, shouldOnboard } from "./lib/onboarding.js";
+import { initReminders } from "./lib/notify.js";
 
+// Each page's code loads when it's first needed (and ahead of time when you point at a link to it).
+const lazy = (load, name) => () => load().then((m) => m[name]);
 const routes = {
-  "": renderHome,
-  games: renderGames,
-  draft: renderDraft,
-  guess: renderGuess,
-  "higher-lower": renderHigherLower,
-  career: renderCareer,
-  player: renderProfilePage,
-  players: renderPlayers,
-  clubs: renderClubs,
-  club: renderClub,
-  seasons: renderSeasons,
-  season: renderSeason,
-  me: renderMe,
-  help: renderHelp,
-  achievements: renderAchievements,
-  compare: renderCompare,
-  recap: renderRecap,
-  challenge: renderChallenge,
-  online: renderOnline,
-  today: renderToday,
-  connections: renderConnections,
-  grid: renderGrid,
-  mycareer: renderMyCareer,
-  records: renderRecords,
-  daily: renderDaily,
-  u: renderPublicProfile,
+  "": lazy(() => import("./home.js"), "renderHome"),
+  games: lazy(() => import("./home.js"), "renderGames"),
+  draft: lazy(() => import("./games/draft.js"), "renderDraft"),
+  guess: lazy(() => import("./games/guess.js"), "renderGuess"),
+  "higher-lower": lazy(() => import("./games/higherlower.js"), "renderHigherLower"),
+  career: lazy(() => import("./games/career.js"), "renderCareer"),
+  player: lazy(() => import("./profile.js"), "renderProfilePage"),
+  players: lazy(() => import("./pages/players.js"), "renderPlayers"),
+  clubs: lazy(() => import("./pages/clubs.js"), "renderClubs"),
+  club: lazy(() => import("./pages/clubs.js"), "renderClub"),
+  seasons: lazy(() => import("./pages/seasons.js"), "renderSeasons"),
+  season: lazy(() => import("./pages/seasons.js"), "renderSeason"),
+  me: lazy(() => import("./pages/me.js"), "renderMe"),
+  help: lazy(() => import("./pages/help.js"), "renderHelp"),
+  achievements: lazy(() => import("./pages/achievements.js"), "renderAchievements"),
+  compare: lazy(() => import("./pages/compare.js"), "renderCompare"),
+  recap: lazy(() => import("./pages/recap.js"), "renderRecap"),
+  challenge: lazy(() => import("./pages/challenge.js"), "renderChallenge"),
+  online: lazy(() => import("./pages/online.js"), "renderOnline"),
+  today: lazy(() => import("./pages/today.js"), "renderToday"),
+  connections: lazy(() => import("./games/connections.js"), "renderConnections"),
+  grid: lazy(() => import("./games/grid.js"), "renderGrid"),
+  mycareer: lazy(() => import("./pages/mycareer.js"), "renderMyCareer"),
+  records: lazy(() => import("./pages/records.js"), "renderRecords"),
+  daily: lazy(() => import("./pages/daily.js"), "renderDaily"),
+  u: lazy(() => import("./pages/publicProfile.js"), "renderPublicProfile"),
+  about: lazy(() => import("./pages/about.js"), "renderAbout"),
+  privacy: lazy(() => import("./pages/about.js"), "renderPrivacy"),
 };
+const loaded = new Map(); // key -> render function, once its module is in
+function loadRoute(key) {
+  if (!routes[key]) return Promise.resolve(null);
+  if (loaded.has(key)) return Promise.resolve(loaded.get(key));
+  return routes[key]().then((fn) => { loaded.set(key, fn); return fn; });
+}
+const keyOf = (hash) => (hash.replace(/^#\/?/, "").split("?")[0].split("/")[0] || "");
+/** Warm up a page's code before the click: on hover, focus or touch of a link to it. */
+function prefetch(e) {
+  const a = e.target.closest?.("a[href^='#/']");
+  if (a) loadRoute(keyOf(a.getAttribute("href"))).catch(() => {});
+}
+for (const ev of ["pointerover", "focusin", "touchstart"]) document.addEventListener(ev, prefetch, { passive: true });
 const GAME_ROUTES = new Set(["draft", "guess", "higher-lower", "career", "connections", "grid", "mycareer"]);
 // which top-level section each route belongs to (for nav highlighting)
 const SECTION = { "": "home", games: "games", draft: "games", guess: "games", "higher-lower": "games", career: "games",
-  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me" };
+  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me", about: "home", privacy: "home" };
 
 const TABS = [["home", "#/", "home", "Home"], ["games", "#/games", "games", "Games"], ["players", "#/players", "players", "Players"], ["online", "#/online", "globe", "Online"],
   ["clubs", "#/clubs", "shield", "Clubs"], ["me", "#/me", "user", "Me"]];
@@ -80,9 +79,11 @@ function problemScreen(view, { title, message, detail = "" }) {
     <div class="cf-icon danger">${icon("x", { size: 30 })}</div>
     <h2>${esc(title)}</h2><p class="muted">${esc(message)}</p>
     ${detail ? `<details class="muted"><summary>Technical details</summary><code>${esc(detail)}</code></details>` : ""}
-    <div class="row" style="justify-content:center"><button class="btn primary" id="retry">${icon("refresh", { size: 16 })} Try again</button><a class="btn ghost" href="#/">${icon("home", { size: 16 })} Home</a></div>
+    <div class="row" style="justify-content:center;flex-wrap:wrap"><button class="btn primary" id="retry">${icon("refresh", { size: 16 })} Try again</button><a class="btn ghost" href="#/">${icon("home", { size: 16 })} Home</a>
+      <button class="btn ghost" id="report">${icon("bug", { size: 16 })} Report this</button></div>
   </div>`;
   view.querySelector("#retry").addEventListener("click", () => route());
+  view.querySelector("#report").addEventListener("click", () => openFeedback({ kind: "bug", detail: `${title}: ${detail}`.slice(0, 600) }));
 }
 
 // Page transitions (View Transitions API where available): pages cross-fade, and the title of the
@@ -97,13 +98,14 @@ document.addEventListener("click", (e) => {
 function route() {
   const motionOk = !firstPaint && document.startViewTransition && !reducedMotion() && !document.hidden;
   firstPaint = false;
-  if (!motionOk) { morphFrom = null; return renderRoute(); }
+  if (!motionOk) { morphFrom = null; return void renderRoute(); }
   const from = morphFrom && document.contains(morphFrom) ? morphFrom : null;
   morphFrom = null;
   if (from) from.style.viewTransitionName = "page-title";
-  const t = document.startViewTransition(() => {
+  const t = document.startViewTransition(async () => {
     if (from) from.style.viewTransitionName = "";
-    vtActive = true; renderRoute(); vtActive = false;
+    vtActive = true;
+    try { await renderRoute(); } finally { vtActive = false; }
     const h1 = document.querySelector("#view h1");
     if (from && h1) h1.style.viewTransitionName = "page-title";
   });
@@ -113,18 +115,38 @@ function route() {
   t.finished.catch(() => {}).finally(() => { const h1 = document.querySelector("#view h1"); if (h1) h1.style.viewTransitionName = ""; });
 }
 
-function renderRoute() {
+let navSeq = 0;
+async function renderRoute() {
   const [path, qs = ""] = location.hash.replace(/^#\/?/, "").split("?");
   const [key = "", ...params] = path.split("/");
   const query = Object.fromEntries(new URLSearchParams(qs));
   const view = document.getElementById("view");
+  const seq = ++navSeq;
   controller?.abort(); // drop listeners/timers of the previous screen
   controller = new AbortController();
   document.querySelectorAll("dialog[open]").forEach(closeSilently); // page change: don't touch history
+  renderCrumbs(document.getElementById("crumbs"), crumbsFor(key, params.map(decodeURIComponent)));
+  let render = loaded.get(key);
+  if (!render && routes[key]) {
+    // first visit to this page: a skeleton shaped like it while its code arrives
+    const slow = setTimeout(() => { if (seq === navSeq) { view.innerHTML = skeletonHtml(key); view.setAttribute("aria-busy", "true"); } }, 120);
+    try { render = await loadRoute(key); } catch (err) {
+      clearTimeout(slow);
+      if (seq !== navSeq) return;
+      view.removeAttribute("aria-busy");
+      console.error(err);
+      problemScreen(view, navigator.onLine
+        ? { title: "This page didn't load", message: "Part of the arcade failed to download. Check your connection and try again.", detail: String(err?.message || err) }
+        : { title: "You're offline", message: "This page hasn't been saved for offline play yet. Connect and try again.", detail: "" });
+      return;
+    }
+    clearTimeout(slow);
+    if (seq !== navSeq) return; // you already moved on
+    view.removeAttribute("aria-busy");
+  }
   view.innerHTML = "";
   view.classList.remove("enter");
   if (!vtActive) { void view.offsetWidth; view.classList.add("enter"); } // the view transition animates instead
-  const render = routes[key];
   try {
     if (!render) problemScreen(view, { title: "Page not found", message: "This link doesn't match any page in the arcade." });
     else render(view, controller.signal, params.map(decodeURIComponent), query);
@@ -144,8 +166,9 @@ function renderRoute() {
 }
 
 // errors after a page has rendered (clicks, timers): tell the player instead of failing silently
-window.addEventListener("error", (e) => { if (e.message) toast("Something went wrong. Try again or reload the page."); });
-window.addEventListener("unhandledrejection", () => toast("Something went wrong. Try again or reload the page."));
+const IGNORE = /ResizeObserver loop|Script error\.?$|Transition was skipped|AbortError/;
+window.addEventListener("error", (e) => { if (e.message && !IGNORE.test(e.message)) showError(`${e.message} @ ${e.filename?.split("/").pop()}:${e.lineno}`); });
+window.addEventListener("unhandledrejection", (e) => { const m = String(e.reason?.message || e.reason || ""); if (!IGNORE.test(m) && e.reason?.name !== "AbortError") showError(m); });
 
 // ---------- chrome
 document.getElementById("logo-slot").innerHTML = logoSvg(40);
@@ -209,5 +232,17 @@ initInstall(); // installable app + offline play
 initA11y(); // screen reader announcements, heading order, keyboard access
 initCardView(); // press and hold a player card for the big view
 initSettingsButton(document.getElementById("settings-btn"));
+initReminders(); // opt-in daily reminder
+// new units: redraw pages that show them (not a game in progress, which would lose its state)
+document.addEventListener("units-changed", () => { const k = keyOf(location.hash); if (!GAME_ROUTES.has(k) || k === "mycareer") renderRoute(); });
 window.addEventListener("hashchange", route);
 route();
+document.getElementById("fb-link")?.addEventListener("click", (e) => { e.preventDefault(); openFeedback(); });
+// installed app: the splash screen fades once the first page is up
+const splash = document.getElementById("splash");
+if (splash) setTimeout(() => { splash.classList.add("out"); setTimeout(() => splash.remove(), 500); }, Math.max(0, 900 - performance.now()));
+// first visit: a short welcome (only from the home or games page, never over a shared link)
+if (shouldOnboard() && ["", "games"].includes(keyOf(location.hash))) setTimeout(openOnboarding, 700);
+// after the first page, fetch the other pages' code in the background so they open instantly (and offline)
+const idle = window.requestIdleCallback || ((f) => setTimeout(f, 1500));
+setTimeout(() => idle(() => Object.keys(routes).forEach((k) => loadRoute(k).catch(() => {}))), 2500);

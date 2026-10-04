@@ -1,5 +1,6 @@
 // All-Time Draft: spin a real team-season, pick one player, fill PG/SG/SF/PF/C.
 // Modes: solo, vs computer, 2-4 player draft room (snake order, shared spin per round).
+import { undoToast } from "../lib/ux.js";
 import { H, PLAYED_SEASONS, POSITIONS, db, isPlayable, pick, playersById, shuffle, teamName } from "../data.js";
 import { esc, fmt1, html, localDate, ratingClass, store, toast, track } from "../ui.js";
 import { IL_FLAG, nameLink, playerCard } from "../components/playerCard.js";
@@ -7,7 +8,6 @@ import { reducedMotion } from "../lib/settings.js";
 import { icon } from "../lib/icons.js";
 import { posFamily, posPill } from "../lib/icons.js";
 import { myName } from "../lib/me.js";
-import { confirmDialog } from "../lib/modal.js";
 import { emit } from "../lib/achievements.js";
 import { announce } from "../lib/a11y.js";
 import { courtHtml } from "../lib/court.js";
@@ -144,7 +144,9 @@ export function renderDraft(root, signal, params, query) {
     root.querySelector("#snd").addEventListener("click", () => { sound.toggle(); setup(); }, { signal });
     root.querySelector("#resume")?.addEventListener("click", resume, { signal });
     root.querySelector("#discard")?.addEventListener("click", async () => {
-      if (await confirmDialog({ title: "Discard the saved draft?", message: "Your unfinished draft will be deleted. This can't be undone.", ok: "Discard", danger: true })) { store.set(SAVE_KEY, null); setup(); }
+      const saved = store.get(SAVE_KEY, null);
+      store.set(SAVE_KEY, null); setup();
+      undoToast("Saved draft discarded", () => { store.set(SAVE_KEY, saved); setup(); });
     }, { signal });
     root.querySelector("#start").addEventListener("click", () => {
       cfg.era = root.querySelector("#era").value;

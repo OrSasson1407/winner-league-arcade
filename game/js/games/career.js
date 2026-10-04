@@ -1,4 +1,5 @@
 // Career Path Quiz: see a player's journey, name the player.
+import { fmtHeight } from "../lib/units.js";
 import { careerSummary, namedPlayers, pick, playersById, seasonYear, shuffle, teamName } from "../data.js";
 import { animate, esc, fmt1, html, store, toast, track } from "../ui.js";
 import { bestSeason, playerCard } from "../components/playerCard.js";
@@ -128,7 +129,7 @@ export function renderCareer(root, signal, params, query) {
           <div class="hint-box">
             ${state.hint || state.answered ? html`
               ${posPill(target.primary_position)}
-              ${target.height_cm ? `<span class="pill">${target.height_cm} cm</span>` : ""}
+              ${target.height_cm ? `<span class="pill">${fmtHeight(target.height_cm)}</span>` : ""}
               ${target.nationality ? `<span class="pill">${esc(target.nationality)}</span>` : ""}
               ${target.birth_date ? `<span class="pill">born ${target.birth_date.slice(0, 4)}</span>` : ""}`
               : `<button class="btn" id="hint">${icon("bulb", { size: 16 })} Hint (−1 point)</button>`}

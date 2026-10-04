@@ -1,6 +1,8 @@
 // Display & accessibility settings: theme, colour-blind palette, text size, motion, sound.
 import { store } from "../ui.js";
-import { sound } from "./fx.js";
+import { canVibrate, haptics, sound } from "./fx.js";
+import { ILS_PER_USD, getUnits, setUnits } from "./units.js";
+import { disableReminders, enableReminders, reminderStatus } from "./notify.js";
 import { icon } from "./icons.js";
 import { applyClubTheme } from "./clubTheme.js";
 import { db } from "../data.js";
@@ -57,6 +59,13 @@ export function initSettingsButton(btn) {
       <div class="field"><label>Text size</label>${seg("size", [["sm", "S"], ["md", "M"], ["lg", "L"], ["xl", "XL"]], s.size)}</div>
       <div class="field"><label>Animations</label>${seg("motion", [["system", "System"], ["full", "Full"], ["reduced", "Reduced"]], s.motion)}</div>
       <div class="field"><label>Sound</label>${seg("sound", [[true, `${icon("soundOn", { size: 14 })} On`], [false, `${icon("soundOff", { size: 14 })} Off`]], sound.on)}</div>
+      ${canVibrate() ? `<div class="field"><label>Vibration</label>${seg("haptics", [[true, "On"], [false, "Off"]], haptics.on)}</div>` : ""}
+      <div class="field"><label>Height</label>${seg("u-height", [["m", "Metres"], ["ft", "Feet & inches"]], getUnits().height)}</div>
+      <div class="field"><label>Money <small class="muted">(₪ at about ${ILS_PER_USD} per $)</small></label>${seg("u-money", [["usd", "$ Dollars"], ["ils", "₪ Shekels"]], getUnits().money)}</div>
+      <div class="field"><label>Daily reminder</label>${(() => { const r = reminderStatus();
+        if (r === "unsupported") return `<small class="muted">Not supported in this browser.</small>`;
+        if (r === "blocked") return `<small class="muted">Notifications are blocked for this site in your browser settings.</small>`;
+        return seg("remind", [[true, `${icon("bell", { size: 14 })} On`], [false, "Off"]], r === "on"); })()}</div>
       <div class="field"><label>App</label><div class="install-row">${installRowHtml()}</div></div>`;
   };
   btn.addEventListener("click", (e) => {
@@ -86,7 +95,11 @@ export function initSettingsButton(btn) {
       const key = b.parentElement.dataset.key;
       const raw = b.dataset.v;
       const val = raw === "true" ? true : raw === "false" ? false : raw;
-      if (key === "sound") sound.on = val; else save({ [key]: val });
+      if (key === "remind") { (val ? enableReminders() : disableReminders()).then(() => pop && render()); return; }
+      if (key === "sound") sound.on = val;
+      else if (key === "haptics") { haptics.on = val; if (val) navigator.vibrate?.(15); }
+      else if (key === "u-height" || key === "u-money") setUnits({ [key.slice(2)]: val });
+      else save({ [key]: val });
       sound.play("tick");
       render();
     });

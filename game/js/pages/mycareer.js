@@ -1,5 +1,7 @@
 // My Career (#/mycareer): create a player, grow up in a club academy, turn pro and play a whole career
 // in the Winner League against the real teams of each season.
+import { undoToast } from "../lib/ux.js";
+import { fmtHeight, fmtMoney } from "../lib/units.js";
 import { PLAYED_SEASONS, db, playersById, teamName } from "../data.js";
 import { countUp, esc, fmt1, html, store, toast } from "../ui.js";
 import { crestSvg, icon } from "../lib/icons.js";
@@ -22,7 +24,7 @@ import { reducedMotion } from "../lib/settings.js";
 const KEY = "mc:save";
 const NATS = ["Israel", "United States", "Serbia", "Lithuania", "Greece", "France", "Spain", "Nigeria", "Canada", "Argentina", "Croatia", "Ukraine"];
 const TROPHY = { title: ["trophy", "Champion"], cup: ["medal", "State Cup"], allstar: ["star", "All-Star"] };
-const money = (v) => `${v < 0 ? "−" : ""}$${Math.abs(Math.round(v)).toLocaleString()}`;
+const money = fmtMoney;
 const roleName = (r) => E.ROLE_NAMES[r] || r;
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -98,7 +100,7 @@ export function renderMyCareer(root, signal) {
             <div class="field"><label for="mc-nat">Nationality</label><select id="mc-nat" class="input">${NATS.map((n) => `<option ${n === f.nat ? "selected" : ""}>${n}</option>`).join("")}</select></div></div>
           <div class="row mc-two"><div class="field"><label>Position</label><div class="seg sm" id="mc-pos">${E.POSITIONS.map((p) => `<button data-v="${p}" class="${p === f.pos ? "on" : ""}" aria-pressed="${p === f.pos}">${p}</button>`).join("")}</div></div>
             <div class="field"><label>Second position</label><div class="seg sm" id="mc-pos2">${E.POSITIONS.map((p) => `<button data-v="${p}" class="${p === f.pos2 ? "on" : ""}" aria-pressed="${p === f.pos2}">${p}</button>`).join("")}</div></div></div>
-          <div class="field"><label for="mc-h">Height: <b>${(f.height / 100).toFixed(2)} m</b></label><input id="mc-h" type="range" min="175" max="222" value="${f.height}" class="mc-range">
+          <div class="field"><label for="mc-h">Height: <b>${fmtHeight(f.height)}</b></label><input id="mc-h" type="range" min="175" max="222" value="${f.height}" class="mc-range">
             <small class="muted">Taller: more rebounds and blocks, less speed (and fewer threes above 2.05 m). Shorter: better passer, harder at the rim.</small></div>
           ${f.nat !== "Israel" ? `<p class="mc-note">${icon("info", { size: 15 })} Foreign player: clubs can give real minutes to only ${E.FOREIGN_LIMIT} foreigners (a simplified version of the league's rules), so you'll need to beat the other foreigners on the roster. Israeli players get a small edge in minutes and salary.</p>` : ""}
           <div class="field"><label>Player type</label><div class="mc-cards" id="mc-arch">${Object.entries(E.ARCHETYPES).map(([k, a]) => `<button class="mc-pick ${k === f.arch ? "on" : ""}" data-v="${k}" aria-pressed="${k === f.arch}"><b>${a.name}</b><small>${a.desc}</small></button>`).join("")}</div></div>
@@ -112,7 +114,7 @@ export function renderMyCareer(root, signal) {
         <div class="card pad mc-preview">
           <span class="avatar-chip player" style="--av:${clubColors(f.academy)[0]};width:110px;height:110px">${playerAvatarSvg(getMe().style === "player" ? getMe().av : DEFAULT_AV, clubColors(f.academy)[0])}</span>
           <h2>${esc(f.name || "Your player")}</h2>
-          <p class="muted" style="margin:0">${f.pos}/${f.pos2} · ${(f.height / 100).toFixed(2)} m · ${esc(f.nat)} · age 16</p>
+          <p class="muted" style="margin:0">${f.pos}/${f.pos2} · ${fmtHeight(f.height)} · ${esc(f.nat)} · age 16</p>
           <div class="mc-ovr"><small>OVERALL</small><b class="led">${E.bestOverall(preview)}</b></div>
           <p class="muted" style="font-size:12px;margin:0">${getMe().style === "player" ? "Your profile avatar is used for the player." : `Build a player avatar on your <a href="#/me">profile</a> to use it here.`}</p>
           <button class="btn primary big-btn" id="mc-go" ${f.name.trim() ? "" : "disabled"}>${icon("play", { size: 16 })} Start at the ${esc(teamName(f.academy))} academy</button>
@@ -126,7 +128,7 @@ export function renderMyCareer(root, signal) {
     seg("#mc-pos", "pos"); seg("#mc-pos2", "pos2"); seg("#mc-arch", "arch");
     $("#mc-diff").addEventListener("click", (e) => { const b = e.target.closest("[data-v]"); if (b) { f.diff = b.dataset.v; f.alloc = {}; redraw(); } }, { signal });
     $("#mc-h").addEventListener("change", (e) => { f.height = Number(e.target.value); redraw(); }, { signal });
-    $("#mc-h").addEventListener("input", (e) => { root.querySelector("label[for=mc-h] b").textContent = `${(e.target.value / 100).toFixed(2)} m`; }, { signal });
+    $("#mc-h").addEventListener("input", (e) => { root.querySelector("label[for=mc-h] b").textContent = fmtHeight(Number(e.target.value)); }, { signal });
     root.querySelector(".mc-alloc").addEventListener("click", (e) => { const b = e.target.closest("[data-al]"); if (!b) return; const k = b.dataset.al; f.alloc[k] = Math.max(0, (f.alloc[k] || 0) + Number(b.dataset.d)); redraw(); }, { signal });
     $("#mc-debut").addEventListener("change", (e) => { f.debut = e.target.value; redraw(); }, { signal });
     $("#mc-acad").addEventListener("change", (e) => { f.academy = e.target.value; redraw(); }, { signal });
@@ -136,7 +138,7 @@ export function renderMyCareer(root, signal) {
       draw();
       const club = teamName(C.academy.club);
       careerIntro({ name: C.name, year: `Summer ${Number(C.debut.slice(0, 4)) - 2}`, club,
-        sub: `${C.pos}/${C.pos2} · ${(C.height / 100).toFixed(2)} m · age ${C.age} · overall ${E.bestOverall(C)}`,
+        sub: `${C.pos}/${C.pos2} · ${fmtHeight(C.height)} · age ${C.age} · overall ${E.bestOverall(C)}`,
         crest: crestSvg(C.academy.club, club, 96), avatar: face(150),
         onDone: () => { announce(`${C.name} joins the ${club} academy.`); root.querySelector("#ac-play")?.focus(); } });
     }, { signal });
@@ -161,7 +163,7 @@ export function renderMyCareer(root, signal) {
       <svg class="hub-court" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><circle cx="200" cy="100" r="34"/><path d="M200 0v200M0 40h70v120H0M400 40h-70v120h70M70 70a30 30 0 0 1 0 60M330 70a30 30 0 0 0 0 60"/></svg>
       <div class="hub-main">
         <div class="hub-face">${face(104)}</div>
-        <div class="hub-id"><small>${esc(C.pos)}/${esc(C.pos2)} · ${(C.height / 100).toFixed(2)} m · age ${C.age}${C.label ? ` · ${C.label}${S?.simulated ? " (simulated)" : ""}` : ""}</small>
+        <div class="hub-id"><small>${esc(C.pos)}/${esc(C.pos2)} · ${fmtHeight(C.height)} · age ${C.age}${C.label ? ` · ${C.label}${S?.simulated ? " (simulated)" : ""}` : ""}</small>
           <h2 class="mc-name">${esc(C.name)}</h2>
           <span class="mc-club">${crestSvg(team, teamName(team), 24)} ${esc(teamName(team))}${C.loan ? " (on loan)" : C.phase === "academy" ? " academy" : ""}${S ? ` · ${roleName(S.role)}` : ""} <span class="pill mc-nat">${C.nat === "Israel" ? "Israeli" : "Foreign player"}</span></span></div>
         <div class="hub-ovr"><small>OVERALL</small><b class="led">${ov}</b></div>
@@ -665,8 +667,10 @@ export function renderMyCareer(root, signal) {
       ${tabs(tab === "season" || tab === "table" || tab === "train" ? "career" : tab)}
       ${tab === "trophies" ? trophiesHtml() : careerHtml()}`;
     bindTabs(drawRetired);
-    root.querySelector("#mc-new").addEventListener("click", async () => {
-      if (await confirmDialog({ title: "Start a new career?", message: "This career stays in your records here until you start the new one.", ok: "New career" })) { C = null; store.set(KEY, null); view = null; draw(); }
+    root.querySelector("#mc-new").addEventListener("click", () => {
+      const old = C;
+      C = null; store.set(KEY, null); view = null; draw();
+      undoToast(`${old.name}'s career closed`, () => { C = old; store.set(KEY, old); view = null; tab = "career"; draw(); });
     }, { signal });
   }
 
