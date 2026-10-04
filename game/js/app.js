@@ -49,6 +49,7 @@ const routes = {
   u: lazy(() => import("./pages/publicProfile.js"), "renderPublicProfile"),
   about: lazy(() => import("./pages/about.js"), "renderAbout"),
   privacy: lazy(() => import("./pages/about.js"), "renderPrivacy"),
+  euroleague: lazy(() => import("./pages/euroleague.js"), "renderEuroleague"),
 };
 const loaded = new Map(); // key -> render function, once its module is in
 function loadRoute(key) {
@@ -66,7 +67,7 @@ for (const ev of ["pointerover", "focusin", "touchstart"]) document.addEventList
 const GAME_ROUTES = new Set(["draft", "guess", "higher-lower", "career", "connections", "grid", "mycareer"]);
 // which top-level section each route belongs to (for nav highlighting)
 const SECTION = { "": "home", games: "games", draft: "games", guess: "games", "higher-lower": "games", career: "games",
-  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me", about: "home", privacy: "home" };
+  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me", about: "home", privacy: "home", euroleague: "clubs" };
 
 const TABS = [["home", "#/", "home", "Home"], ["games", "#/games", "games", "Games"], ["players", "#/players", "players", "Players"], ["online", "#/online", "globe", "Online"],
   ["clubs", "#/clubs", "shield", "Clubs"], ["me", "#/me", "user", "Me"]];

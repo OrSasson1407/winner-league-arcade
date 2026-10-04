@@ -17,13 +17,14 @@ import * as E from "../mycareer/engine.js";
 import { maybeEvent, resolveEvent } from "../mycareer/events.js";
 import { badgeMedals, bracket, contractHtml, gauge, radar, scheduleGrid, standings } from "../mycareer/visuals.js";
 import { clubThemeVars } from "../lib/clubTheme.js";
+import { MOCK_NOTE, elLoaded, loadEuroleague } from "../euroleague.js";
 import { bindMomentum, momentumHtml, watchGame } from "../mycareer/live.js";
 import { careerIntro, clearFlashes, newsFlash } from "../mycareer/flash.js";
 import { reducedMotion } from "../lib/settings.js";
 
 const KEY = "mc:save";
 const NATS = ["Israel", "United States", "Serbia", "Lithuania", "Greece", "France", "Spain", "Nigeria", "Canada", "Argentina", "Croatia", "Ukraine"];
-const TROPHY = { title: ["trophy", "Champion"], cup: ["medal", "State Cup"], allstar: ["star", "All-Star"] };
+const TROPHY = { title: ["trophy", "Champion"], euroleague: ["crown", "EuroLeague"], cup: ["medal", "State Cup"], allstar: ["star", "All-Star"] };
 const money = fmtMoney;
 const roleName = (r) => E.ROLE_NAMES[r] || r;
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
@@ -42,7 +43,12 @@ function modal(label) {
   return dialog;
 }
 
-export function renderMyCareer(root, signal) {
+export async function renderMyCareer(root, signal) {
+  if (!elLoaded()) {
+    root.innerHTML = `<div class="card pad center-card"><p class="muted">Loading the EuroLeague data for your career…</p></div>`;
+    try { await loadEuroleague(); } catch { /* offline without it: the career stays in Israel */ }
+    if (signal.aborted) return;
+  }
   let C = store.get(KEY, null);
   if (C && (C.v || 1) < 2) { // saves from before salaries were in dollars
     C.money = Math.round(C.money / 3.7);
@@ -154,7 +160,7 @@ export function renderMyCareer(root, signal) {
     const rank = S ? E.table(S).findIndex((t) => t.id === S.team) + 1 : 0;
     const nx = S ? nextOpp() : null;
     const chips = [
-      S ? `<div class="hub-chip"><small>${esc(S.label)}</small><b>${rec.w}-${rec.l}</b><span>#${rank} in the league</span></div>` : "",
+      S ? `<div class="hub-chip"><small>${esc(S.label)}</small><b>${rec.w}-${rec.l}</b><span>#${rank} in the ${S.league === "el" ? "EuroLeague" : "league"}</span></div>` : "",
       nx && nx.opp ? `<div class="hub-chip"><small>Next game</small><span class="hub-opp">${crestSvg(nx.opp, teamName(nx.opp), 22)} ${nx.home === false ? "at" : "vs"} ${esc(teamName(nx.opp))}</span></div>` : "",
       C.contract ? `<div class="hub-chip"><small>Contract</small><b>${money(C.contract.salary)}</b><span>${C.contract.left} season${C.contract.left === 1 ? "" : "s"} left</span></div>` : "",
       `<div class="hub-chip"><small>Bank</small><b>${money(C.money)}</b><span>${icon("bolt", { size: 12 })} ${C.tp} training points</span></div>`,
@@ -291,7 +297,7 @@ export function renderMyCareer(root, signal) {
         <p class="muted">${first ? `The academy years are over. ${esc(teamName(C.academy.club))} wants to keep its own, and other clubs are calling.` : "Your contract is up. Here's who wants you."} Accept an offer, or try to negotiate (the club may walk away).</p>
         <div class="field"><label>Agent</label><div class="mc-cards" id="mc-agent">${Object.entries(E.AGENTS).map(([k, a]) => `<button class="mc-pick ${C.agent === k ? "on" : ""}" data-v="${k}" aria-pressed="${C.agent === k}"><b>${a.name}</b><small>${a.desc} Fee ${Math.round(a.fee * 100)}%.</small></button>`).join("")}</div></div>
         <div class="mc-offers">${view.offers.map((o, i) => html`<div class="card pad mc-offer ${o.homeGrown ? "home" : ""}">
-          <div class="row">${crestSvg(o.team, o.name, 36)}<div><b>${esc(o.name)}</b><small class="muted">${o.homeGrown ? "Your academy club" : o.own ? "Your current club" : ""}${o.loyal ? " · loyalty bonus" : ""}</small></div></div>
+          <div class="row">${crestSvg(o.team, o.name, 36)}<div><b>${esc(o.name)}</b><small class="muted">${o.abroad ? `<span class="pill eu-pill">${icon("globe", { size: 12 })} EuroLeague · abroad</span>` : ""}${o.homeGrown ? "Your academy club" : o.own ? "Your current club" : ""}${o.loyal ? " · loyalty bonus" : ""}</small></div></div>
           <div class="mc-terms"><span>${money(o.salary)}<small>/season gross</small></span><span>${o.years} yr${o.years > 1 ? "s" : ""}</span><span>${roleName(o.role)}</span></div>
           <small class="muted">≈ ${money(E.netPay(o.salary, C.agent))} net after ~${Math.round(E.taxRate(o.salary) * 100)}% tax and the agent's ${Math.round(E.AGENTS[C.agent].fee * 100)}% · ${E.FAM_NAMES[o.fam] || ""} depth: #${(o.rank ?? 0) + 1}${C.nat !== "Israel" ? ` · ${o.foreigners} foreigners on the roster (minutes for ${E.FOREIGN_LIMIT})` : ""}</small>
           <div class="row" style="flex-wrap:wrap">
@@ -416,7 +422,7 @@ export function renderMyCareer(root, signal) {
     const b = E.boxScore(C, C.cur, g);
     const tbl = (name, lines, score) => `<div class="box-team"><div class="row"><b>${esc(name)}</b><span class="spacer"></span><b class="led">${score}</b></div>
       <table class="stat-table box"><thead><tr><th>Player</th><th></th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead><tbody>
-      ${lines.map((l) => `<tr class="${l.me ? "best" : ""}"><td>${l.me ? `<b>${esc(l.name)}</b>` : l.pid ? `<button class="link-name" data-profile="${l.pid}">${esc(l.name)}</button>` : esc(l.name)}</td><td class="muted">${esc(l.pos)}</td><td>${l.min}</td><td><b>${l.pts}</b></td><td>${l.reb}</td><td>${l.ast}</td></tr>`).join("")}</tbody></table></div>`;
+      ${lines.map((l) => `<tr class="${l.me ? "best" : ""}"><td>${l.me ? `<b>${esc(l.name)}</b>` : l.pid && l.el ? `<a class="link-name" href="#/euroleague/player/${esc(l.pid)}">${esc(l.name)}</a>` : l.pid ? `<button class="link-name" data-profile="${l.pid}">${esc(l.name)}</button>` : esc(l.name)}</td><td class="muted">${esc(l.pos)}</td><td>${l.min}</td><td><b>${l.pts}</b></td><td>${l.reb}</td><td>${l.ast}</td></tr>`).join("")}</tbody></table></div>`;
     const d = modal("Box score");
     d.innerHTML = html`<button class="icon-btn profile-close" aria-label="Close">${icon("close", { size: 18 })}</button>
       <div class="profile"><h2>${esc(teamName(C.cur.team))} ${g.my} – ${g.their} ${esc(teamName(g.opp))}</h2><p class="muted">${esc(g.label || "")}${C.cur.simulated ? " · simulated season" : ""}</p>
@@ -463,6 +469,12 @@ export function renderMyCareer(root, signal) {
       newsFlash({ kicker: "STATE CUP", tone: cg.won ? "good" : "info", ic: "medal", text: cupLine,
         title: out.cup.winner === C.cur.team ? `${teamName(C.cur.team)} win the State Cup!` : cg.won ? "State Cup: through to the next round" : "State Cup: knocked out" });
       if (out.cup.winner === C.cur.team) { confetti(3000); sound.play("victory"); emit("mc:trophy", { type: "cup" }); } }
+    if (out.euro) {
+      const x = out.euro;
+      if (x.won) { newsFlash({ kicker: "EUROLEAGUE FINAL FOUR", tone: "good", ic: "crown", title: `${teamName(C.cur.team)} are EuroLeague champions!`, text: `${C.name} lifts the trophy at the Final Four.` }); confetti(5000); sound.play("victory"); emit("mc:trophy", { type: "euroleague" }); }
+      else if (x.inIt) newsFlash({ kicker: "EUROLEAGUE FINAL FOUR", tone: "info", ic: "globe", title: `Final Four: ${teamName(x.f4.champion)} win the EuroLeague`, text: `${teamName(C.cur.team)} made the Final Four but fell short.` });
+      else newsFlash({ kicker: "EUROLEAGUE", tone: "info", ic: "globe", title: `EuroLeague season over: #${x.rank} for ${teamName(C.cur.team)}`, text: `${teamName(x.f4.champion)} won the Final Four.` });
+    }
     if (out.allStar) { if (out.allStar.picked) { newsFlash({ kicker: "ALL-STAR GAME", tone: "good", ic: "star", title: `${C.name} is an All-Star!`, text: "Selected for this season's All-Star game." }); confetti(2000); emit("mc:trophy", { type: "allstar" }); } }
     save();
   }
@@ -505,6 +517,8 @@ export function renderMyCareer(root, signal) {
       <div class="mc-review-stats">${[["PPG", summary.avg.ppg], ["RPG", summary.avg.rpg], ["APG", summary.avg.apg], ["VAL", summary.avg.val], ["GP", summary.avg.gp], ["Finish", "#" + summary.standing]].map(([l, v]) => `<div><small>${l}</small><b class="led">${v}</b></div>`).join("")}</div>
       ${summary.awards.length ? `<div class="mc-awards">${summary.awards.map((a) => `<span class="pill">${icon("medal", { size: 13 })} ${esc(a)}</span>`).join("")}</div>` : ""}
       ${summary.allStar ? `<p>${icon("star", { size: 15 })} All-Star</p>` : ""}${summary.cupWon ? `<p>${icon("medal", { size: 15 })} State Cup winners</p>` : ""}
+      ${summary.euro ? `<p>${icon("globe", { size: 15 })} EuroLeague: ${summary.euro.champion ? "<b>champions!</b>" : summary.euro.f4 ? "Final Four" : `#${summary.euro.rank} of ${summary.euro.of}`} · ${summary.euro.avg.gp} games, ${summary.euro.avg.ppg} PPG</p>` : ""}
+      ${summary.league === "el" ? `<p class="muted">A season abroad in the EuroLeague. Individual awards are only given in the Winner League here.</p>` : ""}
       <h3>Summer development (age ${C.age})</h3>
       <div class="mc-growth">${Object.entries(growth).map(([k, v]) => `<span class="${v >= 0 ? "up" : "down"}">${E.ATTRS[k]} ${v >= 0 ? "+" : ""}${v}</span>`).join("")}</div>
       <p class="muted">Income after agent fee: ${money(summary.income)}</p>
@@ -541,7 +555,8 @@ export function renderMyCareer(root, signal) {
           <div class="card pad"><h3>${icon("chart")} ${S.label} so far</h3>
             <div class="mc-review-stats">${[["GP", avg.gp], ["MIN", avg.min], ["PPG", avg.ppg], ["RPG", avg.rpg], ["APG", avg.apg], ["VAL", avg.val]].map(([l, v]) => `<div><small>${l}</small><b class="led">${v}</b></div>`).join("")}</div>
             <p class="muted" style="font-size:12px;margin:8px 0 0">Team strength ${S.base ?? "–"}${S.boost ? ` → ${r1(S.base + S.boost)} with you (${S.boost > 0 ? "+" : ""}${S.boost})` : ""}${S.coachChanges ? ` · coach changes this season: ${S.coachChanges}` : ""}</p>
-            <p class="muted" style="font-size:12px;margin:4px 0 0">FG ${avg.fg ?? "–"}% · 3P ${avg.tp ?? "–"}% · FT ${avg.ft ?? "–"}% · State Cup: ${S.cup.winner ? (S.cup.winner === S.team ? "won!" : "out") : S.cup.alive ? `round ${S.cup.round + 1}` : "out"}${S.allStar ? ` · All-Star: ${S.allStar.picked ? "selected" : "not selected"}` : ""}</p></div>
+            <p class="muted" style="font-size:12px;margin:4px 0 0">FG ${avg.fg ?? "–"}% · 3P ${avg.tp ?? "–"}% · FT ${avg.ft ?? "–"}% ${S.cup.none ? "" : ` · State Cup: ${S.cup.winner ? (S.cup.winner === S.team ? "won!" : "out") : S.cup.alive ? `round ${S.cup.round + 1}` : "out"}`}${S.allStar ? ` · All-Star: ${S.allStar.picked ? "selected" : "not selected"}` : ""}</p></div>
+          ${euroCard(S)}
           <div class="card pad"><h3>${icon("calendar")} Schedule</h3>${scheduleGrid(S)}
             <p class="muted" style="font-size:12px;margin:8px 0 0">Tap a played game to see its scoreboard.</p></div>
           <div class="card pad">${depthHtml(S.label, S.team)}</div>
@@ -564,11 +579,11 @@ export function renderMyCareer(root, signal) {
   /** Who you're competing with for minutes at your position group. */
   function depthHtml(label, tid) {
     const dc = E.depthChart(C, label, tid);
-    const rows = dc.rivals.map((ps) => ({ name: playersById.get(ps.player_id)?.name || ps.player_id, pid: ps.player_id, r: ps.rating_mock, foreign: !E.isIsraeliPlayer(ps.player_id) }));
-    rows.splice(dc.rank, 0, { me: true, name: C.name, r: Math.round(dc.myScore), foreign: C.nat !== "Israel" });
+    const rows = dc.rivals.map((ps) => ({ name: E.playerName(ps.player_id), pid: ps.player_id, wl: playersById.has(ps.player_id), r: ps.rating_mock, foreign: !dc.abroad && !E.isIsraeliPlayer(ps.player_id) }));
+    rows.splice(dc.rank, 0, { me: true, name: C.name, r: Math.round(dc.myScore), foreign: !dc.abroad && C.nat !== "Israel" });
     return html`<h3>${icon("users")} Depth chart · ${E.FAM_NAMES[dc.fam]} at ${esc(teamName(tid))}</h3>
-      <ol class="mc-depth">${rows.slice(0, 7).map((x, i) => `<li class="${x.me ? "me" : ""}"><span>${i + 1}</span>${x.me ? `<b>${esc(x.name)} (you)</b>` : `<button class="link-name" data-profile="${x.pid}">${esc(x.name)}</button>`}${x.foreign ? ` <small class="muted">foreign</small>` : ""}<b class="led">${x.r}</b></li>`).join("")}</ol>
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Your number includes coach trust, chemistry${C.nat === "Israel" ? " and the Israeli-player edge" : ""}.${dc.foreign ? ` Foreign players on the roster: ${dc.foreigners} (minutes for ${E.FOREIGN_LIMIT}).${dc.slotOk ? "" : " <b>You're not among the top foreigners yet: bench.</b>"}` : ""}</p>`;
+      <ol class="mc-depth">${rows.slice(0, 7).map((x, i) => `<li class="${x.me ? "me" : ""}"><span>${i + 1}</span>${x.me ? `<b>${esc(x.name)} (you)</b>` : x.wl ? `<button class="link-name" data-profile="${x.pid}">${esc(x.name)}</button>` : `<a class="link-name" href="#/euroleague/player/${esc(x.pid)}">${esc(x.name)}</a>`}${x.foreign ? ` <small class="muted">foreign</small>` : ""}<b class="led">${x.r}</b></li>`).join("")}</ol>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Your number includes coach trust, chemistry${C.nat === "Israel" && !dc.abroad ? " and the Israeli-player edge" : ""}.${dc.abroad ? ` EuroLeague roster; its ratings are placeholder data, rescaled to the Winner League.` : ""}${dc.foreign ? ` Foreign players on the roster: ${dc.foreigners} (minutes for ${E.FOREIGN_LIMIT}).${dc.slotOk ? "" : " <b>You're not among the top foreigners yet: bench.</b>"}` : ""}</p>`;
   }
   /** Signing ceremony: the contract, a signature, and the first photo in the new jersey. */
   function ceremony(o) {
@@ -589,14 +604,38 @@ export function renderMyCareer(root, signal) {
 
 
   function tableHtml() {
-    const S = C.cur;
+    const S = C.cur, abroad = S.league === "el";
     return html`<div class="mc-stack">
-      <div class="card pad" style="min-width:0"><h2>${icon("chart")} ${S.label} standings${S.simulated ? ` <span class="muted" style="font-size:14px">(simulated season)</span>` : ""}</h2>
+      <div class="card pad" style="min-width:0"><h2>${icon(abroad ? "globe" : "chart")} ${abroad ? "EuroLeague " : ""}${S.label} standings${S.simulated ? ` <span class="muted" style="font-size:14px">(simulated season)</span>` : ""}</h2>
         ${standings(S)}
-        <p class="muted" style="font-size:12px">▲▼ change since the last round. The top 8 (highlighted) make the playoffs, best of three. Team strengths come from each club's real roster that season.</p></div>
-      <div class="card pad" style="min-width:0"><h2>${icon("trophy")} Playoffs</h2>
-        ${S.playoffs ? bracket(S) : `<p class="muted">The bracket appears when the regular season ends. Finish in the top 8 to get in.</p>`}</div>
+        <p class="muted" style="font-size:12px">▲▼ change since the last round. ${abroad ? `The top 8 make the playoffs (best of three); the winners go to a one-game Final Four. ${esc(MOCK_NOTE)} Team strengths are rescaled to the Winner League.` : "The top 8 (highlighted) make the playoffs, best of three. Team strengths come from each club's real roster that season."}</p></div>
+      <div class="card pad" style="min-width:0"><h2>${icon("trophy")} ${abroad ? "Playoffs & Final Four" : "Playoffs"}</h2>
+        ${S.playoffs ? bracket(S, abroad ? ["Playoffs", "Final Four semis", "Final"] : undefined) : `<p class="muted">The bracket appears when the regular season ends. Finish in the top 8 to get in.</p>`}</div>
+      ${S.el ? html`<div class="card pad" style="min-width:0"><h2>${icon("globe")} EuroLeague ${S.el.season}</h2>
+        ${euroTableHtml(S.el, S.team, 99)}
+        ${S.el.f4 ? `<p><b>Final Four:</b> ${S.el.f4.teams.map((t) => esc(teamName(t))).join(", ")} · champion <b>${esc(teamName(S.el.champion))}</b></p>` : `<p class="muted" style="font-size:12px">One game against every club, spread over the league season. The top four go to the Final Four when the league's regular season ends.</p>`}
+        <p class="muted" style="font-size:12px">${esc(MOCK_NOTE)} EuroLeague strengths are rescaled to the Winner League through clubs that play in both.</p></div>` : ""}
     </div>`;
+  }
+  function euroTableHtml(el, me, limit = 8) {
+    const rows = E.euroTable(el);
+    const mine = rows.findIndex((t) => t.id === me);
+    const shown = rows.slice(0, limit);
+    if (mine >= limit) shown.push(rows[mine]);
+    return `<table class="stat-table mc-table2"><thead><tr><th>#</th><th>Club</th><th>W</th><th>L</th><th>+/-</th></tr></thead><tbody>${shown.map((r) => {
+      const i = rows.indexOf(r);
+      return `<tr class="${r.id === me ? "me-row" : ""} ${i < 4 ? "po" : ""} ${i === 3 ? "cut" : ""}"><td>${i + 1}</td><td><span class="tm">${crestSvg(r.id, r.name, 20)} ${esc(r.name)}</span></td><td><b>${r.w}</b></td><td>${r.l}</td><td>${r.diff > 0 ? "+" : ""}${r.diff}</td></tr>`;
+    }).join("")}</tbody></table>`;
+  }
+  /** The EuroLeague campaign of your Israeli club, on the season tab. */
+  function euroCard(S) {
+    if (!S.el) return S.league === "el" ? `<div class="card pad eu-card"><h3>${icon("globe")} A season abroad</h3><p class="muted" style="margin:0">${esc(teamName(S.team))} play the EuroLeague: ${S.schedule.length} rounds, then the playoffs and a one-game Final Four. Teammates and opponents are the real rosters of that EuroLeague season. ${esc(MOCK_NOTE)}</p></div>` : "";
+    const rows = E.euroTable(S.el), mine = rows.findIndex((t) => t.id === S.team);
+    const r = S.el.standings[S.team];
+    return html`<div class="card pad eu-card"><div class="row"><h3 style="margin:0">${icon("globe")} EuroLeague ${S.el.season}</h3><span class="spacer"></span><a class="btn ghost sm" href="#/euroleague/season/${S.el.season}">Clubs</a></div>
+      <p style="margin:8px 0">${r.w}-${r.l} · <b>#${mine + 1}</b> of ${rows.length} · round ${S.el.round} of ${S.el.schedule.length}${S.el.f4 ? ` · champion: <b>${esc(teamName(S.el.champion))}</b>` : ""}</p>
+      ${euroTableHtml(S.el, S.team, 4)}
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Played between league rounds. The top four reach the Final Four. ${esc(MOCK_NOTE)}</p></div>`;
   }
 
   // ---------------------------------------------------------------- career & legacy
@@ -609,15 +648,15 @@ export function renderMyCareer(root, signal) {
     const pro = C.history.filter((h) => h.pro);
     const t = C.totals;
     const recs = [["pts", "Points", t.pts], ["reb", "Rebounds", t.reb], ["ast", "Assists", t.ast], ["stl", "Steals", t.stl], ["blk", "Blocks", t.blk], ["gp", "Games", t.gp]];
-    const bestSeason = pro.reduce((b, h) => (!b || h.avg.ppg > b.avg.ppg ? h : b), null);
+    const bestSeason = pro.filter((h) => h.league !== "el").reduce((b, h) => (!b || h.avg.ppg > b.avg.ppg ? h : b), null);
     return html`<div class="mc-grid">
       <div class="card pad" style="min-width:0"><h2>${icon("clock")} Career</h2>
-        ${pro.length ? `<div class="grid-wrap"><table class="stat-table"><thead><tr><th>Season</th><th>Team</th><th>Age</th><th>Role</th><th>GP</th><th>PPG</th><th>RPG</th><th>APG</th><th>VAL</th><th>OVR</th></tr></thead>
-          <tbody>${pro.map((h) => `<tr><td>${h.season}${h.simulated ? "*" : ""}</td><td>${esc(teamName(h.team))}${h.loan ? " (loan)" : ""}</td><td>${h.age}</td><td>${roleName(h.role)}</td><td>${h.avg.gp}</td><td>${h.avg.ppg}</td><td>${h.avg.rpg}</td><td>${h.avg.apg}</td><td>${h.avg.val}</td><td><b>${h.overall}</b></td></tr>`).join("")}</tbody></table></div>
+        ${pro.length ? `<div class="grid-wrap"><table class="stat-table"><thead><tr><th>Season</th><th>Team</th><th>Age</th><th>Role</th><th>GP</th><th>PPG</th><th>RPG</th><th>APG</th><th>VAL</th><th>OVR</th><th>Europe</th></tr></thead>
+          <tbody>${pro.map((h) => `<tr><td>${h.season}${h.simulated ? "*" : ""}</td><td>${esc(teamName(h.team))}${h.loan ? " (loan)" : ""}</td><td>${h.age}</td><td>${roleName(h.role)}</td><td>${h.avg.gp}</td><td>${h.avg.ppg}</td><td>${h.avg.rpg}</td><td>${h.avg.apg}</td><td>${h.avg.val}</td><td><b>${h.overall}</b></td><td>${h.league === "el" ? `<span class="pill eu-pill">EuroLeague club</span>` : h.euro ? (h.euro.champion ? "🏆 Champion" : h.euro.f4 ? "Final Four" : `#${h.euro.rank}`) : "–"}</td></tr>`).join("")}</tbody></table></div>
           <p class="muted" style="font-size:12px">* simulated season (after ${E.LAST_REAL}, rosters based on ${E.LAST_REAL}).</p>` : `<p class="muted">No pro seasons yet.</p>`}
       </div>
       <div style="display:grid;gap:16px;align-content:start"><div class="card pad"><h3>${icon("trophy")} Against the real records</h3>
-        <p class="muted" style="font-size:13px;margin-top:0">Your career totals ranked among every real player since 2010-11 (regular season).</p>
+        <p class="muted" style="font-size:13px;margin-top:0">Your Winner League totals ranked among every real player since 2010-11 (regular season).${C.elTotals?.gp ? ` In Europe: ${C.elTotals.gp} EuroLeague games, ${C.elTotals.pts.toLocaleString()} points.` : ""}</p>
         <ul class="clean mc-recs">${recs.map(([cat, l, v]) => { const r = recordRank(cat, v); return `<li><span>${l}</span><b>${v.toLocaleString()}</b><span class="${r.rank === 1 ? "good-text" : "muted"}">#${r.rank}${r.rank === 1 ? " · all-time record!" : ` · record ${Math.round(r.top.value).toLocaleString()} (${esc(playersById.get(r.top.pid)?.name || "")})`}</span></li>`; }).join("")}</ul>
         ${bestSeason ? (() => { const r = recordRank("sppg", bestSeason.avg.ppg); return `<p style="font-size:14px">Best scoring season: <b>${bestSeason.avg.ppg} PPG</b> (${bestSeason.season}) · would rank <b>#${r.rank}</b> among real single seasons.</p>`; })() : ""}
       </div>

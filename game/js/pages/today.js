@@ -6,6 +6,8 @@ import { bestSeason, nameLink, playerCard } from "../components/playerCard.js";
 import { icon } from "../lib/icons.js";
 import { deferred, esc, fmt1, html } from "../ui.js";
 import { db } from "../data.js";
+import { EL_INDEX, EL_SEASONS } from "../euroleague.js";
+import { crestSvg } from "../lib/icons.js";
 
 const pad = (n) => String(n).padStart(2, "0");
 const md = (d) => `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -19,9 +21,21 @@ export function bornOn(mmdd) {
     .sort((a, b) => b.s.bestRating - a.s.bestRating || b.s.totalGames - a.s.totalGames);
 }
 
-function flashback(yearsAgo, now) {
+const seasonAgo = (yearsAgo, now) => {
   const startYear = now.getFullYear() - yearsAgo - (now.getMonth() < 8 ? 1 : 0); // seasons start in the autumn
-  const season = `${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
+  return `${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
+};
+/** The EuroLeague that season: Israeli clubs and how many Winner League players took part (from the EuroLeague data). */
+function elFlash(season) {
+  if (!EL_SEASONS.includes(season)) return null;
+  return { season, clubs: (EL_INDEX.seasonTeams[season] || []).length, israeli: EL_INDEX.israeli[season] || [], wl: EL_INDEX.wlCount[season] || 0 };
+}
+const elLine = (e) => e ? `<div class="flash-el"><small class="muted">IN THE EUROLEAGUE</small>
+  ${e.israeli.length ? e.israeli.map((x) => `<a href="#/euroleague/club/${x.team}/${e.season}">${crestSvg(x.team, teamName(x.team), 18)} ${esc(teamName(x.team))}</a> <span class="muted">${x.wl.length} of ${x.size} players also in the Winner League</span>`).join("<br>") : `<span class="muted">No Israeli club in the data that season.</span>`}
+  <br><a href="#/euroleague/season/${e.season}" class="muted">${e.clubs} clubs · ${e.wl} Winner League players →</a></div>` : "";
+
+function flashback(yearsAgo, now) {
+  const season = seasonAgo(yearsAgo, now);
   if (!PLAYED_SEASONS.includes(season)) return null;
   const recs = db.player_seasons.filter((r) => r.season === season && isPlayable(r, 10));
   const top = (k) => recs.filter((r) => r.stats[k] != null).sort((a, b) => b.stats[k] - a.stats[k])[0];
@@ -40,6 +54,8 @@ export function renderToday(root, signal) {
       for (const x of bornOn(md(d)).slice(0, 2)) week.push({ ...x, d });
     }
     const flash = [5, 10, 15].map((y) => flashback(y, now)).filter(Boolean);
+    // before the Winner League data starts, the EuroLeague data still goes back further
+    const elOnly = [20, 25].map((y) => ({ yearsAgo: y, el: elFlash(seasonAgo(y, now)) })).filter((x) => x.el);
     const age = (p, d = now) => d.getFullYear() - Number(p.birth_date.slice(0, 4));
     const line = (r, k, label) => r ? `<li><span class="muted">${label}</span> ${nameLink(r.player_id, playersById.get(r.player_id).name)} <b>${fmt1(r.stats[k])}</b> <small class="muted">${esc(teamName(r.team_id))}</small></li>` : "";
     root.innerHTML = html`
@@ -67,6 +83,13 @@ export function renderToday(root, signal) {
             ${f.best ? `<li><span class="muted">Top rated</span> ${nameLink(f.best.player_id, playersById.get(f.best.player_id).name)} <b>${f.best.rating_mock}</b> <small class="muted">${esc(teamName(f.best.team_id))}</small></li>` : ""}
             ${line(f.scorer, "ppg", "Points")}${line(f.reb, "rpg", "Rebounds")}${line(f.ast, "apg", "Assists")}
           </ul>
+          ${elLine(elFlash(f.season))}
+        </div>`).join("")}
+        ${elOnly.map((x) => html`<div class="card pad flash-card">
+          <small class="muted">${x.yearsAgo} YEARS AGO</small>
+          <h3><a href="#/euroleague/season/${x.el.season}">EuroLeague ${x.el.season}</a></h3>
+          <p class="muted" style="margin:0 0 8px">Before the Winner League records here begin.</p>
+          ${elLine(x.el)}
         </div>`).join("")}
       </div>
       <p class="muted" style="font-size:12px">Birth dates and stats come from the official league site (regular season, minimum 10 games for season leaders).</p>`;

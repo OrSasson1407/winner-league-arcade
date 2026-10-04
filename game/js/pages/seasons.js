@@ -27,7 +27,8 @@ function drawSeasons(root) {
   const seasons = [...db.seasons].reverse();
   root.innerHTML = html`
     <div class="game-head"><div><h1>${icon("calendar", { size: 30 })} Seasons</h1>
-      <p>17 seasons from 2010-11 to today. Regular-season stats, from the official league records.</p></div></div>
+      <p>17 seasons from 2010-11 to today. Regular-season stats, from the official league records.</p></div>
+      <a class="btn" href="#/euroleague">${icon("globe", { size: 15 })} EuroLeague seasons</a></div>
     <div class="club-grid">${seasons.map((s) => {
       const recs = seasonRecords(s.season);
       const scorer = topBy(recs, (r) => r.stats.ppg)[0];

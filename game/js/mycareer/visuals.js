@@ -67,7 +67,7 @@ export function badgeMedals(C, { fresh = null, tpOk = (cost) => C.tp >= cost, co
 
 // ---------------------------------------------------------------- schedule calendar
 export function scheduleGrid(S) {
-  const league = S.games.filter((g) => !g.cup && !g.playoff);
+  const league = S.games.filter((g) => !g.cup && !g.playoff && !g.eu);
   const cells = S.schedule.map((round, i) => {
     const m = round.find(([h, a]) => h === S.team || a === S.team);
     if (!m) return `<div class="sc-cell bye"><small>R${i + 1}</small><span>Bye</span></div>`;
@@ -78,7 +78,7 @@ export function scheduleGrid(S) {
     const inner = `<small>R${i + 1} · ${home ? "home" : "away"}</small>${crestSvg(opp, teamName(opp), 26)}<span class="sc-opp">${esc(teamName(opp))}</span>${g ? `<b>${g.won ? "W" : "L"} ${g.my}-${g.their}</b>` : i === S.round ? "<b>Next</b>" : ""}`;
     return g ? `<button class="sc-cell ${cls}" data-g="${idx}" aria-label="Round ${i + 1}: ${g.won ? "win" : "loss"} ${g.my}-${g.their} ${home ? "vs" : "at"} ${esc(teamName(opp))}">${inner}</button>` : `<div class="sc-cell ${cls}">${inner}</div>`;
   });
-  const extra = S.games.map((g, i) => (g.cup || g.playoff ? `<button class="sc-cell ${g.won ? "w" : "l"} special" data-g="${i}"><small>${g.cup ? "Cup" : "Playoffs"}</small>${crestSvg(g.opp, teamName(g.opp), 26)}<span class="sc-opp">${esc(teamName(g.opp))}</span><b>${g.won ? "W" : "L"} ${g.my}-${g.their}</b></button>` : "")).join("");
+  const extra = S.games.map((g, i) => (g.cup || g.playoff || g.eu ? `<button class="sc-cell ${g.won ? "w" : "l"} special ${g.eu ? "eu" : ""}" data-g="${i}"><small>${g.cup ? "Cup" : g.eu ? (g.f4 ? "Final Four" : "EuroLeague") : "Playoffs"}</small>${crestSvg(g.opp, teamName(g.opp), 26)}<span class="sc-opp">${esc(teamName(g.opp))}</span><b>${g.won ? "W" : "L"} ${g.my}-${g.their}</b></button>` : "")).join("");
   return `<div class="mc-sched">${cells.join("")}${extra}</div>`;
 }
 
@@ -95,12 +95,12 @@ export function standings(S) {
 }
 
 // ---------------------------------------------------------------- playoff bracket
-export function bracket(S) {
+export function bracket(S, roundNames = null) {
   const P = S.playoffs;
   if (!P) return "";
   const rounds = [...(P.history || [])];
   if (!P.champion && P.series?.length && !(P.history || []).some((r) => r === P.series)) rounds.push(P.series);
-  const names = ["Quarter-finals", "Semi-finals", "Final"];
+  const names = roundNames || ["Quarter-finals", "Semi-finals", "Final"];
   const team = (id, wins, won) => `<div class="bk-team ${id === S.team ? "me" : ""} ${won ? "won" : ""}">${id ? crestSvg(id, teamName(id), 20) : `<i class="bk-tbd" aria-hidden="true"></i>`}<span>${id ? esc(teamName(id)) : "TBD"}</span><b>${wins ?? ""}</b></div>`;
   return `<div class="mc-bracket" role="group" aria-label="Playoff bracket">${[0, 1, 2].map((ri) => {
     const r = rounds[ri];

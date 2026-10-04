@@ -1,6 +1,7 @@
 // Shared data layer: loads the database once and builds game-friendly indexes.
 import { gameDatabase as db } from "../data/game_db.js";
 import { createDatabaseHelpers } from "../../src/database_helpers.js";
+import { euroleagueIndex } from "../data/euroleague_index.js";
 
 export { db };
 export const H = createDatabaseHelpers(db);
@@ -11,7 +12,8 @@ export const POSITIONS = ["PG", "SG", "SF", "PF", "C"];
 
 const teamsById = new Map(db.teams.map((t) => [t.team_id, t]));
 export const playersById = new Map(db.players.map((p) => [p.player_id, p]));
-export const teamName = (id) => teamsById.get(id)?.canonical_name ?? id;
+// EuroLeague clubs (separate data) get their names from the small EuroLeague index
+export const teamName = (id) => teamsById.get(id)?.canonical_name ?? euroleagueIndex.teams[id] ?? id;
 
 /** A player-season a game can use: real name, regular-season games played. */
 export function isPlayable(ps, minGames = 5) {

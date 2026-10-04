@@ -1,6 +1,7 @@
 // Global search (Ctrl+K, "/" or the header button): players, clubs, seasons and pages in one box.
 import { careerSummary, db, namedPlayers, teamName } from "../data.js";
-import { esc } from "../ui.js";
+import { esc, store } from "../ui.js";
+import { EL_SEASONS, EL_INDEX, elLoaded, elTeamName, loadEuroleague } from "../euroleague.js";
 import { crestSvg, icon } from "./icons.js";
 import { closeModal, closeSilently, openModal } from "./modal.js";
 import { openProfile } from "../profile.js";
@@ -29,6 +30,9 @@ const PAGES = [
   { label: "Help center", sub: "Rules and explanations", href: "#/help", ic: "info", words: "help rules faq how rating chemistry" },
   { label: "Your profile", sub: "Nickname, avatar, records", href: "#/me", ic: "user", words: "me profile nickname avatar" },
   { label: "Home", sub: "Start page", href: "#/", ic: "home", words: "home start" },
+  { label: "EuroLeague", sub: "Seasons, clubs and Israeli clubs in Europe", href: "#/euroleague", ic: "globe", words: "euroleague europe european euro cup final four" },
+  { label: "About", sub: "Where the data comes from", href: "#/about", ic: "info", words: "about data source version" },
+  { label: "Privacy", sub: "What is stored and where", href: "#/privacy", ic: "lock", words: "privacy data cookies delete" },
 ];
 
 let index = null;
@@ -49,6 +53,25 @@ function buildIndex() {
   return index;
 }
 
+// EuroLeague entries (built once the EuroLeague data has loaded)
+let elIndex = null;
+function buildElIndex(E) {
+  if (elIndex) return elIndex;
+  const players = E.db.players.map((p) => {
+    const rows = E.careerOf(p.player_id);
+    const first = rows[0]?.season, last = rows[rows.length - 1]?.season;
+    return { type: "elplayer", id: p.player_id, label: p.name, key: norm(p.name), sub: `EuroLeague · ${elTeamName(rows[rows.length - 1]?.team_id)} · ${first === last ? first : first?.slice(0, 4) + "–" + last?.slice(5)}`, games: rows.length };
+  });
+  const clubs = Object.entries(EL_INDEX.teams).map(([id, name]) => {
+    const n = EL_SEASONS.filter((s) => (EL_INDEX.seasonTeams[s] || []).includes(id)).length;
+    return { type: "elclub", id, label: name, key: norm(name), sub: `EuroLeague club · ${n} seasons`, seasons: n };
+  });
+  const seasons = EL_SEASONS.map((s) => ({ type: "elseason", id: s, label: `EuroLeague ${s}`, key: norm(`euroleague ${s} ${s.slice(0, 4)} ${"20" + s.slice(5)}`), sub: `${(EL_INDEX.seasonTeams[s] || []).length} clubs` }));
+  return (elIndex = { players, clubs, seasons });
+}
+const LEAGUES = [["wl", "Winner League"], ["el", "EuroLeague"], ["all", "Both"]];
+const league = () => store.get("search:league", "wl");
+
 function score(item, q) {
   if (!q) return 0;
   if (item.key.startsWith(q)) return 3;
@@ -59,19 +82,34 @@ function score(item, q) {
 function results(q) {
   const ix = buildIndex();
   const nq = norm(q.trim());
+  const lg = league();
   if (!nq) return [{ title: "Go to", items: ix.pages.slice(0, 7) }];
   const pick = (list, n, tiebreak) => list.map((it) => [score(it, nq), it]).filter(([s]) => s > 0)
     .sort((a, b) => b[0] - a[0] || (tiebreak ? tiebreak(a[1], b[1]) : 0)).slice(0, n).map(([, it]) => it);
-  return [
-    { title: "Players", items: pick(ix.players, 7, (a, b) => b.games - a.games) },
-    { title: "Clubs", items: pick(ix.clubs, 6, (a, b) => b.seasons - a.seasons) },
-    { title: "Seasons", items: pick(ix.seasons, 3) },
-    { title: "Pages", items: pick(ix.pages, 4) },
-  ].filter((g) => g.items.length);
+  const groups = [];
+  if (lg !== "el") groups.push(
+    { title: lg === "all" ? "Winner League players" : "Players", items: pick(ix.players, lg === "all" ? 5 : 7, (a, b) => b.games - a.games) },
+    { title: lg === "all" ? "Winner League clubs" : "Clubs", items: pick(ix.clubs, lg === "all" ? 4 : 6, (a, b) => b.seasons - a.seasons) },
+    { title: "Seasons", items: pick(ix.seasons, 3) });
+  if (lg !== "wl") {
+    const E = elLoaded();
+    if (!E) groups.push({ title: "EuroLeague", items: [], loading: true });
+    else {
+      const ex = buildElIndex(E);
+      groups.push(
+        { title: "EuroLeague players", items: pick(ex.players, lg === "all" ? 5 : 7, (a, b) => b.games - a.games) },
+        { title: "EuroLeague clubs", items: pick(ex.clubs, lg === "all" ? 4 : 6, (a, b) => b.seasons - a.seasons) },
+        { title: "EuroLeague seasons", items: pick(ex.seasons, 3) });
+    }
+  }
+  groups.push({ title: "Pages", items: pick(ix.pages, 4) });
+  return groups.filter((g) => g.items.length || g.loading);
 }
 
 function itemIcon(it) {
-  if (it.type === "club") return crestSvg(it.id, it.label, 28);
+  if (it.type === "club" || it.type === "elclub") return crestSvg(it.id, it.label, 28);
+  if (it.type === "elplayer") return `<span class="sr-ic">${icon("globe", { size: 16 })}</span>`;
+  if (it.type === "elseason") return `<span class="sr-ic">${icon("calendar", { size: 16 })}</span>`;
   if (it.type === "player") return `<span class="sr-ic">${icon("user", { size: 16 })}</span>`;
   if (it.type === "season") return `<span class="sr-ic">${icon("calendar", { size: 16 })}</span>`;
   return `<span class="sr-ic">${icon(it.ic, { size: 16 })}</span>`;
@@ -86,6 +124,7 @@ export function openSearch() {
     dialog.innerHTML = `<div class="sm-head">${icon("search", { size: 20 })}
         <input id="gs-input" type="search" placeholder="Search players, clubs, seasons, pages…" autocomplete="off" aria-label="Search" aria-controls="gs-results" aria-autocomplete="list">
         <kbd>Esc</kbd></div>
+      <div class="sm-league"><span class="muted">League</span><div class="seg sm" id="gs-league" role="radiogroup" aria-label="League">${LEAGUES.map(([v, l]) => `<button role="radio" data-lg="${v}">${l}</button>`).join("")}</div></div>
       <div id="gs-results" class="sm-results" role="listbox" aria-label="Search results" tabindex="0"></div>
       <div class="sm-foot muted"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Ctrl</kbd><kbd>K</kbd> anywhere</span></div>`;
     document.body.appendChild(dialog);
@@ -98,7 +137,8 @@ export function openSearch() {
       flat = groups.flatMap((g) => g.items);
       active = Math.min(active, Math.max(0, flat.length - 1));
       let i = 0;
-      box.innerHTML = flat.length ? groups.map((g) => `<div class="sr-group">${esc(g.title)}</div>${g.items.map((it) => {
+      dialog.querySelectorAll("#gs-league [data-lg]").forEach((b) => { const on = b.dataset.lg === league(); b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); });
+      box.innerHTML = flat.length || groups.some((g) => g.loading) ? groups.map((g) => g.loading ? `<div class="sr-group">${esc(g.title)}</div><div class="sr-loading muted">Loading the EuroLeague data…</div>` : `<div class="sr-group">${esc(g.title)}</div>${g.items.map((it) => {
         const idx = i++;
         return `<div class="sr-item ${idx === active ? "on" : ""}" role="option" aria-selected="${idx === active}" data-i="${idx}">${itemIcon(it)}<span class="sr-main"><b>${esc(it.label)}</b><small>${esc(it.sub || "")}</small></span>${icon("arrowRight", { size: 14, cls: "sr-go" })}</div>`;
       }).join("")}`).join("") : `<div class="empty-state">${icon("search", { size: 28 })}<b>No results for “${esc(input.value)}”</b></div>`;
@@ -109,10 +149,17 @@ export function openSearch() {
       // leave the dialog without stepping history back, then reuse its history entry
       closeSilently(dialog);
       if (it.type === "player") { openProfile(it.id, { reuseEntry: true }); return; }
-      const hash = it.type === "club" ? `#/club/${it.id}` : it.type === "season" ? `#/season/${it.id}` : it.href;
+      const hash = it.type === "club" ? `#/club/${it.id}` : it.type === "season" ? `#/season/${it.id}` : it.type === "elplayer" ? `#/euroleague/player/${it.id}`
+        : it.type === "elclub" ? `#/euroleague/club/${it.id}` : it.type === "elseason" ? `#/euroleague/season/${it.id}` : it.href;
       location.replace(hash);
     };
     input.addEventListener("input", () => { active = 0; render(); });
+    const needEl = () => { if (league() !== "wl" && !elLoaded()) loadEuroleague().then(() => dialog.open && render()).catch(() => {}); };
+    dialog.querySelector("#gs-league").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-lg]"); if (!b) return;
+      store.set("search:league", b.dataset.lg); active = 0; needEl(); render(); input.focus();
+    });
+    dialog._needEl = needEl;
     input.addEventListener("keydown", (e) => {
       if (e.key === "ArrowDown") { active = Math.min(flat.length - 1, active + 1); render(); e.preventDefault(); }
       else if (e.key === "ArrowUp") { active = Math.max(0, active - 1); render(); e.preventDefault(); }
@@ -123,6 +170,7 @@ export function openSearch() {
   }
   const input = dialog.querySelector("#gs-input");
   input.value = "";
+  dialog._needEl();
   dialog._render();
   openModal(dialog);
   input.focus();

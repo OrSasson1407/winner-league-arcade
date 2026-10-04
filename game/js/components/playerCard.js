@@ -1,6 +1,7 @@
 // Player card (FIFA / 2K style). Tier frame by rating: legend 95+, gold 90+, silver 80+, bronze.
 import { playersById, teamName } from "../data.js";
 import { clubColors } from "../lib/clubs.js";
+import { playedEL } from "../euroleague.js";
 import { posFamily } from "../lib/icons.js";
 import { esc, fmt1, initials } from "../ui.js";
 
@@ -38,6 +39,7 @@ export function playerCard(ps, opts = {}) {
     <div class="pc-top"><span class="pc-rating">${hideRating ? "?" : rating}</span><span class="pc-pos pos-${posFamily(pos)}">${esc(pos)}${ps.secondary_position ? "/" + esc(ps.secondary_position) : ""}</span></div>
     ${isIsraeli(p) ? `<span class="pc-flag" title="Israeli">${IL_FLAG}</span>` : ""}
     ${badge ? `<span class="pc-badge">${badge}</span>` : ""}
+    ${playedEL(ps.player_id) ? `<span class="pc-el" title="Also played in the EuroLeague" aria-label="EuroLeague player">EL</span>` : ""}
     <div class="pc-avatar" aria-hidden="true">${esc(initials(p.name))}</div>
     <div class="pc-name">${esc(p.name)}</div>
     <div class="pc-team"><i class="dot" style="background:${c1}"></i><span>${esc(teamName(ps.team_id))} · ${ps.season}</span></div>

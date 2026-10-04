@@ -1,10 +1,11 @@
 // Player profile: opened as a modal from anywhere ([data-profile] clicks), or as a page (#/player/<id>).
+import { MOCK_NOTE, elCareer } from "./euroleague.js";
 import { fmtHeight } from "./lib/units.js";
 import { H, db, playersById, teamName } from "./data.js";
 import { bestSeason, playerCard } from "./components/playerCard.js";
 import { clubColors } from "./lib/clubs.js";
 import { esc, fmt1, html } from "./ui.js";
-import { icon } from "./lib/icons.js";
+import { crestSvg, icon } from "./lib/icons.js";
 import { closeModal, closeSilently, openModal } from "./lib/modal.js";
 import { copyLink } from "./ui.js";
 import { logActivity } from "./lib/progress.js";
@@ -42,6 +43,13 @@ function age(dob) {
   return now.getFullYear() - y - ((now.getMonth() + 1 < m || (now.getMonth() + 1 === m && now.getDate() < d)) ? 1 : 0);
 }
 
+/** Light club colours (e.g. Maccabi yellow) need dark text on top. */
+const isLight = (c) => {
+  const m = /^#([0-9a-f]{6})$/i.exec(c);
+  if (!m) return false;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4;
+};
 function timelineHtml(records) {
   const first = SEASONS.indexOf(records[0].season), last = SEASONS.indexOf(records[records.length - 1].season);
   const cells = [];
@@ -51,7 +59,7 @@ function timelineHtml(records) {
     if (!rs.length) { cells.push(`<div class="gap" style="flex:1" title="${s}: not in the league">–</div>`); continue; }
     for (const r of rs) {
       const [c1] = clubColors(r.team_id);
-      cells.push(`<div style="flex:${1 / rs.length};background:${c1}" title="${esc(teamName(r.team_id))} · ${s}">${rs.length === 1 && last - first < 12 ? s.slice(2) : ""}</div>`);
+      cells.push(`<div style="flex:${1 / rs.length};background:${c1}${isLight(c1) ? ";color:#111;text-shadow:none" : ""}" title="${esc(teamName(r.team_id))} · ${s}">${rs.length === 1 && last - first < 12 ? s.slice(2) : ""}</div>`);
     }
   }
   return `<div class="timeline" role="img" aria-label="Career timeline">${cells.join("")}</div>
@@ -143,7 +151,20 @@ export function profileHtml(pid) {
             <td class="rating">${s ? r.rating_mock : "–"}</td></tr>`;
         }).join("")}</tbody></table></div>
     </div>
+    ${euroleagueHtml(pid)}
   </div>`;
+}
+
+/** The player's EuroLeague years (separate competition data), if any. */
+function euroleagueHtml(pid) {
+  const rows = elCareer(pid);
+  if (!rows.length) return "";
+  const clubs = [...new Set(rows.map(([, t]) => t))];
+  return html`<div class="card pad el-career"><div class="row"><h3 style="margin:0">${icon("globe")} EuroLeague career</h3><span class="spacer"></span>
+      <a class="btn ghost sm" href="#/euroleague/player/${esc(pid)}">EuroLeague page ${icon("arrowRight", { size: 13 })}</a></div>
+    <p class="muted" style="margin:6px 0 10px">${rows.length} season${rows.length === 1 ? "" : "s"} with ${clubs.length} club${clubs.length === 1 ? "" : "s"} in the EuroLeague, alongside the Winner League above.</p>
+    <div class="el-years">${rows.map(([season, tid]) => `<a class="el-year" href="#/euroleague/club/${tid}/${season}" style="--club:${clubColors(tid)[0]}">${crestSvg(tid, teamName(tid), 22)}<span><b>${season}</b><small>${esc(teamName(tid))}</small></span></a>`).join("")}</div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">${esc(MOCK_NOTE)} Only seasons and clubs are shown here.</p></div>`;
 }
 
 /** Wires the chart (metric switch, hover crosshair + tooltip) inside a rendered profile. */

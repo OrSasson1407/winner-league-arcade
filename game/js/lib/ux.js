@@ -68,6 +68,13 @@ export function crumbsFor(key, params = []) {
   if (key === "help") return [home, ["Help center", null]];
   if (key === "about") return [home, ["About", null]];
   if (key === "privacy") return [home, ["About", "#/about"], ["Privacy", null]];
+  if (key === "euroleague") {
+    const el = ["EuroLeague", "#/euroleague"];
+    if (!params[0]) return [home, ["EuroLeague", null]];
+    if (params[0] === "season") return [home, el, [params[1] || "Season", null]];
+    if (params[0] === "club") return [home, el, [teamName(params[1]), null]];
+    if (params[0] === "player") return [home, el, [playersById.get(params[1])?.name || "Player", null]];
+  }
   return null;
 }
 export function renderCrumbs(el, trail) {
