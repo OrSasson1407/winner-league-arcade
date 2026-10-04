@@ -2,7 +2,7 @@
 import { careerSummary, db, namedPlayers, seededRng, teamName } from "./data.js";
 import { bestSeason, playerCard } from "./components/playerCard.js";
 import { openProfile } from "./profile.js";
-import { autocomplete, countUp, esc, html, localDate, store } from "./ui.js";
+import { autocomplete, countUp, esc, fmt1, html, localDate, store } from "./ui.js";
 import { icon, logoSvg } from "./lib/icons.js";
 import { myName } from "./lib/me.js";
 import { totals } from "./lib/achievements.js";
@@ -106,13 +106,11 @@ export function renderHome(root, signal) {
         <button class="icon-btn" id="lb-next" aria-label="Next">${icon("arrowRight", { size: 15 })}</button>
       </div>
     </section>
-    <section class="hero">
+    <section class="bc-hero">
       <div>
-        <div class="hero-logo">${logoSvg(84)}</div>
-        <h1>Winner League <span>Arcade</span></h1>
-        <p class="hello">Welcome back, <b>${esc(myName("Guest"))}</b></p>
-        <p>${namedPlayers.length.toLocaleString()} players, ${db.teams.length} clubs and ${db.metadata.season_list.length} seasons of the Israeli Premier League,
-          straight from the official league records. Pick a game or look up any player.</p>
+        <p class="bc-kicker"><b>Winner League Arcade</b><span>${db.metadata.season_list.length} seasons · official league records</span></p>
+        <h1>${db.metadata.season_list.length} seasons. <br><em>Your</em> move.</h1>
+        <p class="bc-sub">Welcome back, <b>${esc(myName("Guest"))}</b>. ${namedPlayers.length.toLocaleString()} players and ${db.teams.length} clubs of the Israeli Premier League, every season since 2010-11. Pick a game or look up any player.</p>
         <div class="search guess-input">${icon("search", { size: 18, cls: "search-ic" })}<input id="search" class="input" placeholder="Search any player…" autocomplete="off" aria-label="Search players"></div>
         <div class="row hero-actions">
           ${last && GAMES[last] ? `<a class="btn jump" href="${GAMES[last].href}">${icon("play", { size: 14 })} Jump back into ${GAMES[last].title}</a>` : ""}
@@ -121,11 +119,16 @@ export function renderHome(root, signal) {
           ${new Date().getDate() <= 7 ? `<a class="btn jump" href="#/recap">${icon("calendar", { size: 14 })} Your monthly recap</a>` : ""}
         </div>
       </div>
-      <div class="potd">
-        <span class="potd-label">${icon("star", { size: 14 })} Player of the day</span>
-        ${playerCard(potdSeason, { size: "lg", classes: "flip-in" })}
-        <button class="btn" data-profile="${potd.player_id}">View career ${icon("arrowRight", { size: 14 })}</button>
-      </div>
+      ${(() => {
+        const st = potdSeason.stats || {};
+        return html`<button class="lower3" data-profile="${potd.player_id}" aria-label="Player of the day: ${esc(potd.name)}, rating ${potdSeason.rating_mock}. Open the career.">
+          <span class="l3-rt"><small>RATING</small><b>${potdSeason.rating_mock}</b></span>
+          <span class="l3-main"><span class="l3-kick">Player of the day</span><span class="l3-name">${esc(potd.name)}</span>
+            <span class="l3-meta">${esc(potdSeason.position || potd.primary_position || "")} · ${esc(teamName(potdSeason.team_id))} · ${potdSeason.season}</span>
+            <span class="l3-stats"><span><b>${fmt1(st.ppg)}</b><small>PPG</small></span><span><b>${fmt1(st.rpg)}</b><small>RPG</small></span><span><b>${fmt1(st.apg)}</b><small>APG</small></span><span><b>${st.games ?? "–"}</b><small>GAMES</small></span></span></span>
+          <span class="l3-go">View career ${icon("arrowRight", { size: 14 })}</span>
+        </button>`;
+      })()}
     </section>
     <section class="card fact-card" aria-label="Fact of the day">
       <span class="fact-ic">${icon("bulb", { size: 22 })}</span>
