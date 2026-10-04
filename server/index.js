@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { GAMES, createEngine } from "./duels.js";
 import { BOT_LEVELS, createBot } from "./bot.js";
-import { applyResult, findByCode, leaderboard, recordFor, recordMsg, setProfile } from "./records.js";
+import { addWeekly, applyResult, findByCode, leaderboard, recordFor, recordMsg, setProfile, weekId, weekOf } from "./records.js";
+import { MAX_MEMBERS, cleanLeagueId, createLeague, getLeague, joinLeague, leaveLeague, syncLeague } from "./leagues.js";
 import { CHAT, cleanCode, friendCode, matchRange } from "../game/js/shared/rating.js";
 import { cleanAv } from "../game/js/lib/avatarArt.js";
 
@@ -157,8 +158,13 @@ function createRoom(game, a, b, mode) {
   leaveLobby(a); leaveLobby(b);
   const room = {
     id: crypto.randomUUID(), game, mode, rated: mode === "ranked", players: [a, b], timers: new Set(), over: false, rematch: new Set(), seq: 0,
-    send(seat, msg) { send(this.players[seat], msg); },
-    broadcast(msg) { this.players.forEach((p) => send(p, msg)); },
+    spectators: new Set(), only: null,
+    send(seat, msg) {
+      if (this.only) { if (seat === 0) send(this.only, msg); return; } // re-sending the state to a new spectator
+      send(this.players[seat], msg);
+      if (seat === 0) this.spectators.forEach((s) => send(s, msg)); // spectators watch from the first player's side
+    },
+    broadcast(msg) { if (this.only) return send(this.only, msg); this.players.forEach((p) => send(p, msg)); this.spectators.forEach((s) => send(s, msg)); },
     timer(fn, ms) { const t = setTimeout(() => { this.timers.delete(t); if (!this.over) fn(); }, ms); this.timers.add(t); return t; },
     clearTimers() { this.timers.forEach(clearTimeout); this.timers.clear(); },
     names() { return this.players.map((p) => p.profile.name); },
@@ -178,6 +184,7 @@ function startMatch(room) {
   room.seq++;
   room.engine = createEngine(room.game, room, `${room.id}-${room.seq}`);
   room.players.forEach((p, seat) => send(p, matchMsg(room, seat)));
+  room.spectators.forEach((s) => send(s, matchMsg(room, 0, { spectator: true, watchers: room.spectators.size })));
   // a short countdown before the first round
   room.timer(() => room.engine.start(), 3500);
 }
@@ -192,14 +199,18 @@ function finishRoom(room, { winner, scores, reason, detail = null }) {
   if (room.rated && room.players.every((p) => p.rec)) {
     delta = applyResult(room.game, room.players.map((p) => p.rec), winner);
   }
+  const human = room.mode !== "bot" && room.players.every((p) => p.rec && !p.isBot);
+  if (human) addWeekly(room.players.map((p) => p.rec), winner);
   room.players.forEach((p, seat) => {
     send(p, {
       t: "end", game: room.game, seat, winner, scores, reason, detail, mode: room.mode, rated: room.rated,
       result: winner === null ? "draw" : winner === seat ? "win" : "lose",
       delta: delta[seat], elo: room.rated ? p.rec?.elo[room.game] : null, streak: room.rated ? p.rec?.streak : null,
     });
-    if (room.rated && p.rec) send(p, recordMsg(p.rec));
+    if (human && p.rec) send(p, recordMsg(p.rec));
   });
+  room.spectators.forEach((s) => send(s, { t: "end", game: room.game, seat: 0, spectator: true, winner, scores, reason, detail, mode: room.mode, rated: room.rated,
+    result: winner === null ? "draw" : winner === 0 ? "win" : "lose", delta: delta[0], elo: null, streak: null }));
   pushStats();
 }
 
@@ -211,6 +222,8 @@ function forfeit(room, loserSeat, reason) {
 function closeRoom(room, leaver) {
   room.clearTimers();
   rooms.delete(room.id);
+  room.spectators.forEach((s) => { s.watching = null; send(s, { t: "spectate:end" }); });
+  room.spectators.clear();
   room.players.forEach((p) => {
     if (p.room === room) p.room = null;
     if (p.isBot) p.stop();
@@ -220,6 +233,13 @@ function closeRoom(room, leaver) {
 }
 
 function seatOf(c) { return c.room ? c.room.players.indexOf(c) : -1; }
+function unwatch(c) {
+  const room = c.watching;
+  if (!room) return;
+  room.spectators.delete(c);
+  c.watching = null;
+  room.players.forEach((p) => send(p, { t: "watchers", n: room.spectators.size }));
+}
 
 // ---------------------------------------------------------------- messages
 function onMessage(c, m) {
@@ -238,7 +258,7 @@ function onMessage(c, m) {
     case "leaders": return send(c, leaderboard(GAMES.includes(m.game) ? m.game : "all", c.sid));
     case "queue": {
       if (!GAMES.includes(m.game) || c.room) return;
-      leaveLobby(c);
+      leaveLobby(c); unwatch(c);
       queues.get(m.game).push({ c, at: Date.now() });
       send(c, { t: "queued", game: m.game });
       matchQueue(m.game);
@@ -317,11 +337,60 @@ function onMessage(c, m) {
       if (room.rematch.size === 2) { room.players.reverse(); return startMatch(room); } // swap seats
       return send(room.players[1 - seatOf(c)], { t: "opp:rematch" });
     }
-    case "react": { // quick emoji reactions between opponents
+    case "react": { // quick reactions between opponents: broadcast-style stickers (and the older emoji)
       const room = c.room;
-      const EMOJI = ["👏", "🔥", "😅", "😮", "💪", "🏀"];
-      if (room && EMOJI.includes(m.e)) send(room.players[1 - seatOf(c)], { t: "react", e: m.e });
+      const OK = ["andone", "swish", "defense", "buzzer", "onfire", "airball", "timeout", "gg", "👏", "🔥", "😅", "😮", "💪", "🏀"];
+      const now = Date.now();
+      if (!room || !OK.includes(m.e) || now - (c.lastReact || 0) < 700) return;
+      c.lastReact = now;
+      send(room.players[1 - seatOf(c)], { t: "react", e: m.e });
+      room.spectators.forEach((s) => send(s, { t: "react", e: m.e, from: seatOf(c) === 0 ? "me" : "opp" }));
       return;
+    }
+    case "spectate": { // watch a friend's match live (seat 0's view, no input)
+      const target = onlineByCode(cleanCode(m.code));
+      const room = target?.room;
+      if (c.room) return;
+      if (!room || room.over) return send(c, { t: "error", code: "no-match", msg: "That player isn't in a match right now." });
+      if (room.spectators.size >= 20) return send(c, { t: "error", code: "full", msg: "This match already has the most spectators allowed." });
+      leaveLobby(c);
+      unwatch(c);
+      c.watching = room;
+      room.spectators.add(c);
+      send(c, matchMsg(room, 0, { spectator: true, watchers: room.spectators.size }));
+      room.only = c; try { room.engine.resync(0); } finally { room.only = null; }
+      room.players.forEach((p) => send(p, { t: "watchers", n: room.spectators.size }));
+      return;
+    }
+    case "unspectate": return unwatch(c);
+    case "league:create": {
+      if (!c.rec) return;
+      const L = createLeague(m.name, friendCode(c.sid));
+      return send(c, { t: "league", league: L, created: true });
+    }
+    case "league:join": {
+      if (!c.rec) return;
+      const L = joinLeague(m.id, friendCode(c.sid));
+      return send(c, L.error ? { t: "error", code: "league", msg: L.error } : { t: "league", league: L, joined: true });
+    }
+    case "league:leave": leaveLeague(m.id, friendCode(c.sid)); return send(c, { t: "league:left", id: cleanLeagueId(m.id) });
+    case "league:sync": { // the browser's copies of its leagues (rebuilds them after a server restart)
+      if (!Array.isArray(m.leagues)) return;
+      for (const copy of m.leagues.slice(0, 10)) { const L = syncLeague(copy, friendCode(c.sid)); if (L) send(c, { t: "league", league: L }); }
+      return;
+    }
+    case "league:table": {
+      const L = getLeague(m.id);
+      if (!L) return send(c, { t: "error", code: "league", msg: "That league isn't on the server right now. Open the league from a member's device to restore it." });
+      const rows = L.members.map((code) => {
+        const on = onlineByCode(code);
+        const r = on?.rec || findByCode(code);
+        const p = on?.profile || r?.profile;
+        const wk = weekOf(r);
+        return { code, known: !!p, name: p?.name || `Player ${code}`, icon: p?.icon, color: p?.color, frame: p?.frame, level: p?.level, style: p?.style, av: p?.av,
+          online: !!on, playing: !!(on?.room && !on.room.over), me: code === friendCode(c.sid), pts: wk.pts, w: wk.w, d: wk.d, l: wk.l, g: wk.g };
+      }).sort((a, b) => b.pts - a.pts || b.w - a.w || a.g - b.g || a.name.localeCompare(b.name));
+      return send(c, { t: "league:table", league: L, week: weekId(), rows, max: MAX_MEMBERS });
     }
     case "chat": { // preset lines only, sent by index
       const room = c.room;
@@ -368,6 +437,7 @@ wss.on("connection", (ws, req) => {
     if (c.ws !== ws) return; // replaced by a newer connection
     c.ws = null;
     leaveLobby(c);
+    unwatch(c);
     pushStats();
     const room = c.room;
     if (room) room.send(1 - seatOf(c), { t: "opp:away", ms: RECONNECT_GRACE });

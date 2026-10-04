@@ -18,6 +18,8 @@ import { maybeEvent, resolveEvent } from "../mycareer/events.js";
 import { badgeMedals, bracket, contractHtml, gauge, radar, scheduleGrid, standings } from "../mycareer/visuals.js";
 import { clubThemeVars } from "../lib/clubTheme.js";
 import { MOCK_NOTE, elLoaded, loadEuroleague } from "../euroleague.js";
+import { drawCareerCard } from "../mycareer/shareCard.js";
+import { shareOrDownload } from "../games/draft_card.js";
 import { bindMomentum, momentumHtml, watchGame } from "../mycareer/live.js";
 import { careerIntro, clearFlashes, newsFlash } from "../mycareer/flash.js";
 import { reducedMotion } from "../lib/settings.js";
@@ -75,6 +77,19 @@ export async function renderMyCareer(root, signal) {
     const [c1, c2] = clubColors(team);
     root.style.setProperty("--club", c1); root.style.setProperty("--club2", c2);
   }
+  // "Share career card": a broadcast-style image of the player (any tab that shows the button)
+  root.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-share-card]");
+    if (!b || !C) return;
+    b.disabled = true;
+    try {
+      const team = C.cur?.team || C.club || C.academy?.club;
+      const canvas = await drawCareerCard(C, playerAvatarSvg(av(), clubColors(team)[0]), { overall: E.bestOverall(C), hofScore: E.hallOfFameScore(C), hofLine: E.HOF_LINE });
+      const how = await shareOrDownload(canvas, `my-career-${C.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`, `${C.name} · My Career`);
+      toast(how === "shared" ? "Shared!" : "Career card saved as an image");
+    } catch { toast("Couldn't make the image. Try again."); }
+    b.disabled = false;
+  }, { signal });
   // switching theme or contrast in Settings re-computes the club colours for it
   document.addEventListener("settings-changed", () => clubTheme(), { signal });
   let meterBase = null; // gauges show the change since before the last game
@@ -652,7 +667,7 @@ export async function renderMyCareer(root, signal) {
     const recs = [["pts", "Points", t.pts], ["reb", "Rebounds", t.reb], ["ast", "Assists", t.ast], ["stl", "Steals", t.stl], ["blk", "Blocks", t.blk], ["gp", "Games", t.gp]];
     const bestSeason = pro.filter((h) => h.league !== "el").reduce((b, h) => (!b || h.avg.ppg > b.avg.ppg ? h : b), null);
     return html`<div class="mc-grid">
-      <div class="card pad" style="min-width:0"><h2>${icon("clock")} Career</h2>
+      <div class="card pad" style="min-width:0"><div class="row"><h2 style="margin:0">${icon("clock")} Career</h2><span class="spacer"></span><button class="btn" data-share-card>${icon("camera", { size: 15 })} Share career card</button></div>
         ${pro.length ? `<div class="grid-wrap"><table class="stat-table"><thead><tr><th>Season</th><th>Team</th><th>Age</th><th>Role</th><th>GP</th><th>PPG</th><th>RPG</th><th>APG</th><th>VAL</th><th>OVR</th><th>Europe</th></tr></thead>
           <tbody>${pro.map((h) => `<tr><td>${h.season}${h.simulated ? "*" : ""}</td><td>${esc(teamName(h.team))}${h.loan ? " (loan)" : ""}</td><td>${h.age}</td><td>${roleName(h.role)}</td><td>${h.avg.gp}</td><td>${h.avg.ppg}</td><td>${h.avg.rpg}</td><td>${h.avg.apg}</td><td>${h.avg.val}</td><td><b>${h.overall}</b></td><td>${h.league === "el" ? `<span class="pill eu-pill">EuroLeague club</span>` : h.euro ? (h.euro.champion ? "🏆 Champion" : h.euro.f4 ? "Final Four" : `#${h.euro.rank}`) : "–"}</td></tr>`).join("")}</tbody></table></div>
           <p class="muted" style="font-size:12px">* simulated season (after ${E.LAST_REAL}, rosters based on ${E.LAST_REAL}).</p>` : `<p class="muted">No pro seasons yet.</p>`}

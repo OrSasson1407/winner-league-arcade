@@ -28,7 +28,26 @@ let dirty = false;
 
 export function blankRecord(sid) {
   const per = (v) => Object.fromEntries(RATED_GAMES.map((g) => [g, v]));
-  return { v: 1, sid, elo: per(START_ELO), peak: per(START_ELO), w: per(0), l: per(0), d: per(0), streak: 0, best: 0, n: 0, ts: 0, profile: null };
+  return { v: 1, sid, elo: per(START_ELO), peak: per(START_ELO), w: per(0), l: per(0), d: per(0), streak: 0, best: 0, n: 0, ts: 0, wk: blankWeek(), profile: null };
+}
+/** ISO week id ("2026-W40"): leagues count this week's results. */
+export function weekId(d = new Date()) {
+  const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y = t.getUTCFullYear();
+  const wk = Math.ceil(((t - Date.UTC(y, 0, 1)) / 86400000 + 1) / 7);
+  return `${y}-W${String(wk).padStart(2, "0")}`;
+}
+const blankWeek = () => ({ id: weekId(), pts: 0, w: 0, d: 0, l: 0, g: 0 });
+/** Records made before a game existed get its defaults (tokens and the saved file keep old shapes). */
+function normalize(rec) {
+  for (const [k, v] of [["elo", START_ELO], ["peak", START_ELO], ["w", 0], ["l", 0], ["d", 0]]) {
+    rec[k] = { ...rec[k] };
+    for (const g of RATED_GAMES) if (typeof rec[k][g] !== "number") rec[k][g] = v;
+  }
+  if (!rec.wk || rec.wk.id !== weekId()) rec.wk = blankWeek();
+  return rec;
 }
 
 export function tokenOf(rec) {
@@ -55,8 +74,22 @@ export function recordFor(sid, token) {
   const fromToken = token ? readToken(token, sid) : null;
   if (fromToken && (!rec || fromToken.n > rec.n)) { rec = { ...blankRecord(sid), ...fromToken, profile: rec?.profile ?? null }; records.set(sid, rec); dirty = true; }
   if (!rec) { rec = blankRecord(sid); records.set(sid, rec); }
-  return rec;
+  return normalize(rec);
 }
+/** A finished match against a person (ranked or friendly) counts for this week's league table: win 3, draw 1. */
+export function addWeekly(recs, winner) {
+  recs.forEach((r, seat) => {
+    normalize(r);
+    r.wk.g++;
+    if (winner === null) { r.wk.d++; r.wk.pts += 1; }
+    else if (winner === seat) { r.wk.w++; r.wk.pts += 3; }
+    else r.wk.l++;
+    r.ts = Date.now();
+  });
+  dirty = true;
+}
+/** This week's numbers for a record (zeros once a new week starts). */
+export const weekOf = (rec) => (rec?.wk?.id === weekId() ? rec.wk : blankWeek());
 
 export function setProfile(rec, profile) {
   rec.profile = { ...profile, code: friendCode(rec.sid) };
@@ -114,7 +147,7 @@ export function findByCode(code) {
 // ---------------------------------------------------------------- persistence (best effort)
 try {
   const saved = JSON.parse(fs.readFileSync(FILE, "utf8"));
-  for (const r of saved) if (r?.sid) records.set(r.sid, { ...blankRecord(r.sid), ...r });
+  for (const r of saved) if (r?.sid) records.set(r.sid, normalize({ ...blankRecord(r.sid), ...r }));
 } catch {}
 export function saveRecords() {
   if (!dirty) return;

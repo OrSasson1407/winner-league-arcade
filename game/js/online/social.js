@@ -9,8 +9,8 @@ import { cleanCode } from "../shared/rating.js";
 import { connect, onNet, send } from "./net.js";
 import { buzz } from "./feel.js";
 
-export const GAME_NAMES = { hl: "Higher or Lower", guess: "Guess the Player", career: "Career Path", draft: "All-Time Draft" };
-export const GAME_ICONS = { hl: "chart", guess: "search", career: "arrowRight", draft: "trophy" };
+export const GAME_NAMES = { hl: "Higher or Lower", guess: "Guess the Player", career: "Career Path", draft: "All-Time Draft", conn: "Connections", grid: "The Grid" };
+export const GAME_ICONS = { hl: "chart", guess: "search", career: "arrowRight", draft: "trophy", conn: "link", grid: "games" };
 
 // ---------------------------------------------------------------- friends
 export const getFriends = () => store.get("online:friends", []);

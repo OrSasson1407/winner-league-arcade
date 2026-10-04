@@ -328,3 +328,48 @@ h2 { font-weight: 800; }
 .el-card .pc-top { align-items: center; }
 .el-card .pc-stats small { letter-spacing: .06em; }
 a.pc-cell { text-decoration: none; color: inherit; }
+
+/* =====================================================================
+   Online: stickers, spectating, leagues, Connections and Grid duels
+   ===================================================================== */
+.react-bar { gap: 6px; }
+.sticker-btn { border: 0; cursor: pointer; padding: 6px 12px 6px 10px; font: 800 13px var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: #fff; background: var(--brand-navy-2);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%); transition: transform var(--t-fast) var(--ease), background var(--t-med) var(--ease); }
+.sticker-btn:hover { background: var(--brand-red); }
+.sticker-btn:active { transform: scale(.94); }
+.sticker-btn:focus-visible { outline: 3px solid var(--brand-gold); outline-offset: 2px; }
+.st-andone, .st-onfire, .st-buzzer { --st: var(--brand-red); }
+.st-swish, .st-gg { --st: var(--brand-gold); --st-ink: var(--brand-navy); }
+.st-defense, .st-timeout { --st: #1d4ed8; }
+.st-airball { --st: #475569; }
+.react-pop.sticker { font: 800 clamp(26px, 5vw, 44px) var(--f-display); letter-spacing: .06em; padding: 8px 22px 8px 18px; color: var(--st-ink, #fff); background: var(--st, var(--brand-red));
+  clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); white-space: nowrap; }
+.og-watch { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; border-left: 4px solid var(--brand-red); }
+.duel-arena.spectating button, .duel-arena.spectating input, .duel-arena.spectating .cn-tile, .duel-arena.spectating .gr-cell { pointer-events: none; }
+.duel-arena.spectating input { display: none; }
+/* leagues */
+.lg-card h2 { text-transform: uppercase; }
+.lg-table td:nth-child(2), .lg-table th:nth-child(2) { text-align: left; }
+.lg-who { display: inline-flex; gap: 10px; align-items: center; }
+.lg-who > span:last-child { display: grid; text-align: left; }
+.lg-who small { font-size: 11.5px; }
+.lg-table .btn.sm { padding: 4px 10px; font-size: 12px; }
+.lg-list { display: grid; gap: 6px; }
+.lg-pick { display: grid; text-align: left; gap: 2px; padding: 10px 12px; border-radius: 4px; border: 1px solid var(--line); background: var(--bg2); color: var(--text); cursor: pointer; }
+.lg-pick.on { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--brand-red); }
+/* Connections duel */
+.og-conn .cn-board { margin-top: 10px; }
+.og-conn-end { width: 100%; max-width: 640px; }
+/* Grid duel */
+.og-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr); gap: 16px; align-items: start; margin-top: 10px; }
+.og-grid .gr-cell.done b { font-size: 13px; line-height: 1.15; }
+.og-grid-side { display: grid; gap: 10px; align-content: start; }
+.og-mini { display: grid; gap: 6px; margin-top: 4px; }
+.og-mini-grid { display: grid; grid-template-columns: repeat(3, 26px); gap: 4px; }
+.og-mini-grid i { height: 26px; border-radius: 3px; background: var(--bg2); border: 1px solid var(--line); }
+.og-mini-grid i.on { background: color-mix(in srgb, var(--accent) 55%, var(--card2)); border-color: var(--accent); }
+.og-mini-grid.big { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.og-mini-grid.big i { height: auto; min-height: 54px; display: grid; place-content: center; text-align: center; padding: 4px; font-style: normal; }
+.og-mini-grid.big i small { font-size: 11px; line-height: 1.15; }
+.og-mini-grid.big i b { font: 800 16px var(--f-display); }
+@media (max-width: 760px) { .og-grid { grid-template-columns: 1fr; } }

@@ -8,8 +8,9 @@ import { SIXTH, SLOT_WEIGHT, slotValue, teamSummary } from "../game/js/shared/dr
 import { decoys, eligible } from "../game/js/shared/careerLogic.js";
 import { COLS, attrs, compare, pool as guessPool } from "../game/js/shared/guessLogic.js";
 import { playGame } from "../game/js/games/draft_sim.js";
+import { answersFor, criterionById, facts, makeConnections, makeGrid, rarity } from "../game/js/shared/leagueFacts.js";
 
-export const GAMES = ["hl", "guess", "career", "draft"];
+export const GAMES = ["hl", "guess", "career", "draft", "conn", "grid"];
 
 // pools are computed once, on first use
 let _hlPool, _careerPool, _guessTargets;
@@ -300,9 +301,127 @@ class DraftDuel {
   resync(seat) { if (!this.over && this.spin) this.room.send(seat, this.stateMsg()); }
 }
 
+
+// ---------------------------------------------------------------- Connections race
+// Same 16 players for both. Find the four groups; four mistakes and you're out. 4 minutes.
+// More groups wins; then fewer mistakes; then whoever finished first.
+const CONN_MS = 240000, CONN_MISTAKES = 4;
+
+class ConnDuel {
+  constructor(room, rnd) {
+    this.room = room; this.rnd = rnd;
+    this.groups = makeConnections(rnd);
+    this.order = shuffle(this.groups.flatMap((g) => g.players), rnd);
+    this.p = [0, 1].map(() => ({ solved: [], mistakes: 0, tried: new Set(), doneMs: null }));
+    this.over = false;
+  }
+  start() {
+    this.at = Date.now();
+    this.room.broadcast({ t: "conn:start" });
+    [0, 1].forEach((seat) => this.room.send(seat, this.stateMsg(seat)));
+    this.room.timer(() => this.end("time"), CONN_MS + 500);
+  }
+  groupInfo(level) { const g = this.groups[level]; return { level, label: g.label, players: g.players }; }
+  stateMsg(seat) {
+    const me = this.p[seat], them = this.p[1 - seat];
+    return { t: "conn:state", order: this.order, solved: me.solved.map((l) => this.groupInfo(l)), mistakes: me.mistakes, max: CONN_MISTAKES,
+      opp: { solved: them.solved.length, mistakes: them.mistakes, done: them.doneMs !== null }, ms: Math.max(0, CONN_MS - (Date.now() - this.at)) };
+  }
+  onMessage(seat, m) {
+    if (m.t !== "conn:guess" || this.over || !Array.isArray(m.pids) || m.pids.length !== 4) return;
+    const me = this.p[seat];
+    if (me.doneMs !== null) return;
+    const pids = [...new Set(m.pids.map(String))];
+    if (pids.length !== 4 || !pids.every((p) => this.order.includes(p))) return;
+    const solvedPids = new Set(me.solved.flatMap((l) => this.groups[l].players));
+    if (pids.some((p) => solvedPids.has(p))) return;
+    const key = pids.slice().sort().join(",");
+    if (me.tried.has(key)) return;
+    me.tried.add(key);
+    const g = this.groups.find((x) => pids.every((p) => x.players.includes(p)));
+    if (g) {
+      me.solved.push(g.level);
+      this.room.send(seat, { t: "conn:right", group: this.groupInfo(g.level) });
+    } else {
+      me.mistakes++;
+      const best = Math.max(...this.groups.map((x) => pids.filter((p) => x.players.includes(p)).length));
+      this.room.send(seat, { t: "conn:wrong", oneAway: best === 3, mistakes: me.mistakes });
+    }
+    if (me.solved.length === 4 || me.mistakes >= CONN_MISTAKES) me.doneMs = Date.now() - this.at;
+    this.room.send(1 - seat, { t: "conn:opp", solved: me.solved.length, mistakes: me.mistakes, done: me.doneMs !== null });
+    if (this.p.every((x) => x.doneMs !== null)) this.end("done");
+    // the result can't change any more: one finished all four groups, the other is out
+    else if (this.p.some((x) => x.solved.length === 4) && this.p.some((x) => x.doneMs !== null && x.solved.length < 4)) this.end("done");
+  }
+  end(reason) {
+    if (this.over) return;
+    this.over = true;
+    const [a, b] = this.p;
+    let winner = null;
+    if (a.solved.length !== b.solved.length) winner = a.solved.length > b.solved.length ? 0 : 1;
+    else if (a.mistakes !== b.mistakes) winner = a.mistakes < b.mistakes ? 0 : 1;
+    else if (a.solved.length && a.doneMs !== null && b.doneMs !== null && a.doneMs !== b.doneMs) winner = a.doneMs < b.doneMs ? 0 : 1;
+    this.room.finish({ winner, scores: [a.solved.length, b.solved.length], reason: "done",
+      detail: { groups: this.groups.map((g) => ({ level: g.level, label: g.label, players: g.players })), solved: [a.solved, b.solved], mistakes: [a.mistakes, b.mistakes], ms: [a.doneMs, b.doneMs], timeUp: reason === "time" } });
+  }
+  resync(seat) { if (!this.over && this.at) this.room.send(seat, this.stateMsg(seat)); }
+}
+
+// ---------------------------------------------------------------- The Grid duel
+// Same board for both. 9 guesses and 3 minutes each; every right answer scores its rarity (0-100).
+const GRID_MS = 180000, GRID_GUESSES = 9;
+
+class GridDuel {
+  constructor(room, rnd) {
+    this.room = room; this.rnd = rnd;
+    this.board = makeGrid(rnd);
+    this.p = [0, 1].map(() => ({ cells: Array(9).fill(null), left: GRID_GUESSES, wrong: 0, doneMs: null }));
+    this.over = false;
+  }
+  start() {
+    this.at = Date.now();
+    [0, 1].forEach((seat) => this.room.send(seat, this.stateMsg(seat)));
+    this.room.timer(() => this.end("time"), GRID_MS + 500);
+  }
+  score(x) { return x.cells.reduce((s, c) => s + (c ? c.rarity : 0), 0); }
+  stateMsg(seat) {
+    const me = this.p[seat], them = this.p[1 - seat];
+    return { t: "grid:state", rows: this.board.rows, cols: this.board.cols, cells: me.cells, left: me.left, score: this.score(me),
+      opp: { filled: them.cells.map(Boolean), left: them.left, score: this.score(them) }, scores: this.p.map((x) => this.score(x)), ms: Math.max(0, GRID_MS - (Date.now() - this.at)) };
+  }
+  onMessage(seat, m) {
+    if (m.t !== "grid:guess" || this.over) return;
+    const me = this.p[seat];
+    const cell = Number(m.cell), pid = String(m.pid || "");
+    if (me.doneMs !== null || !(cell >= 0 && cell < 9) || me.cells[cell] || me.left <= 0 || !playersById.has(pid)) return;
+    if (me.cells.some((c) => c?.pid === pid)) return;
+    me.left--;
+    const r = criterionById(this.board.rows[Math.floor(cell / 3)]), c = criterionById(this.board.cols[cell % 3]);
+    const f = facts().get(pid);
+    const right = !!(f && r.test(f) && c.test(f));
+    if (right) me.cells[cell] = { pid, rarity: rarity(pid, answersFor(r, c)) };
+    else me.wrong++;
+    this.room.send(seat, { t: "grid:result", cell, pid, right, rarity: right ? me.cells[cell].rarity : 0, left: me.left, score: this.score(me) });
+    if (me.left <= 0 || me.cells.every(Boolean)) me.doneMs = Date.now() - this.at;
+    this.room.send(1 - seat, { t: "grid:opp", filled: me.cells.map(Boolean), left: me.left, score: this.score(me), done: me.doneMs !== null });
+    this.room.broadcast({ t: "grid:scores", scores: this.p.map((x) => this.score(x)) });
+    if (this.p.every((x) => x.doneMs !== null)) this.end("done");
+  }
+  end(reason) {
+    if (this.over) return;
+    this.over = true;
+    const [a, b] = this.p.map((x) => this.score(x));
+    const fa = this.p[0].cells.filter(Boolean).length, fb = this.p[1].cells.filter(Boolean).length;
+    const winner = a !== b ? (a > b ? 0 : 1) : fa !== fb ? (fa > fb ? 0 : 1) : null;
+    this.room.finish({ winner, scores: [a, b], reason: "done",
+      detail: { rows: this.board.rows, cols: this.board.cols, cells: this.p.map((x) => x.cells), filled: [fa, fb], timeUp: reason === "time" } });
+  }
+  resync(seat) { if (!this.over && this.at) this.room.send(seat, this.stateMsg(seat)); }
+}
+
 function winnerOf([a, b]) { return a === b ? null : a > b ? 0 : 1; }
 
-const ENGINES = { hl: HLDuel, career: CareerDuel, guess: GuessDuel, draft: DraftDuel };
+const ENGINES = { hl: HLDuel, career: CareerDuel, guess: GuessDuel, draft: DraftDuel, conn: ConnDuel, grid: GridDuel };
 export function createEngine(game, room, seed) {
   return new ENGINES[game](room, seededRng("online-" + seed));
 }

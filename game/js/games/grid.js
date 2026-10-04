@@ -9,18 +9,12 @@ import { emit } from "../lib/achievements.js";
 import { markDaily } from "../lib/daily.js";
 import { announce } from "../lib/a11y.js";
 import { shot } from "../lib/shot.js";
-import { answersFor, criterionById, facts, makeGrid } from "../shared/leagueFacts.js";
+import { answersFor, criterionById, facts, makeGrid, rarity } from "../shared/leagueFacts.js";
 
 const GUESSES = 9;
 const STATS_KEY = "grid:stats";
 const ATTR_ICON = { il: "flag", us: "flag", pg: "jersey", c: "jersey", ppg15: "ball", rpg8: "hoop", apg5: "users", s8: "calendar", cl4: "shield", h205: "arrowRight", h188: "arrowLeft", gp200: "clock" };
 
-/** Rarity 0–100 of a right answer: how little-known the player is among all right answers (by games played). */
-function rarity(pid, list) {
-  if (list.length <= 1) return 100;
-  const sorted = list.slice().sort((a, b) => b.games - a.games);
-  return Math.round((100 * sorted.findIndex((f) => f.pid === pid)) / (sorted.length - 1));
-}
 
 export function renderGrid(root, signal, params, query = {}) {
   let mode = ["daily", "free"].includes(query.mode) ? query.mode : store.get("grid:mode", "daily");

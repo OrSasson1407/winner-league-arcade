@@ -54,6 +54,12 @@ export function criterionById(id) {
   return ATTRS.find((a) => a.id === id) || null;
 }
 export const answersFor = (a, b) => [...facts().values()].filter((f) => a.test(f) && b.test(f));
+/** Rarity 0–100 of a right Grid answer: how little-known the player is among all right answers (by games played). */
+export function rarity(pid, list) {
+  if (list.length <= 1) return 100;
+  const sorted = list.slice().sort((a, b) => b.games - a.games);
+  return Math.round((100 * sorted.findIndex((f) => f.pid === pid)) / (sorted.length - 1));
+}
 
 /** A 3×3 grid: columns are clubs, rows mix clubs and attributes; every cell has 3+ right answers. */
 export function makeGrid(rnd) {

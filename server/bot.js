@@ -2,14 +2,18 @@
 // through the same engine calls, with human-like delays and mistakes per difficulty.
 import { namedPlayers, psKey } from "../game/js/data.js";
 import { SLOT_WEIGHT, slotValue } from "../game/js/shared/draftLogic.js";
+import { answersFor, criterionById } from "../game/js/shared/leagueFacts.js";
 
 export const BOT_LEVELS = {
   easy: { name: "Rookie Bot", icon: "whistle", color: "#199e70", level: 3, frame: "none",
-    hl: [0.58, 3500, 7500], career: [0.5, 8000, 15000], guess: { solve: 0.45, at: [6, 8], every: [15000, 22000] }, draft: "easy" },
+    hl: [0.58, 3500, 7500], career: [0.5, 8000, 15000], guess: { solve: 0.45, at: [6, 8], every: [15000, 22000] }, draft: "easy",
+    conn: [0.45, [22000, 34000]], grid: [0.6, [16000, 24000], 0] },
   normal: { name: "Veteran Bot", icon: "rocket", color: "#3987e5", level: 15, frame: "silver",
-    hl: [0.72, 2200, 6000], career: [0.7, 5000, 12000], guess: { solve: 0.8, at: [5, 7], every: [11000, 17000] }, draft: "normal" },
+    hl: [0.72, 2200, 6000], career: [0.7, 5000, 12000], guess: { solve: 0.8, at: [5, 7], every: [11000, 17000] }, draft: "normal",
+    conn: [0.62, [16000, 26000]], grid: [0.78, [12000, 19000], 0.4] },
   hard: { name: "Legend Bot", icon: "crown", color: "#d55181", level: 40, frame: "gold",
-    hl: [0.88, 1100, 3500], career: [0.88, 2500, 7000], guess: { solve: 1, at: [3, 5], every: [8000, 12000] }, draft: "hard" },
+    hl: [0.88, 1100, 3500], career: [0.88, 2500, 7000], guess: { solve: 1, at: [3, 5], every: [8000, 12000] }, draft: "hard",
+    conn: [0.8, [11000, 19000]], grid: [0.92, [8000, 14000], 0.8] },
 };
 const between = (a, b) => a + Math.random() * (b - a);
 const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -80,9 +84,54 @@ export function createBot(levelKey) {
           if (choice) act({ t: "draft:pick", key: psKey(choice.ps), slot: choice.slot });
         }, between(1800, 4500));
       }
-      if (m.t === "end") { bot.guessing = false; later(() => room.chatFrom?.(bot, m.result === "win" ? 6 : 1), 1200); }
+      if (m.t === "conn:state" && !bot.connecting) { // Connections: groups in order of difficulty, with some wrong tries
+        bot.connecting = true;
+        const [p, every] = L.conn;
+        const step = () => {
+          const e = eng();
+          if (bot.room !== room || room.over || e.over) return;
+          const me = e.p[seat];
+          if (me.doneMs !== null) return;
+          const open = e.groups.filter((g) => !me.solved.includes(g.level));
+          if (!open.length) return;
+          let pids;
+          if (Math.random() < p) pids = open[0].players;
+          else { // a near miss: three from one group and one from another
+            const a = open[0], b = open[1] || open[0];
+            pids = [...a.players.slice(0, 3), b.players.find((x) => !a.players.includes(x)) || a.players[3]];
+            if (me.tried.has(pids.slice().sort().join(","))) pids = open[0].players;
+          }
+          act({ t: "conn:guess", pids });
+          later(step, between(...every));
+        };
+        later(step, between(...every));
+      }
+      if (m.t === "grid:state" && !bot.gridding) { // The Grid: fill a cell, sometimes with a rare answer, sometimes wrong
+        bot.gridding = true;
+        const [p, every, rare] = L.grid;
+        const step = () => {
+          const e = eng();
+          if (bot.room !== room || room.over || e.over) return;
+          const me = e.p[seat];
+          if (me.doneMs !== null || me.left <= 0) return;
+          const empty = me.cells.map((c, i) => (c ? null : i)).filter((i) => i !== null);
+          const cell = pickOne(empty);
+          const r = criterionById(e.board.rows[Math.floor(cell / 3)]), c = criterionById(e.board.cols[cell % 3]);
+          const used = new Set(me.cells.filter(Boolean).map((x) => x.pid));
+          const answers = answersFor(r, c).filter((f) => !used.has(f.pid)).sort((a, b) => b.games - a.games);
+          let pid;
+          if (Math.random() < p && answers.length) {
+            const pool = Math.random() < rare ? answers.slice(Math.floor(answers.length / 2)) : answers.slice(0, Math.max(1, Math.ceil(answers.length / 3)));
+            pid = pickOne(pool).pid;
+          } else pid = pickOne(namedPlayers).player_id;
+          act({ t: "grid:guess", cell, pid });
+          later(step, between(...every));
+        };
+        later(step, between(...every));
+      }
+      if (m.t === "end") { bot.guessing = false; bot.connecting = false; bot.gridding = false; later(() => room.chatFrom?.(bot, m.result === "win" ? 6 : 1), 1200); }
       if (m.t === "opp:rematch") later(() => room.rematchFrom?.(bot), 1500);
-      if (m.t === "match") bot.guessing = false;
+      if (m.t === "match") { bot.guessing = false; bot.connecting = false; bot.gridding = false; }
     },
   };
   return bot;

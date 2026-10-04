@@ -24,6 +24,8 @@ import { clueSpeech } from "../shared/guessLogic.js";
 import { drawResultCard } from "../online/card.js";
 import { shareOrDownload } from "../games/draft_card.js";
 import { CHAT, RANKS, cleanCode, rankOf } from "../shared/rating.js";
+import { criterionById, facts } from "../shared/leagueFacts.js";
+import { crestSvg } from "../lib/icons.js";
 
 export const ONLINE_GAMES = {
   hl: { name: "Higher or Lower", ic: "chart", short: "Speed duel",
@@ -34,6 +36,10 @@ export const ONLINE_GAMES = {
     rules: "10 careers, 20 seconds each. The first correct answer takes 3 points. A wrong answer locks you out of that round." },
   draft: { name: "All-Time Draft", ic: "trophy", short: "Head-to-head draft",
     rules: "Snake draft from shared spins: 6 picks each (PG to C plus a sixth man), 30 seconds per pick. Then your two teams play a simulated game." },
+  conn: { name: "Connections", ic: "link", short: "Group race",
+    rules: "The same 16 players for both of you. Find the four groups; four mistakes and you're out. 4 minutes. More groups wins, then fewer mistakes, then the faster finish." },
+  grid: { name: "The Grid", ic: "games", short: "Rarity duel",
+    rules: "The same 3×3 board for both. 9 guesses and 3 minutes each; every right answer scores its rarity (0–100). Highest total wins." },
 };
 const HL_CATS = {
   ppg: { label: "Points per game", get: (ps) => ps.stats.ppg, dec: 1 },
@@ -42,7 +48,11 @@ const HL_CATS = {
   rating: { label: "Game rating", get: (ps) => ps.rating_mock, dec: 0 },
   val: { label: "Efficiency (VAL) per game", get: (ps) => ps.stats.valuation_per_game, dec: 1 },
 };
-const REACTIONS = ["👏", "🔥", "😅", "😮", "💪", "🏀"];
+// broadcast-style stickers (sent by id, so nothing free-form goes between players)
+const STICKERS = [["andone", "AND ONE!"], ["swish", "SWISH"], ["defense", "DEFENSE!"], ["buzzer", "BUZZER BEATER"], ["onfire", "ON FIRE"], ["airball", "AIRBALL"], ["timeout", "TIMEOUT"], ["gg", "GG"]];
+const STICKER_TEXT = Object.fromEntries(STICKERS);
+const getLeagues = () => store.get("online:leagues", []);
+const saveLeague = (L) => { const list = getLeagues().filter((x) => x.id !== L.id); list.unshift(L); store.set("online:leagues", list.slice(0, 10)); };
 const REASONS = { forfeit: "Your opponent left the match.", disconnect: "Your opponent lost their connection." };
 const BOTS = { easy: { name: "Rookie", ic: "whistle" }, normal: { name: "Veteran", ic: "rocket" }, hard: { name: "Legend", ic: "crown" } };
 const slotLabel = (s) => (s === SIXTH ? "6th" : s);
@@ -64,20 +74,29 @@ export function renderOnline(root, signal, params = []) {
   let M = null; // the current match
   let G = null; // the current game's state
   let tick = null;
-  let tab = ["play", "friends", "leaders", "history"].includes(store.get("online:tab")) ? store.get("online:tab") : "play";
+  let tab = ["play", "friends", "leagues", "leaders", "history"].includes(store.get("online:tab")) ? store.get("online:tab") : "play";
+  let league = null, leagueTables = {}, gridItems = null;
   let friendsInfo = null, leaders = null, leadersGame = "all", stopCount = null;
   const joinCode = params[0] === "join" && params[1] ? String(params[1]).toUpperCase().replace(/[^A-Z0-9]/g, "") : null;
+  const leagueLink = params[0] === "league" && params[1] ? String(params[1]).toUpperCase().replace(/[^A-Z0-9]/g, "") : null;
+  if (leagueLink) { tab = "leagues"; league = leagueLink; }
   let joinTried = false;
 
   connect();
   onNet(onMessage, signal);
   tick = setInterval(updateClocks, 200);
   // friends' online status, refreshed while the Friends tab is open
-  const friendPoll = setInterval(() => { if (phase === "lobby" && tab === "friends" && getFriends().length) send({ t: "friends", codes: getFriends().map((f) => f.code) }); }, 15000);
+  const friendPoll = setInterval(() => {
+    if (phase === "lobby" && tab === "friends" && getFriends().length) send({ t: "friends", codes: getFriends().map((f) => f.code) });
+    if (phase === "lobby" && tab === "leagues" && league) send({ t: "league:table", id: league });
+  }, 15000);
+  const syncLeagues = () => { const list = getLeagues(); if (list.length) send({ t: "league:sync", leagues: list }); };
+  if (netStatus() === "online") syncLeagues();
   signal.addEventListener("abort", () => {
     clearInterval(tick); clearInterval(friendPoll); stopCount?.();
     if (phase === "searching" || phase === "inviting") send({ t: "cancel" });
-    if (phase === "match" || phase === "end") send({ t: "leave" }); // leaving the page forfeits a running match
+    if (M?.spectator) send({ t: "unspectate" });
+    else if (phase === "match" || phase === "end") send({ t: "leave" }); // leaving the page forfeits a running match
   });
 
   // ------------------------------------------------------------ server messages
@@ -87,6 +106,7 @@ export function renderOnline(root, signal, params = []) {
         if (phase === "lobby" || phase === "searching" || phase === "inviting") drawLobby();
         else drawConnBadge();
         if (m.status === "online" && joinCode && !joinTried && phase === "lobby") { joinTried = true; send({ t: "join", code: joinCode }); }
+        if (m.status === "online") { syncLeagues(); if (leagueLink && !getLeagues().some((x) => x.id === leagueLink) && !joinTried) { joinTried = true; send({ t: "league:join", id: leagueLink }); } }
         return;
       case "welcome": case "stats": if (phase === "lobby" || phase === "searching" || phase === "inviting") drawLobbyStats(); return;
       case "queued": phase = "searching"; searchStart = Date.now(); return drawLobby();
@@ -102,23 +122,35 @@ export function renderOnline(root, signal, params = []) {
         return;
       }
       case "chat": return showChat(m.i, "opp");
+      case "league": {
+        saveLeague(m.league);
+        if (m.created || m.joined) { league = m.league.id; tab = "leagues"; toast(m.created ? `League created: ${m.league.name}` : `You joined ${m.league.name}`); }
+        if (league === m.league.id) send({ t: "league:table", id: league });
+        if (phase === "lobby" && tab === "leagues") drawLobby();
+        return;
+      }
+      case "league:left": store.set("online:leagues", getLeagues().filter((x) => x.id !== m.id)); if (league === m.id) league = null; if (phase === "lobby" && tab === "leagues") drawLobby(); return;
+      case "league:table": leagueTables[m.league.id] = m; saveLeague(m.league); if (phase === "lobby" && tab === "leagues") drawLobby(); return;
+      case "watchers": if (M) { M.watchers = m.n; const w = root.querySelector("#watchers"); if (w) w.textContent = m.n ? `👁 ${m.n} watching` : ""; } return;
+      case "spectate:end": if (M?.spectator && phase === "match") { M = null; G = null; phase = "lobby"; toast("The match ended"); drawLobby(); } return;
       case "cancelled": if (phase === "searching" || phase === "inviting") { phase = "lobby"; invite = null; drawLobby(); } return;
       case "error": lobbyMsg = m.msg; phase = "lobby"; if (joinCode) history.replaceState(null, "", "#/online"); return drawLobby();
       case "match":
         if (m.resumed && M && M.seq === m.seq) { M.seat = m.seat; drawConnBadge(); return; }
         M = { game: m.game, mode: m.mode, rated: m.rated, seat: m.seat, you: m.you, opp: m.opp, seq: m.seq, scores: [0, 0], oppAway: false, oppRematch: false, sentRematch: false,
-          startAt: deadlineFrom(3500), maxBehind: 0, oppSolvedFirst: false };
+          startAt: deadlineFrom(3500), maxBehind: 0, oppSolvedFirst: false, spectator: !!m.spectator, watchers: m.watchers || 0 };
         G = null; phase = "match";
         if (joinCode) history.replaceState(null, "", "#/online");
         sound.play("spin"); buzz(150);
-        if (!m.resumed) announce(`Match found: ${m.opp.name}. ${ONLINE_GAMES[m.game].name}, ${m.mode === "ranked" ? "ranked" : m.mode === "bot" ? "against a bot" : "friendly"}. Starting in 3 seconds.`, { assertive: true });
+        if (M.spectator) announce(`Watching ${m.you.name} against ${m.opp.name}, ${ONLINE_GAMES[m.game].name}.`);
+        else if (!m.resumed) announce(`Match found: ${m.opp.name}. ${ONLINE_GAMES[m.game].name}, ${m.mode === "ranked" ? "ranked" : m.mode === "bot" ? "against a bot" : "friendly"}. Starting in 3 seconds.`, { assertive: true });
         stopCount?.(); stopCount = m.resumed ? null : countdown(M.startAt);
         return drawMatch();
       case "opp:away": if (M) { M.oppAway = Date.now() + m.ms; drawOppState(); } return;
       case "opp:back": if (M) { M.oppAway = false; drawOppState(); } return;
       case "opp:left": if (M) { M.oppLeft = true; if (phase === "end") drawEnd(); } return;
       case "opp:rematch": if (M) { M.oppRematch = true; if (phase === "end") drawEnd(); toast(`${M.opp.name} wants a rematch`); } return;
-      case "react": return showReaction(m.e, "opp");
+      case "react": return showReaction(m.e, m.from || "opp");
       case "end": return onEnd(m);
     }
     if (!M || phase !== "match") return;
@@ -126,6 +158,8 @@ export function renderOnline(root, signal, params = []) {
     if (m.t.startsWith("car:") || (m.t === "opp:wrong" && M.game === "career")) return careerMessage(m);
     if (m.t.startsWith("guess:")) return guessMessage(m);
     if (m.t.startsWith("draft:")) return draftMessage(m);
+    if (m.t.startsWith("conn:")) return connMessage(m);
+    if (m.t.startsWith("grid:")) return gridMessage(m);
   }
 
   // ------------------------------------------------------------ lobby
@@ -139,7 +173,7 @@ export function renderOnline(root, signal, params = []) {
     const r = rankOf(elo);
     return `<span class="rank-badge rk-${r.id} ${small ? "sm" : ""}" title="${r.name} · ${elo}"><i></i>${r.name}${small ? "" : ` <b>${elo}</b>`}</span>`;
   };
-  const TABS = [["play", "bolt", "Play"], ["friends", "users", "Friends"], ["leaders", "trophy", "Leaderboard"], ["history", "clock", "History"]];
+  const TABS = [["play", "bolt", "Play"], ["friends", "users", "Friends"], ["leagues", "medal", "Leagues"], ["leaders", "trophy", "Leaderboard"], ["history", "clock", "History"]];
 
   function drawLobby() {
     const s = netStatus();
@@ -161,7 +195,7 @@ export function renderOnline(root, signal, params = []) {
     }, { signal });
     root.querySelector("#reconnect")?.addEventListener("click", () => connect(), { signal });
     const body = root.querySelector("#og-body");
-    ({ play: drawPlay, friends: drawFriends, leaders: drawLeaders, history: drawHistory })[tab](body, s, busy);
+    ({ play: drawPlay, friends: drawFriends, leagues: drawLeagues, leaders: drawLeaders, history: drawHistory })[tab](body, s, busy);
     drawLobbyStats();
   }
 
@@ -262,7 +296,8 @@ export function renderOnline(root, signal, params = []) {
           return html`<div class="friend-row">
             <span class="fr-av">${avatarHtml({ icon: f.icon || "ball", color: f.color || "#64748b", frame: f.frame || "none", style: f.style, av: f.av }, 38)}<i class="dot-st ${st}"></i></span>
             <div class="fr-info"><b>${esc(f.name)}</b><small class="muted">${st === "playing" ? "In a match" : st === "online" ? "Online now" : "Offline"} · ${f.code}${h2h.w + h2h.l + h2h.d ? ` · you ${h2h.w}-${h2h.l}${h2h.d ? `-${h2h.d}` : ""}` : ""}</small></div>
-            <button class="btn ${st === "online" ? "primary" : ""}" data-inv="${f.code}" ${st === "online" && s === "online" ? "" : "disabled"}>${icon("play", { size: 14 })} Invite</button>
+            ${st === "playing" ? `<button class="btn" data-watch="${f.code}" ${s === "online" ? "" : "disabled"}>${icon("play", { size: 14 })} Watch</button>`
+              : `<button class="btn ${st === "online" ? "primary" : ""}" data-inv="${f.code}" ${st === "online" && s === "online" ? "" : "disabled"}>${icon("play", { size: 14 })} Invite</button>`}
             <button class="icon-btn" data-rm="${f.code}" aria-label="Remove ${esc(f.name)}">${icon("close", { size: 15 })}</button>
           </div>`;
         }).join("")}</div>
@@ -295,6 +330,7 @@ export function renderOnline(root, signal, params = []) {
     $("#fr-add").addEventListener("click", add, { signal });
     $("#fr-in").addEventListener("keydown", (e) => { if (e.key === "Enter") add(); }, { signal });
     body.querySelectorAll("[data-inv]").forEach((b) => b.addEventListener("click", () => { lobbyMsg = ""; send({ t: "invite:friend", code: b.dataset.inv, game }); }, { signal }));
+    body.querySelectorAll("[data-watch]").forEach((b) => b.addEventListener("click", () => { lobbyMsg = ""; send({ t: "spectate", code: b.dataset.watch }); }, { signal }));
     body.querySelectorAll("[data-rm]").forEach((b) => b.addEventListener("click", async () => {
       const f = friends.find((x) => x.code === b.dataset.rm);
       const before = getFriends();
@@ -302,6 +338,56 @@ export function renderOnline(root, signal, params = []) {
       undoToast(`${f?.name || "Friend"} removed`, () => { store.set("online:friends", before); drawLobby(); });
     }, { signal }));
     if (friends.length && !friendsInfo) send({ t: "friends", codes: friends.map((f) => f.code) });
+  }
+
+  // ---------------- leagues: a private group with a weekly table
+  function drawLeagues(body, s) {
+    const mineList = getLeagues();
+    if (!league && mineList.length) league = mineList[0].id;
+    const T = league ? leagueTables[league] : null;
+    const L = T?.league || mineList.find((x) => x.id === league);
+    const myCodeNow = myCode || myRecord()?.code;
+    body.innerHTML = html`<div class="online-grid">
+      <div style="display:grid;gap:16px;align-content:start;min-width:0">
+        ${L ? html`<div class="card pad lg-card">
+          <div class="row"><div><small class="muted">LEAGUE · WEEK ${esc(T?.week?.split("-W")[1] || "")}</small><h2 style="margin:2px 0 0">${esc(L.name)}</h2></div><span class="spacer"></span>
+            <button class="btn" id="lg-copy">${icon("link", { size: 15 })} Invite link</button></div>
+          ${T ? html`<div class="grid-wrap"><table class="stat-table lg-table"><thead><tr><th>#</th><th>Player</th><th>W</th><th>D</th><th>L</th><th>Pts</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
+            ${T.rows.map((r, i) => html`<tr class="${r.me ? "me-row" : ""}"><td>${i + 1}</td>
+              <td><span class="lg-who">${avatarHtml({ icon: r.icon || "ball", color: r.color || "#64748b", frame: r.frame || "none", style: r.style, av: r.av }, 28)}<span><b>${esc(r.name)}${r.me ? " (you)" : ""}</b><small class="muted">${r.playing ? "In a match" : r.online ? "Online" : "Offline"} · ${r.code}</small></span></span></td>
+              <td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td><b class="led">${r.pts}</b></td>
+              <td>${r.me ? "" : r.playing ? `<button class="btn sm" data-watch="${r.code}">Watch</button>` : r.online ? `<button class="btn sm" data-inv="${r.code}">Invite</button>` : ""}</td></tr>`).join("")}
+            </tbody></table></div>
+            <p class="muted" style="font-size:12px;margin:8px 0 0">Points from online matches against people this week (not bots): win 3, draw 1. A new week starts on Monday (UTC). Up to ${T.max} players.</p>`
+            : `<p class="muted">Loading the table…</p>`}
+          <div class="row" style="margin-top:10px"><span class="muted" style="font-size:13px">League code <b class="led">${esc(L.id)}</b></span><span class="spacer"></span><button class="btn ghost" id="lg-leave">${icon("x", { size: 14 })} Leave league</button></div>
+        </div>` : html`<div class="card pad"><h3>${icon("medal")} Friend leagues</h3><p class="muted">Start a private league with your friends: everyone's online results this week go into one table. Share the code, and the table resets every Monday.</p></div>`}
+      </div>
+      <div style="display:grid;gap:16px;align-content:start">
+        ${mineList.length ? `<div class="card pad"><h3>${icon("users")} Your leagues</h3><div class="lg-list">${mineList.map((x) => `<button class="lg-pick ${x.id === league ? "on" : ""}" data-lg="${x.id}"><b>${esc(x.name)}</b><small class="muted">${(x.members || []).length} player${(x.members || []).length === 1 ? "" : "s"} · ${x.id}</small></button>`).join("")}</div></div>` : ""}
+        <div class="card pad" style="display:grid;gap:8px"><h3>${icon("star")} New league</h3>
+          <div class="row"><input id="lg-name" class="input" maxlength="32" placeholder="League name" aria-label="League name" style="flex:1"><button class="btn primary" id="lg-create" ${s === "online" ? "" : "disabled"}>Create</button></div></div>
+        <div class="card pad" style="display:grid;gap:8px"><h3>${icon("search")} Join a league</h3>
+          <div class="row"><input id="lg-code" class="input ch-input" maxlength="7" placeholder="LABC234" aria-label="League code" style="flex:1"><button class="btn" id="lg-join" ${s === "online" ? "" : "disabled"}>Join</button></div></div>
+      </div>
+    </div>`;
+    const $ = (q) => body.querySelector(q);
+    $("#lg-create").addEventListener("click", () => { const n = $("#lg-name").value.trim(); if (!n) return $("#lg-name").focus(); send({ t: "league:create", name: n }); }, { signal });
+    $("#lg-join").addEventListener("click", () => { const c = cleanCode($("#lg-code").value); if (c.length < 6) return $("#lg-code").focus(); lobbyMsg = ""; send({ t: "league:join", id: c }); }, { signal });
+    body.querySelectorAll("[data-lg]").forEach((b) => b.addEventListener("click", () => { league = b.dataset.lg; send({ t: "league:table", id: league }); drawLobby(); }, { signal }));
+    body.querySelectorAll("[data-inv]").forEach((b) => b.addEventListener("click", () => { lobbyMsg = ""; send({ t: "invite:friend", code: b.dataset.inv, game }); }, { signal }));
+    body.querySelectorAll("[data-watch]").forEach((b) => b.addEventListener("click", () => { lobbyMsg = ""; send({ t: "spectate", code: b.dataset.watch }); }, { signal }));
+    $("#lg-copy")?.addEventListener("click", async () => {
+      const link = `${location.origin}${location.pathname}#/online/league/${L.id}`;
+      try { await navigator.clipboard.writeText(`Join my league "${L.name}" in Winner League Arcade: ${link}`); toast("Invite link copied"); } catch { toast(link); }
+    }, { signal });
+    $("#lg-leave")?.addEventListener("click", () => {
+      const keep = L;
+      send({ t: "league:leave", id: L.id });
+      undoToast(`You left ${L.name}`, () => send({ t: "league:join", id: keep.id }));
+    }, { signal });
+    if (league && !T && s === "online") send({ t: "league:table", id: league });
+    void myCodeNow;
   }
 
   // ---------------- leaderboard
@@ -379,11 +465,11 @@ export function renderOnline(root, signal, params = []) {
 
   function duelBar() {
     const g = ONLINE_GAMES[M.game];
-    const score = (i) => (M.game === "guess" ? `${G?.tries?.[i] ?? 0}/8` : M.game === "draft" ? `${G?.picked?.[i] ?? 0}/6` : M.scores[i]);
+    const score = (i) => (M.game === "guess" ? `${G?.tries?.[i] ?? 0}/8` : M.game === "draft" ? `${G?.picked?.[i] ?? 0}/6` : M.game === "conn" ? `${M.scores[i] ?? 0}/4` : M.scores[i]);
     return html`<div class="card duel-bar">
-      <div class="duel-p p-me">${avatarHtml(M.you, 40)}<div><b>${esc(M.you.name)}</b><small class="muted">You · ${M.rated ? rankBadge(M.you.elo, { small: true }) : `Lv ${M.you.level}`}</small></div><span class="duel-score led" id="score-me">${score(M.seat)}</span><span class="chat-bubble me" id="chat-me" hidden></span></div>
+      <div class="duel-p p-me">${avatarHtml(M.you, 40)}<div><b>${esc(M.you.name)}</b><small class="muted">${M.spectator ? "" : "You · "}${M.rated ? rankBadge(M.you.elo, { small: true }) : `Lv ${M.you.level}`}</small></div><span class="duel-score led" id="score-me">${score(M.seat)}</span><span class="chat-bubble me" id="chat-me" hidden></span></div>
       <div class="duel-mid"><span class="muted">${icon(g.ic, { size: 16 })} ${g.name}</span><b id="duel-round"></b>
-        <span class="row" style="gap:6px;justify-content:center"><span class="mode-chip ${M.mode}">${M.mode === "ranked" ? "Ranked" : M.mode === "bot" ? "vs Bot" : "Friendly"}</span><span class="conn ${netStatus()}" id="conn" title="Ping ${Math.round(latency())} ms"><i></i></span></span></div>
+        <span class="row" style="gap:6px;justify-content:center"><span class="mode-chip ${M.mode}">${M.mode === "ranked" ? "Ranked" : M.mode === "bot" ? "vs Bot" : "Friendly"}</span><span class="muted" id="watchers" style="font-size:12px">${M.watchers ? `👁 ${M.watchers} watching` : ""}</span><span class="conn ${netStatus()}" id="conn" title="Ping ${Math.round(latency())} ms"><i></i></span></span></div>
       <div class="duel-p p-them"><span class="chat-bubble opp" id="chat-opp" hidden></span><span class="duel-score led" id="score-opp">${score(opp())}</span><div style="text-align:right"><b>${esc(M.opp.name)}</b><small class="muted" id="opp-state"></small></div>${avatarHtml(M.opp, 40)}</div>
     </div>`;
   }
@@ -393,12 +479,15 @@ export function renderOnline(root, signal, params = []) {
     root.innerHTML = html`
       <h1 class="sr-only">Online ${esc(ONLINE_GAMES[M.game].name)}: ${esc(M.you.name)} vs ${esc(M.opp.name)}</h1>
       ${duelBar()}
-      <div id="arena" class="duel-arena"></div>
-      <div class="react-bar" role="group" aria-label="Send a reaction">${REACTIONS.map((e) => `<button class="react-btn" data-e="${e}" aria-label="React ${e}">${e}</button>`).join("")}
+      ${M.spectator ? html`<div class="card pad og-watch"><span class="bc-strap">Live</span><span>Watching <b>${esc(M.you.name)}</b> vs <b>${esc(M.opp.name)}</b>. You see ${esc(M.you.name)}'s screen.</span><span class="spacer"></span><button class="btn" id="stop-watch">${icon("arrowLeft", { size: 15 })} Stop watching</button></div>` : ""}
+      <div id="arena" class="duel-arena ${M.spectator ? "spectating" : ""}"></div>
+      ${M.spectator ? "" : html`<div class="react-bar" role="group" aria-label="Send a sticker">${STICKERS.map(([id, text]) => `<button class="sticker-btn st-${id}" data-e="${id}">${text}</button>`).join("")}
         <button class="btn ghost" id="chat-toggle" aria-expanded="false">${icon("users", { size: 15 })} Say…</button>
         <span class="spacer"></span><button class="btn ghost" id="forfeit">${icon("flag", { size: 15 })} Leave match</button></div>
-      <div class="chat-menu" id="chat-menu" hidden>${CHAT.map((c, i) => `<button class="btn" data-chat="${i}">${esc(c)}</button>`).join("")}</div>
+      <div class="chat-menu" id="chat-menu" hidden>${CHAT.map((c, i) => `<button class="btn" data-chat="${i}">${esc(c)}</button>`).join("")}</div>`}
       <div class="react-layer" aria-hidden="true"></div>`;
+    root.querySelector("#stop-watch")?.addEventListener("click", () => { send({ t: "unspectate" }); M = null; G = null; phase = "lobby"; drawLobby(); }, { signal });
+    if (M.spectator) { if (!G) drawCountdown(); else drawArena(); drawOppState(); return; }
     root.querySelector(".react-bar").addEventListener("click", (e) => {
       const b = e.target.closest("[data-e]"); if (!b) return;
       send({ t: "react", e: b.dataset.e }); showReaction(b.dataset.e, "me");
@@ -437,7 +526,7 @@ export function renderOnline(root, signal, params = []) {
   function drawArena() {
     const a = root.querySelector("#arena");
     if (!a || !G) return;
-    ({ hl: drawHL, career: drawCareer, guess: drawGuess, draft: drawDraft })[M.game](a);
+    ({ hl: drawHL, career: drawCareer, guess: drawGuess, draft: drawDraft, conn: drawConn, grid: drawGridDuel })[M.game](a);
     updateScores();
   }
 
@@ -446,6 +535,7 @@ export function renderOnline(root, signal, params = []) {
     if (!me || !M) return;
     if (M.game === "guess") { me.textContent = `${G?.tries?.[M.seat] ?? 0}/8`; them.textContent = `${G?.tries?.[opp()] ?? 0}/8`; }
     else if (M.game === "draft") { me.textContent = `${G?.picked?.[M.seat] ?? 0}/6`; them.textContent = `${G?.picked?.[opp()] ?? 0}/6`; }
+    else if (M.game === "conn") { me.textContent = `${mine(M.scores) ?? 0}/4`; them.textContent = `${theirs(M.scores) ?? 0}/4`; }
     else { me.textContent = mine(M.scores); them.textContent = theirs(M.scores); }
     const r = root.querySelector("#duel-round");
     if (r && G?.roundLabel) r.textContent = G.roundLabel;
@@ -476,8 +566,10 @@ export function renderOnline(root, signal, params = []) {
     const layer = root.querySelector(".react-layer");
     if (!layer) return;
     const el = document.createElement("span");
-    el.className = `react-pop ${who}`;
-    el.textContent = e;
+    const sticker = STICKER_TEXT[e];
+    el.className = `react-pop ${who} ${sticker ? `sticker st-${e}` : ""}`;
+    el.textContent = sticker || e;
+    if (sticker && who !== "me") announce(`${who === "opp" ? M?.opp.name : M?.you.name}: ${sticker}`);
     layer.appendChild(el);
     setTimeout(() => el.remove(), 1800);
   }
@@ -510,7 +602,7 @@ export function renderOnline(root, signal, params = []) {
     if (phase === "searching") { const offer = root.querySelector("#bot-offer"); if (offer && offer.hidden && Date.now() - searchStart > 30000) offer.hidden = false; }
   }
   const timerBar = (deadline, total, urgent = false) => `<div class="duel-timer" role="timer" aria-label="Time left" data-deadline="${deadline}" data-total="${total}" data-urgent="${urgent ? 1 : 0}"><i aria-hidden="true"></i><b></b></div>`;
-  const youThem = (seat) => (seat === M.seat ? "You" : esc(M.opp.name));
+  const youThem = (seat) => (seat === M.seat ? (M.spectator ? esc(M.you.name) : "You") : esc(M.opp.name));
 
   // ------------------------------------------------------------ Higher or Lower
   function hlMessage(m) {
@@ -688,6 +780,122 @@ export function renderOnline(root, signal, params = []) {
     }
   }
 
+  // ------------------------------------------------------------ Connections race
+  function connMessage(m) {
+    if (m.t === "conn:start") return;
+    if (m.t === "conn:state") {
+      const first = !G;
+      G = { t: "conn", order: m.order, solved: m.solved, mistakes: m.mistakes, max: m.max, opp: m.opp, deadline: deadlineFrom(m.ms), selected: G?.selected || [], msg: "", roundLabel: "Find the four groups" };
+      M.scores[M.seat] = m.solved.length; M.scores[opp()] = m.opp.solved;
+      setOppNote(`${m.opp.solved}/4 groups · ${m.opp.mistakes} mistake${m.opp.mistakes === 1 ? "" : "s"}`);
+      return first ? drawMatch() : drawArena();
+    }
+    if (!G || G.t !== "conn") return;
+    if (m.t === "conn:right") {
+      G.solved.push(m.group); G.selected = []; G.msg = "";
+      M.scores[M.seat] = G.solved.length;
+      sound.play("place"); announce(`Correct: ${m.group.label}.`);
+    }
+    if (m.t === "conn:wrong") {
+      G.mistakes = m.mistakes; G.msg = m.oneAway ? "One away…" : "Not a group";
+      sound.play("bad"); announce(`${G.msg} ${G.max - G.mistakes} mistakes left.`);
+      setTimeout(() => root.querySelector(".cn-board")?.classList.add("shake"), 0);
+    }
+    if (m.t === "conn:opp") {
+      G.opp = { solved: m.solved, mistakes: m.mistakes, done: m.done };
+      M.scores[opp()] = m.solved;
+      if (theirs(M.scores) > mine(M.scores)) M.maxBehind = Math.max(M.maxBehind, theirs(M.scores) - mine(M.scores));
+      setOppNote(`${m.solved}/4 groups · ${m.mistakes} mistake${m.mistakes === 1 ? "" : "s"}`);
+    }
+    drawArena();
+  }
+  function drawConn(a) {
+    const name = (pid) => playersById.get(pid)?.name ?? pid;
+    const solvedPids = new Set(G.solved.flatMap((g) => g.players));
+    const left = G.order.filter((p) => !solvedPids.has(p));
+    const done = G.solved.length === 4 || G.mistakes >= G.max;
+    a.innerHTML = html`${timerBar(G.deadline, 240000, !done)}
+      <div class="cn-wrap og-conn">
+        <div class="cn-solved">${G.solved.slice().sort((x, y) => x.level - y.level).map((g) => `<div class="cn-group lv${g.level}" role="group" aria-label="${esc(g.label)}"><b>${esc(g.label)}</b><span>${g.players.map((p) => esc(name(p))).join(", ")}</span></div>`).join("")}</div>
+        ${done ? `<p class="og-done">${G.solved.length === 4 ? `${icon("check", { size: 18, cls: "ic-good" })} All four groups! ` : `${icon("x", { size: 18, cls: "ic-bad" })} Out of mistakes. `}<span class="muted">Waiting for ${esc(M.opp.name)}…</span></p>`
+          : html`<div class="cn-board" role="group" aria-label="Players">${left.map((p) => `<button class="cn-tile ${G.selected.includes(p) ? "on" : ""}" data-p="${p}" aria-pressed="${G.selected.includes(p)}">${esc(name(p))}</button>`).join("")}</div>
+          <div class="row cn-bar" style="justify-content:center">
+            <span class="cn-mistakes" role="img" aria-label="${G.max - G.mistakes} mistakes left">Mistakes left ${Array.from({ length: G.max }, (_, i) => `<i class="${i < G.max - G.mistakes ? "" : "used"}"></i>`).join("")}</span>
+            <button class="btn" id="cn-clear" ${G.selected.length ? "" : "disabled"}>Deselect</button>
+            <button class="btn primary" id="cn-go" ${G.selected.length === 4 ? "" : "disabled"}>Submit</button></div>
+          ${G.msg ? `<p class="muted" style="text-align:center;margin:0">${esc(G.msg)}</p>` : ""}`}
+        <p class="muted" style="text-align:center;margin:6px 0 0">${esc(M.opp.name)}: ${G.opp.solved}/4 groups · ${G.opp.mistakes} mistake${G.opp.mistakes === 1 ? "" : "s"}${G.opp.done ? " · finished" : ""}</p>
+      </div>`;
+    a.querySelector(".cn-board")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-p]"); if (!b || M.spectator) return;
+      const p = b.dataset.p;
+      G.selected = G.selected.includes(p) ? G.selected.filter((x) => x !== p) : G.selected.length < 4 ? [...G.selected, p] : G.selected;
+      G.msg = ""; drawArena();
+    });
+    a.querySelector("#cn-clear")?.addEventListener("click", () => { G.selected = []; drawArena(); });
+    a.querySelector("#cn-go")?.addEventListener("click", () => { if (G.selected.length === 4 && !M.spectator) send({ t: "conn:guess", pids: G.selected }); });
+  }
+
+  // ------------------------------------------------------------ The Grid duel
+  function gridMessage(m) {
+    if (m.t === "grid:state") {
+      const first = !G;
+      G = { t: "grid", rows: m.rows, cols: m.cols, cells: m.cells, left: m.left, score: m.score, opp: m.opp, deadline: deadlineFrom(m.ms), active: null, msg: "", roundLabel: "Fill the board" };
+      M.scores = m.scores;
+      return first ? drawMatch() : drawArena();
+    }
+    if (!G || G.t !== "grid") return;
+    if (m.t === "grid:result") {
+      if (m.right) G.cells[m.cell] = { pid: m.pid, rarity: m.rarity };
+      G.left = m.left; G.score = m.score; G.active = null;
+      G.msg = m.right ? `${playersById.get(m.pid)?.name}: rarity ${m.rarity}` : `${playersById.get(m.pid)?.name} doesn't fit that square.`;
+      sound.play(m.right ? "place" : "bad"); announce(G.msg);
+    }
+    if (m.t === "grid:opp") { G.opp = { filled: m.filled, left: m.left, score: m.score, done: m.done }; setOppNote(`${m.filled.filter(Boolean).length}/9 · ${m.left} left`); }
+    if (m.t === "grid:scores") { M.scores = m.scores; if (theirs(M.scores) > mine(M.scores)) M.maxBehind = Math.max(M.maxBehind, theirs(M.scores) - mine(M.scores)); return updateScores(); }
+    drawArena();
+  }
+  function drawGridDuel(a) {
+    gridItems ??= namedPlayers.filter((p) => facts().has(p.player_id)).map((p) => {
+      const s = careerSummary(p.player_id);
+      return { id: p.player_id, label: p.name, sub: `${teamName(s.lastTeam)} · ${s.firstSeason === s.lastSeason ? s.firstSeason : s.firstSeason.slice(0, 4) + "–" + s.lastSeason.slice(5)}` };
+    });
+    const head = (id) => { const cr = criterionById(id); return cr.club ? `<span class="gh-crest">${crestSvg(cr.club, teamName(cr.club), 28)}</span><b>${esc(cr.label)}</b>` : `<b>${esc(cr.label)}</b>`; };
+    const done = G.left <= 0 || G.cells.every(Boolean);
+    a.innerHTML = html`${timerBar(G.deadline, 180000, !done)}
+      <div class="og-grid">
+        <div class="gr-board" role="group" aria-label="The Grid: rows × columns">
+          <div class="gr-corner"><b class="led">${G.left}</b><small>guesses left</small></div>
+          ${[0, 1, 2].map((c) => `<div class="gr-head col">${head(G.cols[c])}</div>`).join("")}
+          ${[0, 1, 2].map((r) => `<div class="gr-head row">${head(G.rows[r])}</div>${[0, 1, 2].map((c) => {
+            const i = r * 3 + c, cell = G.cells[i];
+            const label = `${criterionById(G.rows[r]).label} and ${criterionById(G.cols[c]).label}`;
+            if (cell) return `<div class="gr-cell done" aria-label="${esc(label)}: ${esc(playersById.get(cell.pid)?.name)}"><b>${esc(playersById.get(cell.pid)?.name)}</b><small>Rarity ${cell.rarity}</small></div>`;
+            return `<button class="gr-cell ${G.active === i ? "on" : ""}" data-cell="${i}" ${done ? "disabled" : ""} aria-label="${esc(label)}: choose a player">${G.active === i ? "…" : "+"}</button>`;
+          }).join("")}`).join("")}
+        </div>
+        <div class="card pad og-grid-side">
+          ${done ? `<p class="og-done">${icon("check", { size: 18, cls: "ic-good" })} Board finished. <span class="muted">Waiting for ${esc(M.opp.name)}…</span></p>`
+            : G.active !== null ? html`<small class="muted">${esc(criterionById(G.rows[Math.floor(G.active / 3)]).label)} × ${esc(criterionById(G.cols[G.active % 3]).label)}</small>
+              <div class="search guess-search"><input id="gr-in" class="input" placeholder="Type a player's name…" autocomplete="off" aria-label="Player for this square"></div>`
+            : `<p class="muted" style="margin:0">Pick a square, then name a player who fits both its row and its column. Each player once.</p>`}
+          ${G.msg ? `<p style="margin:0">${esc(G.msg)}</p>` : ""}
+          <div class="og-mini" aria-label="${esc(M.opp.name)}'s board"><small class="muted">${esc(M.opp.name)} · ${G.opp.score} pts</small>
+            <div class="og-mini-grid">${G.opp.filled.map((f) => `<i class="${f ? "on" : ""}"></i>`).join("")}</div></div>
+        </div>
+      </div>`;
+    a.querySelector(".gr-board").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-cell]"); if (!b || M.spectator) return;
+      G.active = Number(b.dataset.cell); G.msg = ""; drawArena();
+    });
+    const inp = a.querySelector("#gr-in");
+    if (inp) {
+      const used = new Set(G.cells.filter(Boolean).map((c) => c.pid));
+      autocomplete(inp, gridItems, (it) => { send({ t: "grid:guess", cell: G.active, pid: it.id }); inp.disabled = true; }, { signal, exclude: (it) => used.has(it.id) });
+      inp.focus({ preventScroll: true });
+    }
+  }
+
   // ------------------------------------------------------------ All-Time Draft
   function draftMessage(m) {
     if (m.t === "draft:last") { if (G?.t === "draft") lastPickToast(m.last); return; }
@@ -771,6 +979,12 @@ export function renderOnline(root, signal, params = []) {
     if (!M) return;
     phase = "end";
     M.end = m; M.oppRematch = false; M.sentRematch = false;
+    if (M.spectator) { // watching: no records, history, ratings or achievements
+      if (m.scores && M.game !== "guess" && M.game !== "draft") M.scores = m.scores;
+      sound.play("place");
+      announce(`Final: ${m.winner === null ? "a draw" : `${m.winner === 0 ? M.you.name : M.opp.name} wins`}.`);
+      return drawEnd();
+    }
     if (m.scores && M.game !== "guess" && M.game !== "draft") M.scores = m.scores;
     if (M.game === "draft" && G?.t === "draft" && m.reason === "done") G.picked = [6, 6];
     addRecord(M.game, m.result);
@@ -817,6 +1031,19 @@ export function renderOnline(root, signal, params = []) {
       const line = (seat) => `<li><b>${youThem(seat)}</b>: ${d.solved[seat] ? `solved in ${d.tries[seat]} ${d.tries[seat] === 1 ? "try" : "tries"} (${Math.round(d.ms[seat] / 1000)}s)` : `not solved (${d.tries[seat]} tries)`}</li>`;
       return html`<div class="og-guess-end">${best ? playerCard(best, { size: "sm" }) : ""}<div style="text-align:left"><small class="muted">THE PLAYER WAS</small><h3>${nameLink(d.target, p.name)}</h3><ul class="clean">${line(M.seat)}${line(opp())}</ul></div></div>`;
     }
+    if (M.game === "conn") {
+      const name = (pid) => playersById.get(pid)?.name ?? pid;
+      return html`<div class="og-final"><div><small class="muted">${M.spectator ? esc(M.you.name).toUpperCase() : "YOU"}</small><b class="led">${mine(m.scores)}/4</b></div><span class="muted">–</span><div><small class="muted">${esc(M.opp.name).toUpperCase()}</small><b class="led">${theirs(m.scores)}/4</b></div></div>
+        <p class="muted" style="margin:0">Mistakes: ${youThem(M.seat)} ${d.mistakes[M.seat]} · ${esc(M.opp.name)} ${d.mistakes[opp()]}${d.timeUp ? " · time ran out" : ""}</p>
+        <div class="cn-solved og-conn-end">${d.groups.map((g) => `<div class="cn-group lv${g.level}"><b>${esc(g.label)}</b><span>${g.players.map((p) => esc(name(p))).join(", ")}</span></div>`).join("")}</div>`;
+    }
+    if (M.game === "grid") {
+      const name = (pid) => playersById.get(pid)?.name ?? pid;
+      const board = (seat) => html`<div class="card pad og-team"><b>${seat === M.seat && !M.spectator ? "Your board" : esc(seat === M.seat ? M.you.name : M.opp.name)}</b>
+        <div class="og-mini-grid big">${d.cells[seat].map((c) => `<i class="${c ? "on" : ""}" title="${c ? esc(name(c.pid)) + " · " + c.rarity : "empty"}">${c ? `<small>${esc(name(c.pid))}</small><b>${c.rarity}</b>` : ""}</i>`).join("")}</div></div>`;
+      return html`<div class="og-final"><div><small class="muted">${M.spectator ? esc(M.you.name).toUpperCase() : "YOU"}</small><b class="led">${mine(m.scores)}</b></div><span class="muted">–</span><div><small class="muted">${esc(M.opp.name).toUpperCase()}</small><b class="led">${theirs(m.scores)}</b></div></div>
+        <div class="og-teams">${board(M.seat)}${board(opp())}</div>`;
+    }
     if (M.game === "draft") {
       const team = (seat) => {
         const t = d.teams[seat];
@@ -833,8 +1060,8 @@ export function renderOnline(root, signal, params = []) {
 
   function drawEnd() {
     const m = M.end;
-    const word = m.result === "win" ? "VICTORY" : m.result === "lose" ? "DEFEAT" : "DRAW";
-    const sub = m.result === "win" ? "You win!" : m.result === "lose" ? `${esc(M.opp.name)} wins` : "Nobody blinked";
+    const word = M.spectator ? "FINAL" : m.result === "win" ? "VICTORY" : m.result === "lose" ? "DEFEAT" : "DRAW";
+    const sub = M.spectator ? (m.winner === null ? "A draw" : `${esc(m.winner === 0 ? M.you.name : M.opp.name)} wins`) : m.result === "win" ? "You win!" : m.result === "lose" ? `${esc(M.opp.name)} wins` : "Nobody blinked";
     const a = root.querySelector("#arena");
     if (!a) { drawMatch(); return; }
     root.querySelector("#forfeit")?.remove();
@@ -856,10 +1083,10 @@ export function renderOnline(root, signal, params = []) {
         </div>` : ""}
       ${h2h && h2h.w + h2h.l + h2h.d > 1 ? `<small class="muted">You vs ${esc(M.opp.name)}: ${h2h.w}-${h2h.l}${h2h.d ? `-${h2h.d}` : ""}</small>` : ""}
       <div class="row" style="justify-content:center;margin-top:8px">
-        ${M.oppLeft ? `<span class="muted">${esc(M.opp.name)} left the room.</span>`
+        ${M.spectator ? "" : M.oppLeft ? `<span class="muted">${esc(M.opp.name)} left the room.</span>`
           : `<button class="btn primary" id="rematch" ${M.sentRematch ? "disabled" : ""}>${icon("refresh", { size: 15 })} ${M.sentRematch ? "Waiting for opponent…" : M.oppRematch ? "Accept rematch" : "Rematch"}</button>`}
-        <button class="btn" id="share">${icon("camera", { size: 15 })} Share result</button>
-        ${canFriend ? `<button class="btn" id="add-friend">${icon("users", { size: 15 })} Add friend</button>` : ""}
+        ${M.spectator ? "" : `<button class="btn" id="share">${icon("camera", { size: 15 })} Share result</button>`}
+        ${canFriend && !M.spectator ? `<button class="btn" id="add-friend">${icon("users", { size: 15 })} Add friend</button>` : ""}
         <button class="btn ghost" id="lobby">${icon("arrowLeft", { size: 15 })} Back to lobby</button>
       </div>
       ${M.oppRematch && !M.sentRematch && !M.oppLeft ? `<p class="muted pop" style="margin:0">${esc(M.opp.name)} wants a rematch!</p>` : ""}
@@ -870,14 +1097,14 @@ export function renderOnline(root, signal, params = []) {
       addFriend({ code: M.opp.code, name: M.opp.name, icon: M.opp.icon, color: M.opp.color, frame: M.opp.frame, style: M.opp.style, av: M.opp.av });
       toast(`${M.opp.name} added to friends`); drawEnd();
     });
-    a.querySelector("#share").addEventListener("click", async () => {
+    a.querySelector("#share")?.addEventListener("click", async () => {
       const sc = scoreLine(m);
       const line = M.comeback ? "Comeback win!" : m.reason !== "done" ? (REASONS[m.reason] || "") : M.game === "guess" && m.detail ? `The player was ${playersById.get(m.detail.target)?.name}` : "";
       const canvas = drawResultCard({ game: M.game, mode: M.mode, result: m.result, you: M.you, opp: M.opp, myScore: sc.me, oppScore: sc.them, delta: m.delta, elo: m.elo, streak: m.streak, line });
       const how = await shareOrDownload(canvas, `winner-league-online-${M.game}.png`, "My Winner League Arcade result");
       toast(how === "shared" ? "Shared!" : "Image saved: post it anywhere");
     });
-    a.querySelector("#lobby").addEventListener("click", () => { send({ t: "leave" }); M = null; G = null; phase = "lobby"; drawLobby(); });
+    a.querySelector("#lobby").addEventListener("click", () => { send({ t: M.spectator ? "unspectate" : "leave" }); M = null; G = null; phase = "lobby"; drawLobby(); });
     if (M.game === "draft" && m.reason === "done") {
       const g = draftGame(m.detail);
       a.querySelector("#watch").addEventListener("click", () => openLiveGame(g, { celebrate: (x) => x.winner === (M.seat === 0 ? x.home : x.away) }));
