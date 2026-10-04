@@ -426,7 +426,7 @@ export function renderOnline(root, signal, params = []) {
   function drawCountdown() {
     const a = root.querySelector("#arena");
     a.innerHTML = html`<div class="card center-card og-vs pop">
-      <small class="muted">MATCH FOUND</small>
+      <span class="bc-strap">Tip-off</span><small class="muted">MATCH FOUND</small>
       <div class="og-vs-row">${avatarHtml(M.you, 64)}<b class="led">VS</b>${avatarHtml(M.opp, 64)}</div>
       <h2>${esc(M.you.name)} <span class="muted">vs</span> ${esc(M.opp.name)}</h2>
       <p class="muted" style="max-width:520px">${ONLINE_GAMES[M.game].rules}</p>
@@ -844,7 +844,7 @@ export function renderOnline(root, signal, params = []) {
     const canFriend = M.opp.code && !M.opp.bot && !isFriend(M.opp.code);
     const h2h = M.opp.code && !M.opp.bot ? headToHead(M.opp.code) : null;
     a.innerHTML = html`<div class="card center-card og-end ${m.result} pop">
-      <small class="muted">${ONLINE_GAMES[M.game].name.toUpperCase()} · ${M.mode === "ranked" ? "RANKED" : M.mode === "bot" ? "VS BOT" : "FRIENDLY"}</small>
+      <span class="bc-strap">Final</span><small class="muted">${ONLINE_GAMES[M.game].name.toUpperCase()} · ${M.mode === "ranked" ? "RANKED" : M.mode === "bot" ? "VS BOT" : "FRIENDLY"}</small>
       <div class="og-word ${m.result}" aria-hidden="true">${word.split("").map((ch, i) => `<span style="animation-delay:${i * 0.06}s">${ch}</span>`).join("")}</div>
       <h2 class="og-result">${m.result === "win" ? icon("trophy", { size: 30 }) : ""} ${sub}</h2>
       ${M.comeback ? `<div class="comeback pop">${icon("refresh", { size: 16 })} COMEBACK WIN!</div>` : ""}

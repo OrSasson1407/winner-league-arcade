@@ -210,3 +210,116 @@ h2 { font-weight: 800; }
 :root[data-theme="light"] .ach-date { color: #15803d; }
 .bc-kicker b { white-space: nowrap; }
 @media (max-width: 560px) { .bc-kicker span { display: none; } .bc-hero h1 { font-size: 52px; } }
+
+/* =====================================================================
+   Stage 2 · data pages: player graphics, club bands, leaderboards
+   ===================================================================== */
+/* player profile: a lower-third band with the facts as a stat strip */
+.profile-head { position: relative; padding: 20px 22px; border-radius: var(--radius); overflow: hidden;
+  background: linear-gradient(105deg, var(--brand-navy) 0 62%, var(--brand-navy-2) 62% 100%); color: #fff; border-left: 6px solid var(--brand-red);
+  --text: #fff; --muted: #b6c4e6; --card2: rgba(255, 255, 255, .06); --line-soft: rgba(255, 255, 255, .12); }
+.profile-head > div > .muted:first-child { display: inline-block; padding: 3px 12px 3px 10px; background: var(--brand-red); color: #fff !important;
+  font: 800 12px var(--f-display) !important; letter-spacing: .16em !important; clip-path: polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%); }
+.profile-head h1 { font-size: clamp(34px, 4.6vw, 52px); margin-top: 8px; }
+.fact { border-radius: 4px; border-top: 3px solid var(--brand-gold); background: rgba(255, 255, 255, .06); }
+.fact small { font-family: var(--f-display); letter-spacing: .12em; }
+.fact b { font: 800 22px var(--f-display); }
+.profile .card h3 { text-transform: uppercase; letter-spacing: .04em; }
+
+/* club page: the club colours as a broadcast band */
+.club-hero { border-radius: var(--radius); border: 0; border-left: 6px solid var(--club, var(--brand-red)); color: #fff;
+  background: linear-gradient(110deg, var(--brand-navy) 0 55%, color-mix(in srgb, var(--club, var(--brand-red)) 55%, var(--brand-navy)) 55% 100%);
+  --text: #fff; --muted: #c7d2ee; --card2: rgba(255, 255, 255, .07); --line-soft: rgba(255, 255, 255, .14); }
+.club-hero h1 { font-size: clamp(34px, 4.6vw, 52px); }
+.club-hero .muted { color: #c7d2ee; }
+
+/* leaders and records: numbered graphics with gold values */
+.leaders li::before { font: 800 12px var(--f-display); color: var(--accent); }
+.ld-bar { border-radius: 0; height: 6px; }
+.ld-bar i { border-radius: 0; background: linear-gradient(90deg, var(--brand-red), var(--chart)); }
+.ld-val, .rec-val { font-family: var(--f-display) !important; font-weight: 800; }
+.rec-pos { font: 800 16px var(--f-display); display: inline-grid; place-items: center; min-width: 32px; height: 32px; background: var(--brand-navy); color: #fff; clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%); }
+.rec-list li.top .rec-pos { background: var(--brand-gold); color: var(--brand-navy); }
+.rec-cats button.on { box-shadow: inset 3px 0 0 var(--brand-red); }
+.cmp-vs { font: 800 30px var(--f-display); color: #fff; background: var(--brand-red); padding: 6px 14px; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+.recap-hero, .pub-hero { border-left: 6px solid var(--brand-red); }
+.recap-hero small, .flash-card > small { font-family: var(--f-display); letter-spacing: .14em; }
+.season-tile { border-left-color: var(--brand-red); }
+
+/* =====================================================================
+   Stage 3 · games: scorebugs, big numbers and result graphics
+   ===================================================================== */
+.big-score, .grade, .hl-val .val { font-family: var(--f-display) !important; font-weight: 800; letter-spacing: .01em; }
+.big-score, .hl-val .val { color: var(--accent); }
+/* the TV scorebug: navy band, white score panels */
+.scoreboard { border-radius: 4px; border: 0; background: var(--brand-navy); box-shadow: var(--shadow); border-bottom: 4px solid var(--brand-red); }
+.sb-team { font: 800 20px var(--f-display); text-transform: uppercase; letter-spacing: .03em; }
+.sb-bar { border-radius: 0; width: 6px; }
+.sb-score { font-family: var(--f-display); color: var(--brand-navy); background: #fff; text-shadow: none; padding: 0 12px; line-height: 1.05; clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.sb-q { color: #fff; background: var(--brand-red); padding: 1px 10px; font-family: var(--f-display); text-shadow: none; }
+.sb-clock { color: var(--brand-gold); font-family: var(--f-display); text-shadow: none; }
+/* results: a lower-third band */
+.final-banner { border: 0; border-left: 6px solid var(--brand-red); background: linear-gradient(105deg, var(--brand-navy) 0 70%, var(--brand-navy-2) 70%); color: #fff;
+  --text: #fff; --muted: #b6c4e6; }
+.final-banner h2 { text-transform: uppercase; font-size: 30px; }
+.answer-card { border-left: 4px solid var(--brand-gold); padding-left: 12px; }
+/* tiles in Connections, The Grid and Guess the Player: square, condensed */
+.cn-tile, .gr-cell { border-radius: 4px; }
+.cn-tile { font-family: var(--f-display); font-weight: 700; letter-spacing: .02em; }
+.cn-group { border-radius: 4px; }
+.cn-group b, .gr-head { font-family: var(--f-display); text-transform: uppercase; letter-spacing: .06em; }
+.hl-side, .hint-box, .hint-shop { border-radius: var(--radius); }
+
+/* =====================================================================
+   Stage 4 · My Career and online: scorebugs, versus and final graphics
+   ===================================================================== */
+.mc-led { border-radius: 4px; border: 0; background: var(--brand-navy); border-bottom: 4px solid var(--brand-red); color: #fff; box-shadow: var(--shadow); background-image: none; }
+.mc-led-head { font: 800 13px var(--f-display); letter-spacing: .14em; text-transform: uppercase; color: #b6c4e6; }
+.mc-led-head b { border-radius: 0; padding: 2px 12px 2px 10px; color: #fff; background: var(--brand-red); clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.mc-led.won .mc-led-head b { background: var(--brand-gold); color: var(--brand-navy); }
+.mc-led-team span { font: 800 17px var(--f-display); text-transform: uppercase; letter-spacing: .03em; color: #fff; }
+.mc-led-team b { font-family: var(--f-display) !important; font-weight: 800; color: var(--brand-navy); background: #fff; text-shadow: none; padding: 2px 14px; line-height: 1;
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.mc-led-dash { color: #b6c4e6; }
+.mc-led-q { font: 700 13px var(--f-display); letter-spacing: .06em; }
+.mc-led-q b { color: var(--brand-gold); }
+.mc-line { color: #e7edfb; }
+.mc-line b { color: var(--brand-gold); }
+.mc-led .btn { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .2); color: #fff; }
+.mc-led .mc-momentum { --text: #fff; --muted: #b6c4e6; --line: rgba(255, 255, 255, .2); }
+.mc-vs b { font-family: var(--f-display); text-transform: uppercase; letter-spacing: .03em; }
+.lv-board-top { border-radius: 4px; background: var(--brand-navy); border: 0; border-bottom: 4px solid var(--brand-red); }
+.lv-team b { font-family: var(--f-display); color: var(--brand-navy); background: #fff; padding: 0 10px; text-shadow: none; }
+.lv-clock small { font-family: var(--f-display); color: #fff; background: var(--brand-red); padding: 0 8px; }
+.lv-clock b { font-family: var(--f-display); color: var(--brand-gold); }
+/* online: scorebug during a match */
+.duel-bar { border-radius: 4px; border: 0; background: var(--brand-navy); border-bottom: 4px solid var(--brand-red); color: #fff; --text: #fff; --muted: #b6c4e6; }
+.duel-score { font-family: var(--f-display) !important; font-weight: 800; background: #fff; color: var(--brand-navy) !important; padding: 0 10px;
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%); }
+.duel-mid b { font-family: var(--f-display); text-transform: uppercase; color: var(--brand-gold); letter-spacing: .06em; }
+/* the pre-match versus graphic */
+.og-vs { background: linear-gradient(105deg, var(--brand-navy) 0 50%, var(--brand-navy-2) 50% 100%); color: #fff; border: 0; border-bottom: 4px solid var(--brand-red); --text: #fff; --muted: #b6c4e6; }
+.og-vs h2 { text-transform: uppercase; }
+.og-vs-row b { font-family: var(--f-display) !important; font-size: 40px; color: #fff; background: var(--brand-red); padding: 4px 18px; clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+/* final score */
+.og-end { border-radius: var(--radius); border-top: 6px solid var(--brand-red); }
+.og-end.win { border: 0; border-top: 6px solid var(--brand-gold); box-shadow: var(--shadow); }
+.og-result { font-family: var(--f-display); text-transform: uppercase; letter-spacing: .02em; }
+.og-final small { font-family: var(--f-display); letter-spacing: .12em; }
+.og-final b { font-family: var(--f-display) !important; font-weight: 800; color: var(--brand-navy); background: #fff; padding: 0 14px; border: 1px solid var(--line);
+  clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+/* news flashes match the network graphics */
+.nf { border-radius: 4px; }
+.nf-kicker { font-family: var(--f-display); font-size: 13px; letter-spacing: .16em; }
+.nf-body b { font-family: var(--f-display); text-transform: uppercase; }
+/* a red graphics strap ("TIP-OFF", "FINAL") */
+.bc-strap { display: inline-block; padding: 3px 14px 3px 12px; background: var(--brand-red); color: #fff; font: 800 13px var(--f-display); letter-spacing: .18em; text-transform: uppercase;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+.og-end.win .bc-strap { background: var(--brand-gold); color: var(--brand-navy); }
+/* gauge change badges: darker fills so white text stays readable */
+.g-delta.up { background: #15803d !important; color: #fff !important; }
+.g-delta.down { background: #b91c1c !important; color: #fff !important; }
+/* layout: grid items may shrink below their content, so a wide table scrolls in its card instead of widening the page */
+.profile, .profile > *, #view > *, .card { min-width: 0; }
+.grid-wrap { max-width: 100%; overflow-x: auto; }
+.card:has(> .stat-table), .card:has(> table) { overflow-x: auto; }

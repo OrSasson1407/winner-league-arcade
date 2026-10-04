@@ -75,6 +75,8 @@ export async function renderMyCareer(root, signal) {
     const [c1, c2] = clubColors(team);
     root.style.setProperty("--club", c1); root.style.setProperty("--club2", c2);
   }
+  // switching theme or contrast in Settings re-computes the club colours for it
+  document.addEventListener("settings-changed", () => clubTheme(), { signal });
   let meterBase = null; // gauges show the change since before the last game
   let freshBadge = null;
 
