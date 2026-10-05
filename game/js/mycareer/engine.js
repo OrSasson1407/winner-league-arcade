@@ -5,6 +5,7 @@
 import { H, PLAYED_SEASONS, db, isPlayable, playersById, seededRng, teamName } from "../data.js";
 import { realTeamStrength } from "../games/draft_sim.js";
 import { elPlayerName, elReady, elRoster, elSeasonFor, elTeams, inElSeason } from "./europe.js";
+import { profile, profileFromSeason, simulateGame } from "../shared/gameSim.js";
 
 // ---------------------------------------------------------------- player model
 export const ATTRS = {
@@ -269,13 +270,6 @@ export function statLine(C, role, rnd, { big = false } = {}) {
 export const gameScore = (l) => l.pts + 0.7 * l.reb + 0.7 * l.ast + l.stl + l.blk - 0.4 * (l.fga - l.fgm) - 0.3 * (l.fta - l.ftm);
 export const valOf = (l) => l.pts + l.reb + l.ast + l.stl + l.blk - (l.fga - l.fgm) - (l.fta - l.ftm);
 
-/** Team strength with you in the lineup for this game. */
-function strengthWith(C, team, line) {
-  const ov = bestOverall(C);
-  // the season baseline already includes you (startSeason); this is tonight's swing
-  return team.strength + (ov - team.strength) * (line.min / 200) * 0.6 + (gameScore(line) - 10) * 0.08 + ((C.chem?.[team.id] || 0) / 100) * 1.2
-    + badgeLv(C, "general") * 0.15 + badgeLv(C, "lockdown") * 0.15;
-}
 function playScore(home, away, rnd, neutral = false) {
   const edge = neutral ? 0 : 1.5;
   const p = 1 / (1 + Math.exp(-((home.s + edge) - away.s) / 4));
@@ -284,28 +278,75 @@ function playScore(home, away, rnd, neutral = false) {
   const margin = 1 + Math.round(rnd() * rnd() * 24);
   return homeWins ? [win, win - margin] : [win - margin, win];
 }
-const quarters = (total, rnd) => {
-  const w = [0, 0, 0, 0].map(() => 0.8 + rnd() * 0.4);
-  const sum = w.reduce((a, b) => a + b, 0);
-  const q = w.map((x) => Math.floor((total * x) / sum));
-  q[3] += total - q.reduce((a, b) => a + b, 0);
-  return q;
-};
 
-/** Play one of your games: your line, the score, quarter scores; teammates/opponents' box comes from the seed. */
+/** Your player for the game engine: per-36 numbers from your attributes and badges (the same formulas as the season lines). */
+function meSnapshot(C, role, big, rnd) {
+  const a = effective(C);
+  const offense = (a.sht + a.thr + a.fin) / 3 + (C.arch === "scorer" ? 4 : 0);
+  const chem = (C.chem?.[C.cur?.team] || 0) / 100;
+  const [lo, hi] = MIN_BY_ROLE[role];
+  return {
+    pos: C.pos, mpg: 36, rating: Math.round(bestOverall(C) + chem * 3),
+    ppg: Math.max(3, 5 + (offense - 45) * 0.39 + badgeLv(C, "bucket") * 0.8 + badgeLv(C, "midrange") * 0.6 + badgeLv(C, "sniper") * 0.6),
+    rpg: Math.max(0.5, 2.5 + (a.reb - 35) * 0.17 + badgeLv(C, "glass") * 0.7), apg: Math.max(0.3, 0.8 + (a.pas - 40) * 0.12 + badgeLv(C, "general") * 0.5),
+    spg: Math.max(0.1, 0.4 + (a.def + a.ath - 80) * 0.012 + badgeLv(C, "lockdown") * 0.3), bpg: Math.max(0.05, 0.15 + (a.def - 50) * 0.018 + (C.height - 196) * 0.05 + badgeLv(C, "highflyer") * 0.25),
+    s3: clamp(0.12 + (a.thr - 50) / 120, 0.02, 0.55), p3: clamp(0.22 + (a.thr - 40) * 0.0032 + badgeLv(C, "sniper") * 0.015, 0.15, 0.48),
+    p2: clamp(0.4 + ((a.fin * 0.6 + a.sht * 0.4) - 50) * 0.0035, 0.32, 0.68), ft: clamp(0.55 + a.sht * 0.0035, 0.45, 0.92) * 100,
+    clutch: big || badgeLv(C, "clutch") ? badgeLv(C, "clutch") + (big ? 0.5 : 0) : 0, foulRisk: 1 + (a.def >= 75 ? 0.15 : 0) + (FAM[C.pos] === "B" ? 0.2 : 0) - (a.iq - 60) * 0.008,
+    energy: C.fatigue > 0 ? 0.85 : 1, target: Math.round(lo + rnd() * (hi - lo)),
+  };
+}
+const ME = "me";
+/** The two teams of one of your games, for the game engine. g: { opp, home, eu, me (snapshot or null), st: [your team, opponent] strengths }. */
+function matchTeams(C, S, g) {
+  const europe = !!g.eu || S.league === "el";
+  const players = (tid) => (europe ? rosterFor(S.label, tid, { europe: true }) : rosterOf(dataSeason(S.label), tid)).slice(0, 9)
+    .map((ps) => profileFromSeason(ps, playerName(ps.player_id)));
+  let mates = players(S.team);
+  const mine = { name: teamName(S.team), id: S.team, strength: g.st[0], players: mates };
+  if (g.me) {
+    mates = mates.slice(0, 8); // you take a rotation spot
+    const meP = profile({ id: ME, name: C.name, me: true, ...g.me });
+    const rest = mates.reduce((s, p) => s + p.mpg, 0) || 1;
+    mine.players = [meP, ...mates];
+    mine.minutes = { [ME]: g.me.target, ...Object.fromEntries(mates.map((p) => [p.id, (p.mpg * (200 - g.me.target)) / rest])) };
+  }
+  const theirs = { name: teamName(g.opp), id: g.opp, strength: g.st[1], players: players(g.opp) };
+  return g.home ? [mine, theirs] : [theirs, mine];
+}
+/** The full game (events, box score, momentum) of one of your games: re-played from its seed. */
+export function simFor(C, S, g, events = true) {
+  const [h, a] = matchTeams(C, S, g);
+  return simulateGame(h, a, { rnd: seededRng("mc-g-" + g.seed), neutral: !!g.neutral, events });
+}
+/** Play one of your games through the game engine: your line comes from the game itself. */
 export function playGame(C, S, oppId, home, rnd, { neutral = false, big = false, label = "", teams = S.teams, eu = false } = {}) {
   const role = C.cur.role;
-  const line = C.injury ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pf: 0, dnp: true, injured: true } : statLine(C, role, rnd, { big });
-  const me = teams.find((t) => t.id === C.cur.team), opp = teams.find((t) => t.id === oppId);
-  const mine = { s: line.min ? strengthWith(C, me, line) : me.strength }, theirs = { s: opp.strength - badgeLv(C, "lockdown") * 0.2 };
-  const [hs, as] = home ? playScore(mine, theirs, rnd, neutral) : playScore(theirs, mine, rnd, neutral);
-  const [my, their] = home ? [hs, as] : [as, hs];
-  if (line.pts > my - 20) { const cut = line.pts - Math.max(0, my - 20); line.pts -= cut; } // keep the box score believable
-  return { opp: oppId, home, my, their, won: my > their, line, q: [quarters(my, rnd), quarters(their, rnd)], seed: Math.floor(rnd() * 1e9), label, ...(eu ? { eu: true } : {}) };
+  const meT = teams.find((t) => t.id === C.cur.team), opp = teams.find((t) => t.id === oppId);
+  // a bench player sometimes doesn't get off the bench
+  const dnp = !C.injury && role === "bench" && rnd() < 0.25 + Math.max(0, (35 - C.trust) / 100);
+  const g = { opp: oppId, home, neutral, label, seed: Math.floor(rnd() * 1e9), sim: 1, st: [meT.strength, opp.strength - badgeLv(C, "lockdown") * 0.2],
+    me: C.injury || dnp ? null : meSnapshot(C, role, big, rnd), ...(eu ? { eu: true } : {}) };
+  if (g.me && C.fatigue > 0) C.fatigue--;
+  const r = simFor(C, S, g, false);
+  const mySide = home ? 0 : 1;
+  const my = r.score[mySide], their = r.score[1 - mySide];
+  const b = r.box[mySide].find((l) => l.id === ME);
+  const line = !g.me ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pf: 0, tov: 0, dnp: true, ...(C.injury ? { injured: true } : {}) }
+    : b.min === 0 ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pf: 0, tov: 0, dnp: true }
+    : { min: b.min, pts: b.pts, reb: b.reb, ast: b.ast, stl: b.stl, blk: b.blk, fgm: b.fgm, fga: b.fga, tpm: b.tpm, tpa: b.tpa, ftm: b.ftm, fta: b.fta, pf: Math.min(5, b.pf), tov: b.tov, pm: b.pm, fouledOut: b.pf >= 5 };
+  return { ...g, my, their, won: my > their, line, q: [r.quarters[mySide], r.quarters[1 - mySide]], ot: r.ot };
 }
 
 /** Full box score for a game (deterministic from its seed). */
 export function boxScore(C, S, g) {
+  if (g.sim) { // played through the game engine: its own box score
+    const r = simFor(C, S, g, false);
+    const mySide = g.home ? 0 : 1;
+    const map = (l) => ({ ...l, pid: l.id === ME ? null : l.id, el: l.id !== ME && !playersById.has(l.id), me: l.id === ME });
+    const keep = (l) => l.min > 0;
+    return { team: r.box[mySide].filter(keep).map(map).sort((a, b) => b.min - a.min), opp: r.box[1 - mySide].filter(keep).map(map).sort((a, b) => b.min - a.min), sim: true };
+  }
   const rnd = seededRng("mc-box-" + g.seed);
   const ds = dataSeason(S.label);
   const europe = !!g.eu || S.league === "el";

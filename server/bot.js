@@ -129,6 +129,12 @@ export function createBot(levelKey) {
         };
         later(step, between(...every));
       }
+      if (m.t === "draft:plan") { // the bot picks a game plan
+        later(() => {
+          const pick = (o) => o[Math.floor(Math.random() * o.length)];
+          act({ t: "draft:tactics", tactics: { pace: pick(["slow", "normal", "fast"]), defense: pick(["man", "man", "zone", "press"]), focus: pick(["balanced", "star", "paint", "threes"]) } });
+        }, between(2000, 6000));
+      }
       if (m.t === "end") { bot.guessing = false; bot.connecting = false; bot.gridding = false; later(() => room.chatFrom?.(bot, m.result === "win" ? 6 : 1), 1200); }
       if (m.t === "opp:rematch") later(() => room.rematchFrom?.(bot), 1500);
       if (m.t === "match") { bot.guessing = false; bot.connecting = false; bot.gridding = false; }

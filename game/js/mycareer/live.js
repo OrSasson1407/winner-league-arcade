@@ -12,13 +12,21 @@ import { COURT, QUARTER, clockOf, leadSeries, momentumFacts, playByPlay } from "
 const GAME_SECONDS_PER_SECOND = 52; // 1x: the 40 minutes in about 46 seconds
 
 // ---------------------------------------------------------------- momentum chart
-export function momentumHtml(g, myName, theirName) {
+/** A game's timeline: from the game engine (g.tl) when there is one, otherwise rebuilt from the quarter scores. */
+function timeline(g) {
+  if (g.tl) return g.tl;
   const ev = playByPlay(g);
-  const pts = leadSeries(ev);
+  return { events: ev, lead: leadSeries(ev), length: 4 * QUARTER };
+}
+export function momentumHtml(g, myName, theirName) {
+  const tl = timeline(g);
+  const ev = tl.events.filter((e) => e.pts);
+  const pts = tl.lead;
   const f = momentumFacts(ev);
   const W = 600, H = 150, top = 8, bot = 8, mid = top + (H - top - bot) / 2;
   const maxAbs = Math.max(8, ...pts.map(([, l]) => Math.abs(l)));
-  const sx = (t) => (t / (4 * QUARTER)) * W;
+  const len = tl.length || 4 * QUARTER;
+  const sx = (t) => (t / len) * W;
   const sy = (l) => mid - (l / maxAbs) * ((H - top - bot) / 2);
   let d = `M0 ${sy(0).toFixed(1)}`;
   for (let i = 1; i < pts.length; i++) d += `H${sx(pts[i][0]).toFixed(1)}V${sy(pts[i][1]).toFixed(1)}`;
@@ -42,13 +50,15 @@ export function momentumHtml(g, myName, theirName) {
 /** Hover/touch crosshair with the score at that moment. */
 export function bindMomentum(fig, g, signal) {
   if (!fig) return;
-  const ev = playByPlay(g).filter((e) => e.pts);
+  const tl = timeline(g);
+  const ev = tl.events.filter((e) => e.pts);
+  const len = tl.length || 4 * QUARTER;
   const svg = fig.querySelector("svg"), cross = fig.querySelector(".mo-cross"), tip = fig.querySelector(".mo-tip");
   const at = (t) => { let s = [0, 0]; for (const e of ev) { if (e.t > t) break; s = e.score; } return s; };
   const move = (e) => {
     const r = svg.getBoundingClientRect();
     const fx = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
-    const t = fx * 4 * QUARTER, s = at(t), c = clockOf(t);
+    const t = fx * len, s = at(t), c = clockOf(t);
     cross.setAttribute("x1", fx * 600); cross.setAttribute("x2", fx * 600); cross.setAttribute("visibility", "visible");
     tip.hidden = false;
     tip.innerHTML = `<small>Q${c.q} ${c.text}</small><b>${s[0]}–${s[1]}</b>`;
@@ -61,8 +71,8 @@ export function bindMomentum(fig, g, signal) {
 }
 
 // ---------------------------------------------------------------- live view
-const SPOTS = [[-62, 0], [-48, -42], [-48, 42], [-14, -60], [-14, 60]]; // offense, relative to the basket it attacks
-function courtSvg() {
+export const SPOTS = [[-62, 0], [-48, -42], [-48, 42], [-14, -60], [-14, 60]]; // offense, relative to the basket it attacks
+export function courtSvg() {
   const [rx] = COURT.hoopR, [lx] = COURT.hoopL;
   const half = (hx, dir) => `<rect x="${dir > 0 ? COURT.w - 58 : 0}" y="${75 - 24.5}" width="58" height="49" class="lv-paint"/>
     <path d="M${dir > 0 ? COURT.w : 0} 9H${hx - dir * 22}A67.5 67.5 0 0 ${dir > 0 ? 0 : 1} ${hx - dir * 22} 141H${dir > 0 ? COURT.w : 0}" class="lv-line"/>

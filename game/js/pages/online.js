@@ -26,6 +26,7 @@ import { shareOrDownload } from "../games/draft_card.js";
 import { CHAT, RANKS, cleanCode, rankOf } from "../shared/rating.js";
 import { criterionById, facts } from "../shared/leagueFacts.js";
 import { crestSvg } from "../lib/icons.js";
+import { bindGamePlan, gamePlanHtml, readGamePlan } from "../lib/gamePlan.js";
 
 export const ONLINE_GAMES = {
   hl: { name: "Higher or Lower", ic: "chart", short: "Speed duel",
@@ -899,6 +900,13 @@ export function renderOnline(root, signal, params = []) {
   // ------------------------------------------------------------ All-Time Draft
   function draftMessage(m) {
     if (m.t === "draft:last") { if (G?.t === "draft") lastPickToast(m.last); return; }
+    if (m.t === "draft:plan") { // the draft is over: pick a game plan before the teams play
+      G = { t: "plan", teams: m.teams, deadline: deadlineFrom(m.ms), done: !!m.done, oppDone: false, picked: [6, 6], roundLabel: "Game plan" };
+      sound.play("spin");
+      announce("Draft complete. Choose a game plan: pace, defense and offense. 15 seconds.");
+      return drawMatch();
+    }
+    if (m.t === "draft:plan:opp") { if (G?.t === "plan") { G.oppDone = true; setOppNote("Plan locked"); drawArena(); } return; }
     if (m.t !== "draft:state") return;
     const prevSpin = G?.t === "draft" ? `${G.spin.season}|${G.spin.team_id}` : null;
     G = { t: "draft", ...m, roster: m.spin.keys.map(psByKey).filter(Boolean), used: new Set(m.used), selected: null, deadline: deadlineFrom(m.ms),
@@ -927,7 +935,22 @@ export function renderOnline(root, signal, params = []) {
   }
 
 
+  function drawPlan(a) {
+    a.innerHTML = html`${timerBar(G.deadline, 15000, !G.done)}
+      <div class="card pad og-plan"><span class="bc-strap">Game plan</span>
+        <h2 style="margin:8px 0 4px">Set up your team</h2>
+        <p class="muted" style="margin:0 0 10px">Both teams are drafted. Choose how you play, then the two teams play a full simulated game.${G.oppDone ? ` <b>${esc(M.opp.name)} has locked in.</b>` : ""}</p>
+        ${G.done ? `<p class="og-done">${icon("check", { size: 18, cls: "ic-good" })} Plan locked. <span class="muted">Waiting for ${esc(M.opp.name)}…</span></p>`
+          : html`<div id="plan-box">${gamePlanHtml({})}</div><div class="row" style="justify-content:center;margin-top:10px"><button class="btn primary" id="plan-go">${icon("check", { size: 15 })} Lock in the plan</button></div>`}
+      </div>`;
+    const box = a.querySelector("#plan-box");
+    if (box) {
+      bindGamePlan(box, { signal });
+      a.querySelector("#plan-go").addEventListener("click", () => { if (M.spectator) return; send({ t: "draft:tactics", tactics: readGamePlan(box).tactics }); G.done = true; drawArena(); });
+    }
+  }
   function drawDraft(a) {
+    if (G.t === "plan") return drawPlan(a);
     const myTurn = G.turn === M.seat;
     const [c1, c2] = clubColors(G.spin.team_id);
     a.innerHTML = html`
@@ -1004,7 +1027,7 @@ export function renderOnline(root, signal, params = []) {
   }
 
   function draftGame(d) {
-    const sides = d.teams.map((t, seat) => ({ name: t.name, strength: t.total, drafted: true, id: "online-" + seat, roster: G_SLOTS.map((s) => psByKey(t.slots[s])).filter(Boolean) }));
+    const sides = d.teams.map((t, seat) => ({ name: t.name, strength: t.total, drafted: true, id: "online-" + seat, roster: G_SLOTS.map((s) => psByKey(t.slots[s])).filter(Boolean), tactics: d.game.tactics?.[seat] }));
     return { seed: d.game.seed, home: sides[0], away: sides[1], hs: d.game.hs, as: d.game.as, neutral: true, winner: sides[d.game.winner], label: "Online final" };
   }
   const G_SLOTS = ["PG", "SG", "SF", "PF", "C", SIXTH];

@@ -1,5 +1,6 @@
 // All-Time Draft: spin a real team-season, pick one player, fill PG/SG/SF/PF/C.
 // Modes: solo, vs computer, 2-4 player draft room (snake order, shared spin per round).
+import { bindGamePlan, gamePlanHtml } from "../lib/gamePlan.js";
 import { undoToast } from "../lib/ux.js";
 import { H, PLAYED_SEASONS, POSITIONS, db, isPlayable, pick, playersById, shuffle, teamName } from "../data.js";
 import { esc, fmt1, html, localDate, ratingClass, store, toast, track } from "../ui.js";
@@ -556,6 +557,8 @@ export function renderDraft(root, signal, params, query) {
         <div><h3>${icon("arena")} Simulate a season</h3><p class="muted" style="margin:6px 0 0">Your team${S.teams.length > 1 ? "s join" : " joins"} the real league of a season: double round-robin, then playoffs. Watch games live and open box scores.</p></div>
         <select id="sim-season" class="input" style="max-width:200px"><option value="">Random season</option>${PLAYED_SEASONS.map((s) => `<option>${s}</option>`).join("")}</select>
         <button class="btn primary" id="sim">Play season</button>
+        ${S.teams.some((t) => !t.cpu) ? `<details class="gp-box" ${S.plan ? "open" : ""}><summary>${icon("clipboard", { size: 15 })} Game plan for ${esc(S.teams.find((t) => !t.cpu).name)}</summary>
+          ${gamePlanHtml(S.plan || {}, planPlayers(S.teams.find((t) => !t.cpu)))}</details>` : ""}
       </div>
       <div class="row" style="justify-content:center;margin-top:24px">
         ${ch ? `<button class="btn" id="ch-share">${icon("users", { size: 16 })} Copy challenge result</button>` : ""}
@@ -572,6 +575,8 @@ export function renderDraft(root, signal, params, query) {
       const how = await shareOrDownload(drawTeamCard(t, teamSummary(t)), `all-time-draft-${t.name.replace(/\W+/g, "-").toLowerCase()}.png`);
       toast(how === "shared" ? "Shared!" : "Team card downloaded");
     }, { signal }));
+    const gpBox = root.querySelector(".gp-box");
+    if (gpBox) bindGamePlan(gpBox, { signal, onChange: (p) => { S.plan = p; } });
     root.querySelector("#sim").addEventListener("click", () => {
       const season = root.querySelector("#sim-season").value || pick(PLAYED_SEASONS);
       showSeason(season);
@@ -579,7 +584,8 @@ export function renderDraft(root, signal, params, query) {
   }
 
   function showSeason(season) {
-    const drafted = S.teams.map((t) => ({ name: t.name, strength: teamSummary(t).total, roster: t.slotList.map((p) => t.slots[p].ps) }));
+    const drafted = S.teams.map((t) => ({ name: t.name, strength: teamSummary(t).total, roster: t.slotList.map((p) => t.slots[p].ps),
+      ...(!t.cpu && S.plan ? { tactics: S.plan.tactics, minutes: planMinutes(t, S.plan.minutes) } : {}) }));
     const sim = simulateSeason(season, drafted);
     const humanTeam = (team) => team.drafted && !S.teams[Number(team.id.split("_")[1])].cpu;
     if (humanTeam(sim.champion)) { confetti(3200); sound.play("win"); }
@@ -648,6 +654,16 @@ export function renderDraft(root, signal, params, query) {
     root.querySelector("#other").addEventListener("click", () => showSeason(pick(PLAYED_SEASONS)), { signal });
     root.querySelector("#back").addEventListener("click", results, { signal });
   }
+
+  // the minutes plan uses the engine's player ids (the same player drafted twice gets "#1")
+  function planPlayers(t) {
+    const seen = new Map();
+    return t.slotList.map((slot) => t.slots[slot]?.ps).filter(Boolean).map((ps) => {
+      const n = seen.get(ps.player_id) || 0; seen.set(ps.player_id, n + 1);
+      return { id: n ? `${ps.player_id}#${n}` : ps.player_id, name: playersById.get(ps.player_id)?.name ?? ps.player_id, pos: ps.position || "", mpg: ps.stats?.mpg ?? 20 };
+    });
+  }
+  function planMinutes(t, minutes) { return minutes && Object.values(minutes).some((v) => v > 0) ? minutes : null; }
 
   if (ch) startGame(); else setup();
 }

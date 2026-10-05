@@ -50,6 +50,7 @@ const routes = {
   about: lazy(() => import("./pages/about.js"), "renderAbout"),
   privacy: lazy(() => import("./pages/about.js"), "renderPrivacy"),
   euroleague: lazy(() => import("./pages/euroleague.js"), "renderEuroleague"),
+  matchup: lazy(() => import("./games/matchup.js"), "renderMatchup"),
 };
 const loaded = new Map(); // key -> render function, once its module is in
 function loadRoute(key) {
@@ -64,10 +65,10 @@ function prefetch(e) {
   if (a) loadRoute(keyOf(a.getAttribute("href"))).catch(() => {});
 }
 for (const ev of ["pointerover", "focusin", "touchstart"]) document.addEventListener(ev, prefetch, { passive: true });
-const GAME_ROUTES = new Set(["draft", "guess", "higher-lower", "career", "connections", "grid", "mycareer"]);
+const GAME_ROUTES = new Set(["draft", "guess", "higher-lower", "career", "connections", "grid", "mycareer", "matchup"]);
 // which top-level section each route belongs to (for nav highlighting)
 const SECTION = { "": "home", games: "games", draft: "games", guess: "games", "higher-lower": "games", career: "games",
-  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me", about: "home", privacy: "home", euroleague: "clubs" };
+  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me", about: "home", privacy: "home", euroleague: "clubs", matchup: "games" };
 
 const TABS = [["home", "#/", "home", "Home"], ["games", "#/games", "games", "Games"], ["players", "#/players", "players", "Players"], ["online", "#/online", "globe", "Online"],
   ["clubs", "#/clubs", "shield", "Clubs"], ["me", "#/me", "user", "Me"]];

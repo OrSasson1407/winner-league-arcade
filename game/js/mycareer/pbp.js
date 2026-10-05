@@ -103,8 +103,11 @@ export function momentumFacts(events) {
   return { bigUs, bigThem, changes, ties };
 }
 
+/** Quarter (5, 6… for overtimes) and the time left in it. */
 export const clockOf = (t) => {
-  const q = Math.min(3, Math.floor(t / QUARTER));
-  const left = Math.max(0, (q + 1) * QUARTER - t);
-  return { q: q + 1, text: `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}` };
+  let q, left;
+  if (t < 4 * QUARTER) { q = Math.min(3, Math.floor(t / QUARTER)); left = (q + 1) * QUARTER - t; q += 1; }
+  else { const o = Math.floor((t - 4 * QUARTER) / 300); q = 5 + o; left = 4 * QUARTER + (o + 1) * 300 - t; }
+  left = Math.max(0, left);
+  return { q, ot: q > 4, label: q > 4 ? `OT${q - 4 > 1 ? q - 4 : ""}` : `Q${q}`, text: `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, "0")}` };
 };

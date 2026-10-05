@@ -8,6 +8,7 @@ import { SIXTH, SLOT_WEIGHT, slotValue, teamSummary } from "../game/js/shared/dr
 import { decoys, eligible } from "../game/js/shared/careerLogic.js";
 import { COLS, attrs, compare, pool as guessPool } from "../game/js/shared/guessLogic.js";
 import { playGame } from "../game/js/games/draft_sim.js";
+import { DEFAULT_TACTICS, TACTICS } from "../game/js/shared/gameSim.js";
 import { answersFor, criterionById, facts, makeConnections, makeGrid, rarity } from "../game/js/shared/leagueFacts.js";
 
 export const GAMES = ["hl", "guess", "career", "draft", "conn", "grid"];
@@ -178,7 +179,7 @@ class GuessDuel {
 
 // ---------------------------------------------------------------- Head-to-head draft
 const DRAFT_SLOTS = ["PG", "SG", "SF", "PF", "C", SIXTH];
-const DRAFT_MS = 30000, DRAFT_RESPINS = 1;
+const DRAFT_MS = 30000, DRAFT_RESPINS = 1, PLAN_MS = 15000;
 
 function draftRoster(teamId, season) {
   const best = new Map();
@@ -250,6 +251,15 @@ class DraftDuel {
     if (best) this.place(seat, best.ps, best.slot, true);
   }
   onMessage(seat, m) {
+    if (this.planning) { // the game plan, after the draft
+      if (m.t !== "draft:tactics" || this.planning.done[seat]) return;
+      const tac = { ...DEFAULT_TACTICS };
+      for (const k of Object.keys(TACTICS)) if (TACTICS[k][m.tactics?.[k]]) tac[k] = m.tactics[k];
+      this.planning.tactics[seat] = tac; this.planning.done[seat] = true;
+      this.room.send(1 - seat, { t: "draft:plan:opp" });
+      if (this.planning.done.every(Boolean)) this.playFinal();
+      return;
+    }
     if (this.over || seat !== this.turn()) return;
     if (m.t === "draft:respin") {
       const t = this.teams[seat];
@@ -281,24 +291,38 @@ class DraftDuel {
     const s = this.turn(), at = this.at, round = this.round;
     this.room.timer(() => { if (this.round === round && this.at === at) this.autoPick(s); }, DRAFT_MS + 500);
   }
+  /** The draft is done: both sides pick a game plan, then the teams play. */
   end() {
+    this.room.clearTimers();
+    this.planning = { tactics: [{ ...DEFAULT_TACTICS }, { ...DEFAULT_TACTICS }], done: [false, false], at: Date.now() };
+    this.room.broadcast(this.planMsg());
+    this.room.timer(() => this.playFinal(), PLAN_MS + 500);
+  }
+  planMsg() { return { t: "draft:plan", ms: Math.max(0, PLAN_MS - (Date.now() - this.planning.at)), teams: this.stateMsg().teams }; }
+  playFinal() {
+    if (this.over) return;
     this.over = true;
     this.room.clearTimers();
+    const tactics = this.planning.tactics;
+    this.planning = null;
     const names = this.room.names();
     const sums = this.teams.map((t) => teamSummary({ slots: t.slots, slotList: DRAFT_SLOTS }));
     const sides = this.teams.map((t, seat) => ({
       name: names[seat], strength: sums[seat].total, drafted: true, id: "online-" + seat,
-      roster: DRAFT_SLOTS.map((s) => t.slots[s].ps),
+      roster: DRAFT_SLOTS.map((s) => t.slots[s].ps), tactics: tactics[seat],
     }));
     const g = playGame(sides[0], sides[1], this.rnd, true);
     const winner = g.winner === sides[0] ? 0 : 1;
     this.room.finish({ winner, scores: [g.hs, g.as], reason: "done", detail: {
       teams: this.teams.map((t, seat) => ({ name: names[seat], slots: Object.fromEntries(DRAFT_SLOTS.map((s) => [s, psKey(t.slots[s].ps)])),
         avg: sums[seat].avg, chem: sums[seat].chem, total: sums[seat].total, grade: sums[seat].grade, label: sums[seat].label, links: sums[seat].links.map((l) => l.text) })),
-      game: { seed: g.seed, hs: g.hs, as: g.as, winner },
+      game: { seed: g.seed, hs: g.hs, as: g.as, winner, tactics, ot: g.ot },
     } });
   }
-  resync(seat) { if (!this.over && this.spin) this.room.send(seat, this.stateMsg()); }
+  resync(seat) {
+    if (this.planning) return this.room.send(seat, { ...this.planMsg(), done: this.planning.done[seat] });
+    if (!this.over && this.spin) this.room.send(seat, this.stateMsg());
+  }
 }
 
 

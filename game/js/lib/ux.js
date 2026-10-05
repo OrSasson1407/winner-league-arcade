@@ -52,7 +52,7 @@ export function showError(detail = "", { retry = null } = {}) {
 
 // ---------------------------------------------------------------- breadcrumbs
 const GAME_NAMES = { draft: "All-Time Draft", guess: "Guess the Player", "higher-lower": "Higher or Lower", career: "Career Path", connections: "Connections",
-  grid: "The Grid", mycareer: "My Career", daily: "Daily challenges", challenge: "Challenge a friend" };
+  grid: "The Grid", mycareer: "My Career", daily: "Daily challenges", challenge: "Challenge a friend", matchup: "Single game" };
 /** Trail for a route, or null for top-level pages. Each item: [label, href|null]. */
 export function crumbsFor(key, params = []) {
   const home = ["Home", "#/"];

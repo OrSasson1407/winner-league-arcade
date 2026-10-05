@@ -4,9 +4,8 @@
 // real players that season. Box scores are generated per game from each player's real
 // per-game profile, deterministically from the game's seed (same game = same box score).
 import { H, isPlayable, playersById, seededRng } from "../data.js";
+import { DEFAULT_TACTICS, profileFromSeason, simulateGame } from "../shared/gameSim.js";
 
-const HOME_EDGE = 1.5;
-const SCALE = 4; // rating points per "e" of win odds
 
 function realRoster(season, teamId) {
   const best = new Map();
@@ -27,16 +26,27 @@ export function realTeamStrength(season, teamId, roster = realRoster(season, tea
 }
 
 let gameSeq = 0;
-export function playGame(home, away, rnd, neutral = false) {
-  const edge = neutral ? 0 : HOME_EDGE;
-  const p = 1 / (1 + Math.exp(-((home.strength + edge) - away.strength) / SCALE));
-  const homeWins = rnd() < p;
-  const winner = homeWins ? home : away;
-  const winScore = Math.round(76 + rnd() * 18 + (winner.strength - 82) * 0.35);
-  const margin = 1 + Math.round(rnd() * rnd() * 24);
-  const [hs, as] = homeWins ? [winScore, winScore - margin] : [winScore - margin, winScore];
-  return { id: ++gameSeq, seed: Math.floor(rnd() * 1e9), home, away, hs, as, neutral, winner: homeWins ? home : away };
+/** A team for the game engine: its players (real per-game numbers), strength, game plan and minutes plan. */
+export function simTeam(t) {
+  if (t._sim) return t._sim;
+  const players = (t.roster || []).filter(Boolean).slice(0, 10).map((ps) => profileFromSeason(ps, playersById.get(ps.player_id)?.name ?? ps.player_id));
+  // the same person drafted twice (different seasons) needs distinct ids in the box score
+  const seen = new Map();
+  players.forEach((p) => { const n = seen.get(p.id) || 0; seen.set(p.id, n + 1); if (n) p.id = `${p.id}#${n}`; });
+  return (t._sim = { name: t.name, id: t.id, strength: t.strength, players, tactics: { ...DEFAULT_TACTICS, ...(t.tactics || {}) }, minutes: t.minutes || null });
 }
+/** Run (or re-run) a game through the engine. The same seed and teams always give the same game. */
+export function runGame(home, away, seed, neutral, events = false) {
+  return simulateGame(simTeam(home), simTeam(away), { rnd: seededRng("g-" + seed), neutral, events });
+}
+export function playGame(home, away, rnd, neutral = false) {
+  const seed = Math.floor(rnd() * 1e9);
+  const r = runGame(home, away, seed, neutral);
+  const [hs, as] = r.score;
+  return { id: ++gameSeq, seed, home, away, hs, as, neutral, winner: hs > as ? home : away, ot: r.ot, quarters: r.quarters };
+}
+/** The full game (events, box score, momentum) for the game screen. */
+export const simOf = (game) => runGame(game.home, game.away, game.seed, game.neutral, true);
 
 function series(hi, lo, bestOf, rnd, label) {
   const need = Math.ceil(bestOf / 2);
@@ -96,61 +106,9 @@ export function simulateSeason(season, drafted, rnd = Math.random) {
 }
 
 // ---------------------------------------------------------------- box scores
-function allocate(total, weights) {
-  const sum = weights.reduce((a, b) => a + b, 0) || 1;
-  const raw = weights.map((w) => (total * w) / sum);
-  const out = raw.map(Math.floor);
-  let left = total - out.reduce((a, b) => a + b, 0);
-  raw.map((r, i) => [r - Math.floor(r), i]).sort((a, b) => b[0] - a[0]).forEach(([, i]) => { if (left > 0) { out[i]++; left--; } });
-  return out;
-}
-
-function teamLines(team, points, rnd) {
-  const roster = team.roster.slice(0, 9);
-  const st = (ps, k) => ps.stats?.[k] ?? 0;
-  const mins = allocate(200, roster.map((ps) => Math.max(4, st(ps, "mpg")) * (0.85 + rnd() * 0.3)));
-  const pts = allocate(points, roster.map((ps, i) => Math.max(0.5, st(ps, "ppg")) * (0.5 + rnd()) * (mins[i] / Math.max(1, st(ps, "mpg") || mins[i]))));
-  const rebT = Math.round(roster.reduce((s, ps) => s + st(ps, "rpg"), 0) * (0.8 + rnd() * 0.4));
-  const astT = Math.round(roster.reduce((s, ps) => s + st(ps, "apg"), 0) * (0.8 + rnd() * 0.4));
-  const reb = allocate(rebT, roster.map((ps) => Math.max(0.3, st(ps, "rpg")) * (0.5 + rnd())));
-  const ast = allocate(astT, roster.map((ps) => Math.max(0.2, st(ps, "apg")) * (0.5 + rnd())));
-  return roster.map((ps, i) => ({
-    player_id: ps.player_id, name: playersById.get(ps.player_id)?.name ?? ps.player_id,
-    pos: ps.position || "", min: mins[i], pts: pts[i], reb: reb[i], ast: ast[i],
-  })).sort((a, b) => b.min - a.min);
-}
-
-/** Deterministic box score for a simulated game. */
+/** Box score for a simulated game, from the game engine (deterministic: the same game every time). */
 export function boxScore(game) {
-  const rnd = seededRng("box-" + game.seed);
-  return { home: teamLines(game.home, game.hs, rnd), away: teamLines(game.away, game.as, rnd) };
-}
-
-/**
- * Play-by-play events for the live view, consistent with the box score:
- * each player's points are split into 3s, 2s and free throws, spread over 40 minutes.
- */
-export function playByPlay(game, box) {
-  const rnd = seededRng("pbp-" + game.seed);
-  const events = [];
-  for (const side of ["home", "away"]) {
-    const lines = box[side];
-    const assisters = lines.flatMap((l) => Array(l.ast).fill(l.name));
-    for (const l of lines) {
-      let p = l.pts;
-      while (p > 0) {
-        let v = p >= 3 && rnd() < 0.3 ? 3 : p >= 2 ? 2 : 1;
-        if (v === 1 && p >= 2 && rnd() < 0.5) v = 2;
-        const t = Math.floor(rnd() * 2399) + 1;
-        let text = v === 3 ? `${l.name} hits a three` : v === 2 ? `${l.name} scores${rnd() < 0.25 ? " on a layup" : rnd() < 0.3 ? " with a dunk" : ""}` : `${l.name} makes a free throw`;
-        if (v > 1 && assisters.length && rnd() < 0.55) {
-          const a = assisters.splice(Math.floor(rnd() * assisters.length), 1)[0];
-          if (a !== l.name) text += ` (assist ${a})`;
-        }
-        events.push({ t, side, v, text });
-        p -= v;
-      }
-    }
-  }
-  return events.sort((a, b) => a.t - b.t);
+  const r = runGame(game.home, game.away, game.seed, game.neutral);
+  const lines = (side) => r.box[side].filter((l) => l.min > 0).map((l) => ({ ...l, player_id: l.id.split("#")[0] })).sort((a, b) => b.min - a.min);
+  return { home: lines(0), away: lines(1) };
 }

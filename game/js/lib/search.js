@@ -22,6 +22,7 @@ const PAGES = [
   { label: "My Career", sub: "Create a player and play a whole career", href: "#/mycareer", ic: "jersey", words: "my career create player academy contract mvp hall of fame mycareer" },
   { label: "Connections", sub: "Four hidden groups of four players", href: "#/connections", ic: "link", words: "connections groups four puzzle" },
   { label: "The Grid", sub: "3×3 board of clubs and achievements", href: "#/grid", ic: "games", words: "grid immaculate 3x3 squares board" },
+  { label: "Single game", sub: "Any two real teams, a full simulated game", href: "#/matchup", ic: "whistle", words: "single game matchup simulate versus play teams exhibition" },
   { label: "Daily challenges", sub: "Four puzzles a day, keep your streak", href: "#/daily", ic: "calendar", words: "daily challenge streak today puzzle" },
   { label: "Today in the league", sub: "Birthdays and season flashbacks", href: "#/today", ic: "star", words: "today birthday born history flashback on this day" },
   { label: "All-time records", sub: "Career totals and single-season bests", href: "#/records", ic: "trophy", words: "records leaders all time most points career totals best season stats leaderboard" },

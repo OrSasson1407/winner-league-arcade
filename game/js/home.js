@@ -49,9 +49,11 @@ export const GAMES = {
     preview: () => `<div class="pv-mc"><b>16</b><i></i><b>22</b><i></i><b>30</b><i></i><b>35</b></div><span class="pv-caption">ACADEMY → LEGEND</span>` },
   grid: { href: "#/grid", title: "The Grid", text: "A 3×3 board of clubs and achievements. Name a player for every square who fits both. Rarer answers score more.",
     preview: () => `<div class="pv-grid">${"<i></i>".repeat(9)}</div><span class="pv-caption">3 × 3</span>` },
+  matchup: { href: "#/matchup", title: "Single game", text: "Any two real teams from any seasons play a full game, possession by possession. Set the game plan and watch it live.",
+    preview: () => `<div class="pv-vs"><b>MTA 2014</b><span>VS</span><b>HJ 2015</b></div><span class="pv-caption">Tip-off</span>` },
 };
 
-const GAME_ICONS = { draft: "trophy", guess: "search", "higher-lower": "chart", career: "arrowRight", connections: "link", grid: "games", mycareer: "jersey" };
+const GAME_ICONS = { draft: "trophy", guess: "search", "higher-lower": "chart", career: "arrowRight", connections: "link", grid: "games", mycareer: "jersey", matchup: "whistle" };
 
 /** The four game tiles (home page + Games page). */
 export function gameTilesHtml() {

@@ -19,6 +19,8 @@ import { badgeMedals, bracket, contractHtml, gauge, radar, scheduleGrid, standin
 import { clubThemeVars } from "../lib/clubTheme.js";
 import { MOCK_NOTE, elLoaded, loadEuroleague } from "../euroleague.js";
 import { drawCareerCard } from "../mycareer/shareCard.js";
+import { keysFor, openGameView } from "../lib/gameView.js";
+import { teamPreview } from "../shared/gameSim.js";
 import { shareOrDownload } from "../games/draft_card.js";
 import { bindMomentum, momentumHtml, watchGame } from "../mycareer/live.js";
 import { careerIntro, clearFlashes, newsFlash } from "../mycareer/flash.js";
@@ -429,13 +431,43 @@ export async function renderMyCareer(root, signal) {
         <span class="mc-led-dash">–</span>
         <div class="mc-led-team"><b class="led" data-count="${g.their}">${g.their}</b><span>${esc(teamName(opp))}</span></div>
       </div>
-      <div class="mc-led-q">${[0, 1, 2, 3].map((i) => `<span>Q${i + 1} <b>${g.q[0][i]}-${g.q[1][i]}</b></span>`).join("")}</div>
-      ${momentumHtml(g, teamName(me), teamName(opp))}
-      <div class="mc-line">${L.injured ? "Out injured" : L.dnp ? "Did not play (coach's decision)" : `<b>${esc(C.name)}</b> ${L.min} min · <b>${L.pts} pts</b> · ${L.reb} reb · ${L.ast} ast · ${L.stl} stl · ${L.blk} blk · ${L.fgm}/${L.fga} FG · ${L.tpm}/${L.tpa} 3P · ${L.pf ?? 0} PF${L.fouledOut ? " · <b>fouled out</b>" : ""}`}</div>
+      <div class="mc-led-q">${g.q[0].map((_, i) => `<span>${i < 4 ? `Q${i + 1}` : `OT${i - 3 > 1 ? i - 3 : ""}`} <b>${g.q[0][i]}-${g.q[1][i]}</b></span>`).join("")}</div>
+      ${momentumHtml(withTimeline(g), teamName(me), teamName(opp))}
+      <div class="mc-line">${L.injured ? "Out injured" : L.dnp ? "Did not play (coach's decision)" : `<b>${esc(C.name)}</b> ${L.min} min · <b>${L.pts} pts</b> · ${L.reb} reb · ${L.ast} ast · ${L.stl} stl · ${L.blk} blk · ${L.fgm}/${L.fga} FG · ${L.tpm}/${L.tpa} 3P${L.tov != null ? ` · ${L.tov} TO` : ""} · ${L.pf ?? 0} PF${L.pm != null ? ` · ${L.pm > 0 ? "+" : ""}${L.pm}` : ""}${L.fouledOut ? " · <b>fouled out</b>" : ""}`}</div>
       <button class="btn" id="mc-box">${icon("chart", { size: 15 })} Box score</button>
     </div>`;
   }
+  /** Games played through the game engine carry their real timeline (for the momentum chart). */
+  function withTimeline(g) {
+    if (!g.sim) return g;
+    const r = E.simFor(C, C.cur, g);
+    const flip = !g.home; // the chart is drawn from your side
+    return { ...g, tl: { events: r.events.map((e) => (flip ? { ...e, score: [e.score[1], e.score[0]] } : e)), lead: r.lead.map(([t, l]) => [t, flip ? -l : l]), length: r.length } };
+  }
+  /** The shared game screen for one of your games (pre-game, live, final) from the game engine. */
+  function gameScreen(g, start, onClose) {
+    const S = C.cur, r = E.simFor(C, S, g);
+    const mine = { name: teamName(S.team), id: S.team }, theirs = { name: teamName(g.opp), id: g.opp };
+    const [home, away] = g.home ? [mine, theirs] : [theirs, mine];
+    const link = (l) => (l.id === "me" ? `<b>${esc(C.name)}</b>` : playersById.has(l.id) ? `<button class="link-name" data-profile="${l.id}">${esc(l.name)}</button>` : `<a class="link-name" href="#/euroleague/player/${esc(l.id)}">${esc(l.name)}</a>`);
+    let pre = null;
+    if (start === "pregame") {
+      // the preview shows the season numbers of the two rosters, not this game's
+      pre = { previews: [0, 1].map((side) => previewOf(side === (g.home ? 0 : 1) ? S.team : g.opp)), lineups: r.box.map((lines) => lines.filter((l) => l.starter).map((l) => ({ name: l.id === "me" ? C.name : l.name, pos: l.pos }))), tactics: [{}, {}] };
+      pre.keys = keysFor(home, away, pre);
+    }
+    return openGameView({ home, away, sim: r, label: g.label || "", pre, start, meId: "me", link, celebrate: g.won ? (g.home ? 0 : 1) : null, onClose });
+  }
+  function previewOf(tid) {
+    const europe = C.cur.league === "el";
+    const rows = (europe ? [] : E.rosterOf(E.dataSeason(C.cur.label), tid)).slice(0, 9);
+    if (!rows.length) return { rating: "–", pts: "–", reb: "–", ast: "–", three: "–", star: null };
+    const t = { players: rows.map((ps) => ({ id: ps.player_id, name: E.playerName(ps.player_id), pos: ps.position, rating: ps.rating_mock, mpg: ps.stats.mpg || 1,
+      use: (ps.stats.ppg || 0) / (ps.stats.mpg || 1), reb: (ps.stats.rpg || 0) / (ps.stats.mpg || 1), ast: (ps.stats.apg || 0) / (ps.stats.mpg || 1), s3: (ps.stats.fg3_pct ?? 0) > 5 ? 0.33 : 0.05 })) };
+    return teamPreview(t);
+  }
   function openBox(g) {
+    if (g.sim) return gameScreen(g, "final");
     const b = E.boxScore(C, C.cur, g);
     const tbl = (name, lines, score) => `<div class="box-team"><div class="row"><b>${esc(name)}</b><span class="spacer"></span><b class="led">${score}</b></div>
       <table class="stat-table box"><thead><tr><th>Player</th><th></th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead><tbody>
@@ -506,6 +538,7 @@ export async function renderMyCareer(root, signal) {
       const b = E.boxScore(C, S, g);
       const w = (l) => l.filter((x) => !x.me && x.min > 0).map((x) => ({ name: x.name, w: x.min }));
       save(); // the result is already decided: watching it doesn't change anything
+      if (g.sim) return gameScreen(g, "pregame", () => afterPlay(out));
       return watchGame({ C, S, g, names: { us: w(b.team), them: w(b.opp) }, jersey: av().num ?? 7, onDone: () => afterPlay(out) });
     }
     afterPlay(out);
