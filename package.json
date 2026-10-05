@@ -7,15 +7,19 @@
   "scripts": {
     "start": "node server/index.js",
     "build:rtl": "node game/tools/build_rtl.mjs",
-    "i18n:missing": "node game/tools/extract_ui_strings.mjs --missing"
+    "i18n:missing": "node game/tools/extract_ui_strings.mjs --missing",
+    "test": "node server/test/db.test.mjs && node server/test/db.pg.test.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "pg": "^8.23.1",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
     "acorn": "^8.19.0",
     "axe-core": "^4.13.0",
     "rtlcss": "^4.3.0"

@@ -1,6 +1,8 @@
 // Winner League Arcade server: serves the game (static files) and runs online 1v1 at /ws.
 //   npm install && npm start            → http://localhost:5173/game/
-// Environment: PORT (default 5173), HOST (default 127.0.0.1 locally, 0.0.0.0 when PORT is set by a host).
+// Environment: PORT (default 5173), HOST (default 127.0.0.1 locally, 0.0.0.0 when PORT is set by a host),
+// DATABASE_URL (Postgres; without it the server keeps its data in server/data), WLA_SECRET (signs the
+// players' record copies and unlocks the admin endpoints; set it on a host so it survives restarts).
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,8 +12,9 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { GAMES, createEngine } from "./duels.js";
 import { BOT_LEVELS, createBot } from "./bot.js";
-import { addWeekly, applyResult, findByCode, leaderboard, recordFor, recordMsg, setProfile, weekId, weekOf } from "./records.js";
-import { MAX_MEMBERS, cleanLeagueId, createLeague, getLeague, joinLeague, leaveLeague, syncLeague } from "./leagues.js";
+import { addWeekly, applyResult, findByCode, initRecords, leaderboard, recordFor, recordMsg, saveRecords, secretSource, setProfile, weekId, weekOf } from "./records.js";
+import { MAX_MEMBERS, cleanLeagueId, createLeague, getLeague, initLeagues, joinLeague, leaveLeague, saveLeagues, syncLeague } from "./leagues.js";
+import { openStore } from "./db.js";
 import { CHAT, cleanCode, friendCode, matchRange } from "../game/js/shared/rating.js";
 import { cleanAv } from "../game/js/lib/avatarArt.js";
 
@@ -27,10 +30,13 @@ const TEXT = new Set([".html", ".js", ".mjs", ".css", ".json", ".svg", ".txt", "
 const ALLOWED = ["game", "src"]; // only the game and its data helpers are public
 const gzCache = new Map(); // file -> { mtime, body }
 
+// ---------------------------------------------------------------- storage
+let store = null; // see db.js: Postgres with DATABASE_URL, else files in server/data
+const started = Date.now();
+
 // ---------------------------------------------------------------- feedback ("Send feedback" in the app)
-// Stored in server/data/feedback.jsonl (when the host keeps the disk) and printed to the server log.
+// Saved to the store and printed to the server log.
 // Read them with GET /api/feedback and the header "x-admin-key: <WLA_SECRET>".
-const FEEDBACK_FILE = path.join(ROOT, "server", "data", "feedback.jsonl");
 const fbHits = new Map(); // ip -> [timestamps]
 const fbRecent = [];
 function feedback(req, res) {
@@ -38,9 +44,8 @@ function feedback(req, res) {
   if (req.method === "GET") {
     const key = req.headers["x-admin-key"];
     if (!process.env.WLA_SECRET || key !== process.env.WLA_SECRET) return json(403, { error: "forbidden" });
-    let rows = fbRecent;
-    try { rows = fs.readFileSync(FEEDBACK_FILE, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)); } catch {}
-    return json(200, rows.slice(-300));
+    store.listFeedback(300).then((rows) => json(200, rows), () => json(200, fbRecent.slice(-300)));
+    return;
   }
   if (req.method !== "POST") return json(405, { error: "method" });
   const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
@@ -60,7 +65,7 @@ function feedback(req, res) {
     const row = { at: new Date(now).toISOString(), kind, message, tech: cleanText(d.tech, 1500) };
     fbRecent.push(row); if (fbRecent.length > 300) fbRecent.shift();
     console.log("[feedback]", JSON.stringify(row));
-    fs.mkdir(path.dirname(FEEDBACK_FILE), { recursive: true }, () => fs.appendFile(FEEDBACK_FILE, JSON.stringify(row) + "\n", () => {}));
+    store.addFeedback(row).catch((e) => console.error("[db] saving feedback failed:", e.message));
     json(200, { ok: true });
   });
 }
@@ -71,6 +76,11 @@ const server = http.createServer((req, res) => {
   if (url === "/" || url === "/game") { res.writeHead(302, { Location: "/game/" }).end(); return; }
   if (url === "/health") { res.writeHead(200, { "Content-Type": "text/plain" }).end("ok"); return; }
   if (url === "/api/feedback") { feedback(req, res); return; }
+  if (url === "/api/status") { // what the server runs on (nothing secret): for checking a deploy
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" })
+      .end(JSON.stringify({ ok: true, storage: store?.kind ?? "starting", secret: secretSource, uptime: Math.round((Date.now() - started) / 1000), online: [...clients.values()].filter((c) => c.ws).length }));
+    return;
+  }
   let file = path.normalize(path.join(ROOT, url));
   const rel = path.relative(ROOT, file);
   if (rel.startsWith("..") || path.isAbsolute(rel) || !ALLOWED.includes(rel.split(path.sep)[0])) { res.writeHead(404).end("Not found"); return; }
@@ -461,6 +471,26 @@ setInterval(() => {
   for (const [code, inv] of invites) if (inv.at < old) invites.delete(code);
 }, 25000);
 
+// save what changed before the process stops (a deploy, Ctrl+C)
+let stopping = false;
+for (const sig of ["SIGINT", "SIGTERM"]) process.once(sig, async () => {
+  if (stopping) return;
+  stopping = true;
+  const t = setTimeout(() => process.exit(0), 5000); // never hang a deploy
+  try { await Promise.all([saveRecords(), saveLeagues()]); await store?.close(); } catch {}
+  clearTimeout(t);
+  process.exit(0);
+});
+
+// the saved data is loaded before the first connection
+try {
+  store = await openStore();
+  const [nr, nl] = await Promise.all([initRecords(store), initLeagues(store)]);
+  console.log(`[db] ${store.kind}: ${nr} records, ${nl} leagues${secretSource === "env" ? "" : " · WLA_SECRET not set: record tokens use a local secret"}`);
+} catch (e) {
+  console.error("[db] could not open the database:", e.message);
+  process.exit(1); // better a failed deploy than a server that silently forgets everything
+}
 server.listen(PORT, HOST, () => {
   console.log(`Winner League Arcade: http://localhost:${PORT}/game/  (online play at ws://…/ws, close this window to stop)`);
 });

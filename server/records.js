@@ -1,8 +1,8 @@
 // Online records: ELO per game, wins/losses, win streak, and the leaderboard.
-// There is no database: records live in memory (saved to server/data/records.json when the disk
-// keeps it), and every player also keeps a copy as a token signed with the server's secret.
-// After a restart (e.g. a free host waking up) the player's browser sends the token back and the
-// record is restored; the signature means it can't be edited in the browser.
+// Records live in memory and are saved to the store (Postgres with DATABASE_URL, else server/data,
+// see db.js). Every player also keeps a copy as a token signed with the server's secret (WLA_SECRET):
+// if the server ever forgets a record, the player's browser sends the token back and it is restored;
+// the signature means it can't be edited in the browser.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 import { RATED_GAMES, START_ELO, eloUpdate, friendCode, rankOf } from "../game/js/shared/rating.js";
 
 const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "data");
-const FILE = path.join(DIR, "records.json");
+/** Where the signing secret came from: "env" (stable across restarts) or "local" (a file, lost with the disk). */
+export const secretSource = process.env.WLA_SECRET ? "env" : "local";
 
 function loadSecret() {
   if (process.env.WLA_SECRET) return process.env.WLA_SECRET;
@@ -24,7 +25,8 @@ const SECRET = loadSecret();
 const sign = (body) => crypto.createHmac("sha256", SECRET).update(body).digest("base64url");
 
 const records = new Map(); // sid -> record
-let dirty = false;
+const dirty = new Set(); // sids changed since the last save
+let store = null;
 
 export function blankRecord(sid) {
   const per = (v) => Object.fromEntries(RATED_GAMES.map((g) => [g, v]));
@@ -72,7 +74,7 @@ function readToken(token, sid) {
 export function recordFor(sid, token) {
   let rec = records.get(sid);
   const fromToken = token ? readToken(token, sid) : null;
-  if (fromToken && (!rec || fromToken.n > rec.n)) { rec = { ...blankRecord(sid), ...fromToken, profile: rec?.profile ?? null }; records.set(sid, rec); dirty = true; }
+  if (fromToken && (!rec || fromToken.n > rec.n)) { rec = { ...blankRecord(sid), ...fromToken, profile: rec?.profile ?? null }; records.set(sid, rec); dirty.add(sid); }
   if (!rec) { rec = blankRecord(sid); records.set(sid, rec); }
   return normalize(rec);
 }
@@ -85,15 +87,15 @@ export function addWeekly(recs, winner) {
     else if (winner === seat) { r.wk.w++; r.wk.pts += 3; }
     else r.wk.l++;
     r.ts = Date.now();
+    dirty.add(r.sid);
   });
-  dirty = true;
 }
 /** This week's numbers for a record (zeros once a new week starts). */
 export const weekOf = (rec) => (rec?.wk?.id === weekId() ? rec.wk : blankWeek());
 
 export function setProfile(rec, profile) {
   rec.profile = { ...profile, code: friendCode(rec.sid) };
-  dirty = true;
+  dirty.add(rec.sid);
 }
 
 /** Apply a rated result. winner: 0 | 1 | null (draw). Returns the rating change per seat. */
@@ -110,8 +112,8 @@ export function applyResult(game, recs, winner) {
     else if (winner === seat) { r.w[game]++; r.streak++; r.best = Math.max(r.best, r.streak); }
     else { r.l[game]++; r.streak = 0; }
     r.n++; r.ts = Date.now();
+    dirty.add(r.sid);
   });
-  dirty = true;
   return [na - before[0], nb - before[1]];
 }
 
@@ -144,15 +146,23 @@ export function findByCode(code) {
   return null;
 }
 
-// ---------------------------------------------------------------- persistence (best effort)
-try {
-  const saved = JSON.parse(fs.readFileSync(FILE, "utf8"));
-  for (const r of saved) if (r?.sid) records.set(r.sid, normalize({ ...blankRecord(r.sid), ...r }));
-} catch {}
-export function saveRecords() {
-  if (!dirty) return;
-  dirty = false;
-  try { fs.mkdirSync(DIR, { recursive: true }); fs.writeFileSync(FILE, JSON.stringify([...records.values()].filter((r) => r.n > 0 || r.profile))); } catch {}
+// ---------------------------------------------------------------- persistence
+/** Load every saved record (call once, before the server takes connections). */
+export async function initRecords(s) {
+  store = s;
+  for (const r of await store.loadRecords()) if (r?.sid) records.set(r.sid, normalize({ ...blankRecord(r.sid), ...r }));
+  return records.size;
 }
-setInterval(saveRecords, 30000).unref();
-for (const sig of ["SIGINT", "SIGTERM"]) process.once(sig, () => { saveRecords(); process.exit(0); });
+let saving = null;
+/** Write the records that changed (players with no games and no profile get no row). */
+export async function saveRecords() {
+  if (!store || !dirty.size || saving) return saving;
+  const sids = [...dirty];
+  dirty.clear();
+  const list = sids.map((sid) => records.get(sid)).filter((r) => r && (r.n > 0 || r.profile));
+  saving = store.saveRecords(list)
+    .catch((e) => { console.error("[db] saving records failed:", e.message); sids.forEach((sid) => dirty.add(sid)); }) // try again next time
+    .finally(() => { saving = null; });
+  return saving;
+}
+setInterval(saveRecords, 10000).unref();
