@@ -4,7 +4,6 @@ import { clubColors } from "./clubs.js";
 import { crestSvg, icon } from "./icons.js";
 import { closeModal, openModal } from "./modal.js";
 import { announce } from "./a11y.js";
-import { reducedMotion } from "./settings.js";
 import { confetti, sound } from "./fx.js";
 import { esc, html } from "../ui.js";
 import { TACTICS } from "../shared/gameSim.js";
@@ -92,7 +91,6 @@ export function keysFor(home, away, pre) {
 export function openGameView(opts) {
   const { home, away, sim, label = "", pre = null, celebrate = null, meId = null, link = null, onClose } = opts;
   let start = opts.start || (pre ? "pregame" : "live");
-  if (reducedMotion() && start === "live") start = "final";
   const d = document.createElement("dialog");
   d.className = "profile-modal gv-modal";
   d.setAttribute("aria-label", `${home.name} vs ${away.name}`);
@@ -107,16 +105,17 @@ export function openGameView(opts) {
   const wire = () => d.querySelector(".profile-close").addEventListener("click", close);
 
   function showPregame() {
-    d.innerHTML = top() + pregameHtml(home, away, pre) + html`<div class="row gv-actions"><button class="btn primary" id="gv-live">${icon("play", { size: 15 })} Watch live</button><button class="btn" id="gv-final">${icon("skip", { size: 15 })} Final score</button></div>
+    d.innerHTML = top() + pregameHtml(home, away, pre) + html`<div class="row gv-actions"><button class="btn primary" id="gv-live" aria-keyshortcuts="L" title="Watch live (L)">${icon("play", { size: 15 })} Watch live</button><button class="btn" id="gv-final" aria-keyshortcuts="F" title="Final score (F)">${icon("skip", { size: 15 })} Final score</button></div>
       <p class="muted gv-note">${ESTIMATE_NOTE}</p>`;
     wire();
-    d.querySelector("#gv-live").addEventListener("click", () => (reducedMotion() ? showFinal() : showLive()));
+    d.querySelector("#gv-live").addEventListener("click", showLive);
     d.querySelector("#gv-final").addEventListener("click", showFinal);
     d.querySelector("#gv-live").focus();
   }
 
   function showFinal() {
     cancelAnimationFrame(raf);
+    keys = null;
     const won = sim.score[0] > sim.score[1] ? 0 : 1;
     const g = { tl: { events: sim.events || [], lead: sim.lead, length: sim.length }, seed: 1 };
     d.innerHTML = top() + html`<div class="gv-final">
@@ -149,7 +148,7 @@ export function openGameView(opts) {
         <circle id="gv-ball" r="2.4" class="lv-ball" cx="140" cy="75"/></svg></div>
       <p class="lv-feed" id="gv-feed" aria-live="off">Tip-off!</p>
       <div class="lv-ctrl"><div class="seg sm" role="group" aria-label="Speed">${[1, 2, 4].map((x) => `<button data-x="${x}" class="${x === 2 ? "on" : ""}" aria-pressed="${x === 2}">${x}×</button>`).join("")}</div>
-        <button class="btn" id="gv-pause">${icon("pause", { size: 15 })} Pause</button><button class="btn primary" id="gv-skip">${icon("skip", { size: 15 })} Final score</button></div>`;
+        <button class="btn" id="gv-pause" aria-keyshortcuts="Space" title="Pause (Space)">${icon("pause", { size: 15 })} Pause</button><button class="btn primary" id="gv-skip" aria-keyshortcuts="F" title="Final score (F)">${icon("skip", { size: 15 })} Final score</button></div>`;
     wire();
     const $ = (q) => d.querySelector(q);
     const dots = [...d.querySelectorAll(".lv-p")], ball = $("#gv-ball"), shots = $("#gv-shots");
@@ -166,6 +165,7 @@ export function openGameView(opts) {
     };
     formation(0);
     let speed = 2, paused = false, t = 0, idx = 0, last = 0, done = false;
+    // reduced motion: players and ball jump to their spots instead of gliding (the CSS drops the movement)
     const setClock = () => { const c = clockOf(Math.min(t, sim.length)); $("#gv-q").textContent = c.label; $("#gv-c").textContent = c.text; };
     const apply = (e, animate) => {
       $("#gv-s0").textContent = e.score[0]; $("#gv-s1").textContent = e.score[1];
@@ -211,11 +211,24 @@ export function openGameView(opts) {
     });
     $("#gv-pause").addEventListener("click", () => { paused = !paused; $("#gv-pause").innerHTML = paused ? `${icon("play", { size: 15 })} Resume` : `${icon("pause", { size: 15 })} Pause`; });
     $("#gv-skip").addEventListener("click", finish);
+    keys = (e) => { // Space pause · 1 2 4 speed · F final score
+      if (e.key === " " || e.key === "k") { e.preventDefault(); $("#gv-pause").click(); }
+      else if (["1", "2", "4"].includes(e.key)) d.querySelector(`[data-x="${e.key}"]`)?.click();
+      else if (e.key === "f" || e.key === "F") finish();
+    };
     d.querySelector(".lv-court").style.setProperty("--lv-move", "0.25s");
     $("#gv-skip").focus();
     raf = requestAnimationFrame(tick);
   }
 
+  // keyboard: the current screen's keys (L watch live / F final score before the game; live keys above)
+  let keys = null;
+  d.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input, select, textarea")) return;
+    if (keys) return keys(e);
+    if ((e.key === "l" || e.key === "L") && d.querySelector("#gv-live")) d.querySelector("#gv-live").click();
+    else if ((e.key === "f" || e.key === "F") && d.querySelector("#gv-final")) d.querySelector("#gv-final").click();
+  });
   openModal(d);
   if (start === "pregame" && pre) showPregame(); else if (start === "final") showFinal(); else showLive();
   return { close };

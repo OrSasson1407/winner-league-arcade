@@ -12,8 +12,8 @@ import { applySettings, getSettings, initSettingsButton, reducedMotion } from ".
 import { icon, logoSvg } from "./lib/icons.js";
 import { avatarHtml, getMe } from "./lib/me.js";
 import { levelInfo } from "./lib/progress.js";
-import { esc, store, toast } from "./ui.js";
-import { crumbsFor, renderCrumbs, showError, skeletonHtml } from "./lib/ux.js";
+import { esc, store, storeReady, toast } from "./ui.js";
+import { crumbsFor, renderCrumbs, showError, skeletonHtml, undoToast } from "./lib/ux.js";
 import { openFeedback } from "./lib/feedback.js";
 import { openOnboarding, shouldOnboard } from "./lib/onboarding.js";
 import { initReminders } from "./lib/notify.js";
@@ -75,16 +75,34 @@ const TABS = [["home", "#/", "home", "Home"], ["games", "#/games", "games", "Gam
 
 let controller = null;
 
-/** Friendly error / not-found screen with "Try again". */
-function problemScreen(view, { title, message, detail = "" }) {
+// The saved game behind each screen: if a save is what breaks a screen, it can be set aside (and brought back).
+const ROUTE_SAVES = { draft: ["draft:save"], mycareer: ["mc:save"], career: ["career:save"], "higher-lower": ["hl:save"], connections: ["conn:free"],
+  grid: ["grid:free"], guess: ["guess:free"], matchup: ["matchup"] };
+const savesOf = (key) => (ROUTE_SAVES[key] || []).filter((k) => store.get(k) !== null);
+function setAside(keys) {
+  const kept = Object.fromEntries(keys.map((k) => [k, store.get(k)]));
+  keys.forEach((k) => { store.set("trash:" + k, kept[k]); store.remove(k); });
+  return () => { for (const [k, v] of Object.entries(kept)) { store.set(k, v); store.remove("trash:" + k); } };
+}
+
+/** Friendly error / not-found screen with "Try again" (and, when a saved game may be the cause, "Start fresh"). */
+function problemScreen(view, { title, message, detail = "", key = null }) {
+  const saves = key === null ? [] : savesOf(key);
   view.innerHTML = `<div class="card center-card problem">
     <div class="cf-icon danger">${icon("x", { size: 30 })}</div>
     <h2>${esc(title)}</h2><p class="muted">${esc(message)}</p>
+    ${saves.length ? `<p class="muted" style="font-size:13px">Still broken after trying again? Your saved game on this screen may be the cause. "Start fresh" puts it aside (you can bring it back).</p>` : ""}
     ${detail ? `<details class="muted"><summary>Technical details</summary><code>${esc(detail)}</code></details>` : ""}
-    <div class="row" style="justify-content:center;flex-wrap:wrap"><button class="btn primary" id="retry">${icon("refresh", { size: 16 })} Try again</button><a class="btn ghost" href="#/">${icon("home", { size: 16 })} Home</a>
+    <div class="row" style="justify-content:center;flex-wrap:wrap"><button class="btn primary" id="retry">${icon("refresh", { size: 16 })} Try again</button>
+      ${saves.length ? `<button class="btn" id="fresh">${icon("play", { size: 16 })} Start fresh</button>` : ""}<a class="btn ghost" href="#/">${icon("home", { size: 16 })} Home</a>
       <button class="btn ghost" id="report">${icon("bug", { size: 16 })} Report this</button></div>
   </div>`;
   view.querySelector("#retry").addEventListener("click", () => route());
+  view.querySelector("#fresh")?.addEventListener("click", () => {
+    const undo = setAside(saves);
+    route();
+    undoToast("Saved game put aside", () => { undo(); route(); }, { ms: 10000 });
+  });
   view.querySelector("#report").addEventListener("click", () => openFeedback({ kind: "bug", detail: `${title}: ${detail}`.slice(0, 600) }));
 }
 
@@ -117,13 +135,14 @@ function route() {
   t.finished.catch(() => {}).finally(() => { const h1 = document.querySelector("#view h1"); if (h1) h1.style.viewTransitionName = ""; });
 }
 
-let navSeq = 0;
+let navSeq = 0, navAt = 0, navKey = "";
 async function renderRoute() {
   const [path, qs = ""] = location.hash.replace(/^#\/?/, "").split("?");
   const [key = "", ...params] = path.split("/");
   const query = Object.fromEntries(new URLSearchParams(qs));
   const view = document.getElementById("view");
   const seq = ++navSeq;
+  navAt = Date.now(); navKey = key;
   controller?.abort(); // drop listeners/timers of the previous screen
   controller = new AbortController();
   document.querySelectorAll("dialog[open]").forEach(closeSilently); // page change: don't touch history
@@ -155,7 +174,7 @@ async function renderRoute() {
     pageChanged(view);
   } catch (err) {
     console.error(err);
-    problemScreen(view, { title: "Something went wrong", message: "This page hit an unexpected error. Trying again usually fixes it.", detail: String(err?.stack || err) });
+    problemScreen(view, { title: "Something went wrong", message: "This page hit an unexpected error. Trying again usually fixes it.", detail: String(err?.stack || err), key });
   }
   if (GAME_ROUTES.has(key)) store.set("last:route", key);
   const section = SECTION[key] ?? "";
@@ -167,10 +186,22 @@ async function renderRoute() {
   window.scrollTo(0, 0);
 }
 
-// errors after a page has rendered (clicks, timers): tell the player instead of failing silently
+// errors after a page has rendered (clicks, timers): tell the player instead of failing silently.
+// Only the broken screen is affected: if it never finished drawing, it shows its own error screen;
+// otherwise a banner offers to redraw just this screen (games keep their progress in their saves).
 const IGNORE = /ResizeObserver loop|Script error\.?$|Transition was skipped|AbortError/;
-window.addEventListener("error", (e) => { if (e.message && !IGNORE.test(e.message)) showError(`${e.message} @ ${e.filename?.split("/").pop()}:${e.lineno}`); });
-window.addEventListener("unhandledrejection", (e) => { const m = String(e.reason?.message || e.reason || ""); if (!IGNORE.test(m) && e.reason?.name !== "AbortError") showError(m); });
+function screenError(detail) {
+  const view = document.getElementById("view");
+  const blank = view.getAttribute("aria-busy") === "true" || !view.querySelector("button, a[href], input, select"); // nothing to use: empty or placeholders
+  if (blank && Date.now() - navAt < 15000) {
+    view.removeAttribute("aria-busy");
+    return problemScreen(view, { title: "This screen didn't load", message: "It hit an unexpected error while drawing. Trying again usually fixes it.", detail, key: navKey });
+  }
+  showError(detail, { retry: () => route() });
+}
+window.addEventListener("error", (e) => { if (e.message && !IGNORE.test(e.message)) screenError(`${e.message} @ ${e.filename?.split("/").pop()}:${e.lineno}`); });
+window.addEventListener("unhandledrejection", (e) => { const m = String(e.reason?.message || e.reason || ""); if (!IGNORE.test(m) && e.reason?.name !== "AbortError") screenError(m); });
+document.addEventListener("storage-full", () => toast("This device's storage is full: free up some space so your progress keeps saving"));
 
 // ---------- chrome
 document.getElementById("logo-slot").innerHTML = logoSvg(40);
@@ -237,14 +268,14 @@ initSettingsButton(document.getElementById("settings-btn"));
 initReminders(); // opt-in daily reminder
 // new units: redraw pages that show them (not a game in progress, which would lose its state)
 document.addEventListener("units-changed", () => { const k = keyOf(location.hash); if (!GAME_ROUTES.has(k) || k === "mycareer") renderRoute(); });
-window.addEventListener("hashchange", route);
-route();
+// saved games in IndexedDB are read before the first screen draws
+storeReady.finally(() => { window.addEventListener("hashchange", route); route(); });
 document.getElementById("fb-link")?.addEventListener("click", (e) => { e.preventDefault(); openFeedback(); });
 // installed app: the splash screen fades once the first page is up
 const splash = document.getElementById("splash");
 if (splash) setTimeout(() => { splash.classList.add("out"); setTimeout(() => splash.remove(), 500); }, Math.max(0, 900 - performance.now()));
 // first visit: a short welcome (only from the home or games page, never over a shared link)
-if (shouldOnboard() && ["", "games"].includes(keyOf(location.hash))) setTimeout(openOnboarding, 700);
+storeReady.finally(() => { if (shouldOnboard() && ["", "games"].includes(keyOf(location.hash))) setTimeout(openOnboarding, 700); });
 // after the first page, fetch the other pages' code in the background so they open instantly (and offline)
 const idle = window.requestIdleCallback || ((f) => setTimeout(f, 1500));
 setTimeout(() => idle(() => Object.keys(routes).forEach((k) => loadRoute(k).catch(() => {}))), 2500);

@@ -15,10 +15,9 @@ const GAMES = [["trophy", "All-Time Draft", "Build the best five in league histo
 /** Existing players skip it: any saved progress means they already know their way around. */
 export function shouldOnboard() {
   if (store.get("onboarded")) return false;
-  const skip = new Set(["wla:settings", "wla:clubvars", "wla:units", "wla:haptics", "wla:sound", "wla:onboarded", "wla:remind",
-    "wla:online:sid", "wla:online:token", "wla:online:rec"]); // written on every visit, not by playing
-  let returning = false;
-  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith("wla:") && !skip.has(k)) { returning = true; break; } } } catch {}
+  const skip = new Set(["settings", "clubvars", "units", "haptics", "sound", "onboarded", "remind",
+    "online:sid", "online:token", "online:rec"]); // written on every visit, not by playing
+  const returning = store.keys().some((k) => !skip.has(k));
   if (returning) { store.set("onboarded", true); return false; }
   return true;
 }

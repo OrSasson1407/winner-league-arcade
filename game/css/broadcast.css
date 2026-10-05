@@ -444,3 +444,26 @@ dialog.gv-modal { width: min(980px, calc(100vw - 20px)); padding: 16px 18px 20px
 .pv-vs { display: grid; justify-items: center; gap: 4px; font: 800 14px var(--f-display); }
 .pv-vs span { color: #fff; background: var(--brand-red); padding: 0 8px; }
 @media (max-width: 900px) { .mu-grid { grid-template-columns: 1fr; } .mu-vs .seg { flex-direction: row; } }
+
+/* =====================================================================
+   Under the hood: connection quality, reconnecting, page-shaped skeletons
+   ===================================================================== */
+.conn.online.q-fair i { background: var(--close); box-shadow: 0 0 0 3px color-mix(in srgb, var(--close) 25%, transparent); }
+.conn.online.q-poor i { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 25%, transparent); animation: pulse 1.4s ease-in-out infinite; }
+.conn.offline i { background: var(--bad); animation: none; }
+.og-reconn { display: flex; gap: 12px; align-items: center; margin: 10px 0; padding: 12px 14px; border-radius: var(--radius); background: color-mix(in srgb, var(--close) 14%, var(--card)); border: 1px solid color-mix(in srgb, var(--close) 55%, transparent); border-left: 4px solid var(--close); }
+.og-reconn > div { display: grid; gap: 2px; }
+.og-reconn small { color: var(--muted); }
+.spin-dot { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 3px solid color-mix(in srgb, var(--close) 30%, transparent); border-top-color: var(--close); animation: spin .9s linear infinite; }
+.og-autobot { justify-content: center; font-size: 13px; margin-top: 4px; }
+.bot-offer .btn small { font-weight: 600; opacity: .85; }
+.sk-hero { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; min-width: 0; }
+.sk-avatar { width: 72px; height: 72px; border-radius: 50%; flex: none; }
+.sk-tabs { display: flex; gap: 8px; margin-bottom: 16px; overflow: hidden; }
+.sk-tabs .sk { flex: none; }
+.sk-tabs .sk { width: 92px; height: 36px; }
+.sk-board { display: grid; gap: 8px; margin-top: 16px; max-width: 640px; }
+.sk-board.g4 { grid-template-columns: repeat(4, 1fr); }
+.sk-board.g3 { grid-template-columns: repeat(3, 1fr); max-width: 520px; }
+.sk-board .sk { aspect-ratio: 1.4; }
+.sk-board.g3 .sk { aspect-ratio: 1; }

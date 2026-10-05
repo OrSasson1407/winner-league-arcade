@@ -2,6 +2,9 @@
 import { store } from "../ui.js";
 
 let ctx = null;
+// animations reduced (the in-app setting, or the system's when the setting follows it)
+const reduced = () => document.documentElement.dataset.motion === "reduced" ||
+  (document.documentElement.dataset.motion !== "full" && matchMedia("(prefers-reduced-motion: reduce)").matches);
 const audio = () => (ctx ??= new (window.AudioContext || window.webkitAudioContext)());
 
 export const sound = {
@@ -37,7 +40,7 @@ export const haptics = {
 };
 const BUZZ = { win: [18, 40, 18], victory: [20, 50, 20, 50, 40], bad: [70], defeat: [90, 60, 90], place: [12], select: [8], warn: [30, 40, 30] };
 export function haptic(name) {
-  if (!BUZZ[name] || !haptics.on || !canVibrate() || document.documentElement.dataset.motion === "reduced") return;
+  if (!BUZZ[name] || !haptics.on || !canVibrate() || reduced()) return;
   if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return; // browsers block it before the first tap
   try { navigator.vibrate(BUZZ[name]); } catch { /* not allowed */ }
 }
@@ -56,6 +59,7 @@ const SOUNDS = {
 };
 
 export function confetti(durationMs = 2600) {
+  if (reduced()) return; // no falling paper for reduced motion: the result screen still says it all
   const c = document.createElement("canvas");
   c.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:60";
   c.width = innerWidth; c.height = innerHeight;

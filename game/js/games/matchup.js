@@ -10,6 +10,7 @@ import { ESTIMATE_NOTE, keysFor, openGameView } from "../lib/gameView.js";
 import { teamPreview } from "../shared/gameSim.js";
 import { realTeamStrength, runGame, simTeam } from "./draft_sim.js";
 import { emit } from "../lib/achievements.js";
+import { gameKeys, press } from "../lib/shortcuts.js";
 
 function rosterOf(season, tid) {
   const best = new Map();
@@ -28,6 +29,7 @@ export function renderMatchup(root, signal) {
   const top = strongest(last);
   const side = Array.isArray(saved?.sides) && saved.sides.length === 2 ? saved.sides : [{ season: last, team: top[0].id, plan: {} }, { season: last, team: top[1]?.id || top[0].id, plan: {} }];
   let venue = saved?.venue || "home";
+  let open = saved?.open || null; // a game on screen when the page was closed: { seed, neutral }
 
   const teamFor = (i) => {
     const s = side[i];
@@ -36,7 +38,7 @@ export function renderMatchup(root, signal) {
   };
 
   function draw() {
-    store.set("matchup", { sides: side, venue });
+    store.set("matchup", { sides: side, venue, open });
     root.innerHTML = html`
       <div class="game-head"><div><h1>${icon("whistle", { size: 30 })} Single game</h1>
         <p>Pick any two real teams, from any seasons, and play a full game possession by possession. Set a game plan for each side.</p></div></div>
@@ -48,10 +50,10 @@ export function renderMatchup(root, signal) {
       const i = Number(card.dataset.side);
       card.querySelector(".mu-season").addEventListener("change", (e) => { side[i].season = e.target.value; const ids = H.getTeamsBySeason(side[i].season).map((t) => t.team_id); if (!ids.includes(side[i].team)) side[i].team = strongest(side[i].season)[0].id; side[i].plan = { tactics: side[i].plan.tactics }; draw(); }, { signal });
       card.querySelector(".mu-team").addEventListener("change", (e) => { side[i].team = e.target.value; side[i].plan = { tactics: side[i].plan.tactics }; draw(); }, { signal });
-      bindGamePlan(card.querySelector(".gp-wrap"), { signal, onChange: (p) => { side[i].plan = p; store.set("matchup", { sides: side, venue }); } });
+      bindGamePlan(card.querySelector(".gp-wrap"), { signal, onChange: (p) => { side[i].plan = p; store.set("matchup", { sides: side, venue, open }); } });
     });
     root.querySelector("#venue").addEventListener("click", (e) => { const b = e.target.closest("[data-v]"); if (b) { venue = b.dataset.v; draw(); } }, { signal });
-    root.querySelector("#go").addEventListener("click", play, { signal });
+    root.querySelector("#go").addEventListener("click", () => play(), { signal });
   }
 
   function sideHtml(i) {
@@ -71,19 +73,24 @@ export function renderMatchup(root, signal) {
     </section>`;
   }
 
-  function play() {
+  function play(again = null) {
     const a = teamFor(0), b = teamFor(1);
     a._sim = null; b._sim = null;
-    const seed = Math.floor(Math.random() * 1e9);
-    const neutral = venue === "neutral";
+    const seed = again?.seed ?? Math.floor(Math.random() * 1e9);
+    const neutral = again ? again.neutral : venue === "neutral";
+    open = { seed, neutral };
+    store.set("matchup", { sides: side, venue, open });
     const sim = runGame(a, b, seed, neutral, true);
     const ta = simTeam(a), tb = simTeam(b);
     const pre = { previews: [ta, tb].map(teamPreview), lineups: [ta, tb].map((t) => t.players.slice().sort((x, y) => (t.minutes?.[y.id] ?? y.mpg) - (t.minutes?.[x.id] ?? x.mpg)).slice(0, 5)), tactics: [ta.tactics, tb.tactics] };
     const home = { name: a.name, id: a.id }, away = { name: b.name, id: b.id };
     pre.keys = keysFor(home, away, pre);
-    emit("matchup:play", {});
-    openGameView({ home, away, sim, label: neutral ? "Single game · neutral court" : "Single game", pre, start: "pregame", link: (l) => nameLink(l.id.split("#")[0], l.name) });
+    if (!again) emit("matchup:play", {});
+    openGameView({ home, away, sim, label: neutral ? "Single game · neutral court" : "Single game", pre, start: "pregame", link: (l) => nameLink(l.id.split("#")[0], l.name),
+      onClose: () => { open = null; store.set("matchup", { sides: side, venue, open }); } });
   }
 
+  gameKeys(signal, { t: press(root, "#go") });
   draw();
+  if (open) play(open); // the same game (same seed) that was on screen
 }

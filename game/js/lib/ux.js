@@ -91,9 +91,16 @@ export function skeletonHtml(key) {
   const card = (h = 120) => `<div class="card pad sk-card"><span class="sk sk-title"></span>${line(90)}${line(70)}<span class="sk" style="height:${h}px;margin-top:10px"></span></div>`;
   const head = `<div class="sk-head"><span class="sk sk-h1"></span>${line(60)}</div>`;
   if (["", "games"].includes(key)) return `<div class="sk-wrap" aria-hidden="true">${head}<div class="sk-grid">${Array.from({ length: 6 }, () => card(90)).join("")}</div></div>`;
-  if (["players", "clubs", "seasons", "records"].includes(key)) return `<div class="sk-wrap" aria-hidden="true">${head}<div class="card pad">${Array.from({ length: 8 }, () => `<div class="sk-row"><span class="sk sk-dot"></span>${line(40)}${line(15)}</div>`).join("")}</div></div>`;
+  if (["players", "clubs", "seasons", "records"].includes(key)) return `<div class="sk-wrap" aria-hidden="true">${head}<div class="card pad">${skeletonRows(8)}</div></div>`;
+  // shaped like the page that is coming: a hero band, a board of tiles, a profile with a table
+  if (["player", "club", "season", "euroleague", "u"].includes(key)) return `<div class="sk-wrap" aria-hidden="true"><div class="card pad sk-hero"><span class="sk sk-avatar"></span><div class="sk-head" style="flex:1">${line(50)}${line(30)}${line(40)}</div></div><div class="card pad">${skeletonRows(6)}</div></div>`;
+  if (key === "mycareer") return `<div class="sk-wrap" aria-hidden="true"><div class="card pad sk-hero"><span class="sk sk-avatar"></span><div class="sk-head" style="flex:1">${line(45)}${line(25)}</div><span class="sk" style="width:120px;height:44px"></span></div><div class="sk-tabs">${Array.from({ length: 5 }, () => `<span class="sk"></span>`).join("")}</div><div class="sk-grid two">${card(160)}${card(160)}</div></div>`;
+  if (["connections", "grid"].includes(key)) return `<div class="sk-wrap" aria-hidden="true">${head}<div class="sk-board ${key === "grid" ? "g3" : "g4"}">${Array.from({ length: key === "grid" ? 9 : 16 }, () => `<span class="sk"></span>`).join("")}</div></div>`;
   return `<div class="sk-wrap" aria-hidden="true">${head}<div class="sk-grid two">${card(200)}${card(200)}</div></div>`;
 }
+
+/** Placeholder rows for a list or table that is still loading. */
+export const skeletonRows = (n = 6) => Array.from({ length: n }, (_, i) => `<div class="sk-row" aria-hidden="true"><span class="sk sk-dot"></span><span class="sk sk-line" style="width:${34 + ((i * 17) % 24)}%"></span><span class="sk sk-line" style="width:14%"></span></div>`).join("");
 
 export const dataUpdated = () => {
   const d = new Date(db.metadata.generated_at);

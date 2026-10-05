@@ -17,7 +17,7 @@ import { challengeFor, challengeRng } from "../lib/challenge.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
 import { clubColors } from "../lib/clubs.js";
 import { confetti, sound } from "../lib/fx.js";
-import { simulateSeason } from "./draft_sim.js";
+import { simulateSeasonAsync, warmSeason } from "../lib/background.js";
 import { CHEM_CAP, SIXTH, SLOT_WEIGHT, chemistry, slotValue, teamSummary } from "../shared/draftLogic.js";
 import { openBoxScore, openLiveGame } from "./draft_live.js";
 import { drawTeamCard, shareOrDownload } from "./draft_card.js";
@@ -49,6 +49,8 @@ function serialize(S, cfg) {
       slots: Object.fromEntries(Object.entries(t.slots).map(([k, v]) => [k, { key: psKey(v.ps), value: v.value }])) })),
     round: S.round, order: S.order, at: S.at, used: [...S.used],
     spin: S.spin && { season: S.spin.season, team_id: S.spin.team_id, team_name: S.spin.team_name, keys: S.spin.roster.map(psKey) },
+    // after the draft: the results, the game plan and the season on screen (re-played from its seed)
+    phase: S.phase, plan: S.plan || null, seasonView: S.seasonView || null,
   };
 }
 
@@ -59,7 +61,8 @@ function deserialize(saved) {
   return {
     teams, round: saved.round, order: saved.order, at: saved.at, used: new Set(saved.used),
     spin: saved.spin ? { season: saved.spin.season, team_id: saved.spin.team_id, team_name: saved.spin.team_name, roster, fresh: false } : null,
-    selected: null, cursor: 0, phase: "draft",
+    selected: null, cursor: 0, phase: saved.phase === "results" ? "results" : "draft",
+    plan: saved.plan || null, seasonView: saved.seasonView || null, saved: saved.phase === "results",
   };
 }
 
@@ -90,14 +93,14 @@ export function renderDraft(root, signal, params, query) {
       const filled = saved.teams.reduce((s, t) => s + Object.keys(t.slots).length, 0);
       const total = saved.teams.reduce((s, t) => s + t.slotList.length, 0);
       const when = new Date(saved.savedAt);
-      return `${saved.teams.filter((t) => !t.cpu).map((t) => t.name).join(", ")} · ${filled}/${total} picks made · saved ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      return `${saved.teams.filter((t) => !t.cpu).map((t) => t.name).join(", ")} · ${saved.phase === "results" ? `draft complete${saved.seasonView ? `, season ${saved.seasonView.season}` : ""}` : `${filled}/${total} picks made`} · saved ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
     })();
     root.innerHTML = html`
       <div class="game-head"><div><a class="back" href="#/">← Home</a><h1>All-Time Draft</h1>
         <p>Build the best starting five from 2010-11 to 2025-26.</p></div>
         <button class="btn ghost" id="snd">${icon(sound.on ? "soundOn" : "soundOff")} ${sound.on ? "Sound on" : "Sound off"}</button></div>
       ${savedInfo ? html`<div class="card pad resume-banner">
-        <div><b>${icon("pause", { size: 16 })} Unfinished draft</b><div class="muted" style="font-size:13px">${esc(savedInfo)}</div></div>
+        <div><b>${icon("pause", { size: 16 })} ${saved.phase === "results" ? "Your last draft" : "Unfinished draft"}</b><div class="muted" style="font-size:13px">${esc(savedInfo)}</div></div>
         <span class="spacer"></span><button class="btn primary" id="resume">▶ Resume</button><button class="btn ghost" id="discard">Discard</button>
       </div>` : ""}
       <div class="setup-grid">
@@ -180,7 +183,7 @@ export function renderDraft(root, signal, params, query) {
 
   function saveProgress() {
     if (ch) return; // challenges don't touch your saved draft
-    if (S && S.phase === "draft") store.set(SAVE_KEY, serialize(S, cfg));
+    if (S && (S.phase === "draft" || S.phase === "results")) store.set(SAVE_KEY, serialize(S, cfg));
   }
 
   function resume() {
@@ -189,8 +192,9 @@ export function renderDraft(root, signal, params, query) {
     if (!restored) { toast("That saved draft can't be restored"); store.set(SAVE_KEY, null); return setup(); }
     cfg = { ...cfg, ...saved.cfg };
     S = restored;
+    toast("Back where you left off");
+    if (S.phase === "results") { const v = S.seasonView; results(); if (v) showSeason(v.season, v.seed, { restoring: true }); return; }
     if (!S.spin || !S.spin.roster.length) newSpin();
-    toast("Draft resumed");
     beginTurn();
   }
 
@@ -527,7 +531,9 @@ export function renderDraft(root, signal, params, query) {
   function results() {
     clearInterval(timerId);
     S.phase = "results";
-    store.set(SAVE_KEY, null); // finished: nothing to resume
+    S.seasonView = null;
+    saveProgress(); // closing the tab now brings you back to these results
+    warmSeason(); // load the season simulator in the background
     const scored = S.teams.map((t) => ({ t, sum: teamSummary(t) }));
     const top = Math.max(...scored.map((x) => x.sum.total));
     if (!S.saved) { // first time on this screen only (not when coming back from the simulation)
@@ -565,7 +571,7 @@ export function renderDraft(root, signal, params, query) {
         <button class="btn primary" id="again">${ch ? "Replay challenge" : "Draft again"}</button>${ch ? "" : `<button class="btn" id="settings">Change settings</button>`}<a class="btn ghost" href="#/">Home</a></div>`;
     root.querySelector("#snd").addEventListener("click", () => { sound.toggle(); root.querySelector("#snd").innerHTML = icon(sound.on ? "soundOn" : "soundOff"); }, { signal });
     root.querySelector("#again").addEventListener("click", startGame, { signal });
-    root.querySelector("#settings")?.addEventListener("click", setup, { signal });
+    root.querySelector("#settings")?.addEventListener("click", () => { store.set(SAVE_KEY, null); setup(); }, { signal });
     root.querySelector("#ch-share")?.addEventListener("click", async () => {
       const txt = challengeShareText(ch, `my team scored ${teamSummary(S.teams[0]).total.toFixed(1)}`);
       try { await navigator.clipboard.writeText(txt); toast("Copied: send it to your friend"); } catch { toast(txt); }
@@ -576,21 +582,29 @@ export function renderDraft(root, signal, params, query) {
       toast(how === "shared" ? "Shared!" : "Team card downloaded");
     }, { signal }));
     const gpBox = root.querySelector(".gp-box");
-    if (gpBox) bindGamePlan(gpBox, { signal, onChange: (p) => { S.plan = p; } });
+    if (gpBox) bindGamePlan(gpBox, { signal, onChange: (p) => { S.plan = p; saveProgress(); } });
     root.querySelector("#sim").addEventListener("click", () => {
       const season = root.querySelector("#sim-season").value || pick(PLAYED_SEASONS);
       showSeason(season);
     }, { signal });
   }
 
-  function showSeason(season) {
+  async function showSeason(season, seed = Math.floor(Math.random() * 1e9), { restoring = false } = {}) {
     const drafted = S.teams.map((t) => ({ name: t.name, strength: teamSummary(t).total, roster: t.slotList.map((p) => t.slots[p].ps),
       ...(!t.cpu && S.plan ? { tactics: S.plan.tactics, minutes: planMinutes(t, S.plan.minutes) } : {}) }));
-    const sim = simulateSeason(season, drafted);
+    const viewing = S.seasonView = { season, seed };
+    saveProgress();
+    root.innerHTML = html`<div class="season-page" aria-busy="true"><div class="game-head"><div><h1>Season ${season}</h1><p class="muted">${icon("arena", { size: 16 })} Playing ${esc(season)}: every game, possession by possession…</p></div></div>
+      <div class="season-grid"><div class="card pad"><span class="sk sk-title"></span>${Array.from({ length: 10 }, () => `<span class="sk sk-line" style="width:${60 + Math.round(Math.random() * 35)}%"></span>`).join("")}</div>
+      <div class="card pad"><span class="sk sk-title"></span>${Array.from({ length: 6 }, () => `<span class="sk sk-line" style="width:80%"></span>`).join("")}</div></div></div>`;
+    const sim = await simulateSeasonAsync(season, drafted, "season-" + seed);
+    if (signal.aborted || S.seasonView !== viewing) return; // you left, or picked another season meanwhile
     const humanTeam = (team) => team.drafted && !S.teams[Number(team.id.split("_")[1])].cpu;
-    if (humanTeam(sim.champion)) { confetti(3200); sound.play("win"); }
-    for (const row of sim.table.filter((r) => humanTeam(r.team))) {
-      emit("draft:season", { madePlayoffs: sim.seeds.includes(row.team), champion: sim.champion === row.team, wins: row.w, losses: row.l });
+    if (!restoring) {
+      if (humanTeam(sim.champion)) { confetti(3200); sound.play("win"); }
+      for (const row of sim.table.filter((r) => humanTeam(r.team))) {
+        emit("draft:season", { madePlayoffs: sim.seeds.includes(row.team), champion: sim.champion === row.team, wins: row.w, losses: row.l });
+      }
     }
     const games = new Map(); // id -> game, for the box score / live buttons
     const reg = (g) => { games.set(String(g.id), g); return g.id; };
@@ -651,8 +665,9 @@ export function renderDraft(root, signal, params, query) {
       else openBoxScore(g);
     }, { signal });
     root.querySelector("#again-sim").addEventListener("click", () => showSeason(season), { signal });
+    announce(`Season ${season} played. Champion: ${sim.champion.name}.`);
     root.querySelector("#other").addEventListener("click", () => showSeason(pick(PLAYED_SEASONS)), { signal });
-    root.querySelector("#back").addEventListener("click", results, { signal });
+    root.querySelector("#back").addEventListener("click", () => { S.seasonView = null; saveProgress(); results(); }, { signal });
   }
 
   // the minutes plan uses the engine's player ids (the same player drafted twice gets "#1")
@@ -665,5 +680,9 @@ export function renderDraft(root, signal, params, query) {
   }
   function planMinutes(t, minutes) { return minutes && Object.values(minutes).some((v) => v > 0) ? minutes : null; }
 
-  if (ch) startGame(); else setup();
+  // came back within a day (closed the tab, phone killed the page): straight back to where you were
+  const recent = !ch && store.get(SAVE_KEY);
+  if (ch) startGame();
+  else if (recent?.savedAt && Date.now() - Date.parse(recent.savedAt) < 24 * 3600e3 && deserialize(recent)) resume();
+  else setup();
 }

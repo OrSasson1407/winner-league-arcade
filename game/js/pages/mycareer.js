@@ -1,6 +1,6 @@
 // My Career (#/mycareer): create a player, grow up in a club academy, turn pro and play a whole career
 // in the Winner League against the real teams of each season.
-import { undoToast } from "../lib/ux.js";
+import { skeletonHtml, undoToast } from "../lib/ux.js";
 import { fmtHeight, fmtMoney } from "../lib/units.js";
 import { PLAYED_SEASONS, db, playersById, teamName } from "../data.js";
 import { countUp, esc, fmt1, html, store, toast } from "../ui.js";
@@ -25,6 +25,7 @@ import { shareOrDownload } from "../games/draft_card.js";
 import { bindMomentum, momentumHtml, watchGame } from "../mycareer/live.js";
 import { careerIntro, clearFlashes, newsFlash } from "../mycareer/flash.js";
 import { reducedMotion } from "../lib/settings.js";
+import { gameKeys, press } from "../lib/shortcuts.js";
 
 const KEY = "mc:save";
 const NATS = ["Israel", "United States", "Serbia", "Lithuania", "Greece", "France", "Spain", "Nigeria", "Canada", "Argentina", "Croatia", "Ukraine"];
@@ -49,8 +50,10 @@ function modal(label) {
 
 export async function renderMyCareer(root, signal) {
   if (!elLoaded()) {
-    root.innerHTML = `<div class="card pad center-card"><p class="muted">Loading the EuroLeague data for your career…</p></div>`;
+    root.innerHTML = `<span class="sr-only">Loading the EuroLeague data for your career…</span>${skeletonHtml("mycareer")}`;
+    root.setAttribute("aria-busy", "true");
     try { await loadEuroleague(); } catch { /* offline without it: the career stays in Israel */ }
+    root.removeAttribute("aria-busy");
     if (signal.aborted) return;
   }
   let C = store.get(KEY, null);
@@ -537,6 +540,7 @@ export async function renderMyCareer(root, signal) {
       const g = mine[0];
       const b = E.boxScore(C, S, g);
       const w = (l) => l.filter((x) => !x.me && x.min > 0).map((x) => ({ name: x.name, w: x.min }));
+      C.pending = out; // closing the tab while watching brings you back to this game
       save(); // the result is already decided: watching it doesn't change anything
       if (g.sim) return gameScreen(g, "pregame", () => afterPlay(out));
       return watchGame({ C, S, g, names: { us: w(b.team), them: w(b.opp) }, jersey: av().num ?? 7, onDone: () => afterPlay(out) });
@@ -544,6 +548,7 @@ export async function renderMyCareer(root, signal) {
     afterPlay(out);
   }
   function afterPlay(out) {
+    delete C.pending;
     afterGames(out);
     if (C.cur.phase === "done") return finishSeason();
     draw();
@@ -763,5 +768,13 @@ export async function renderMyCareer(root, signal) {
     }, { signal });
   }
 
+  gameKeys(signal, { p: press(root, "#mc-play"),
+    ...Object.fromEntries([1, 2, 3, 4, 5, 6].map((n) => [String(n), () => { const b = root.querySelectorAll("#mc-tabs [data-tab]")[n - 1]; if (!b) return false; b.click(); }])) });
   draw();
+  // the tab closed while a game was on screen: the game counts already, finish it from where you were
+  if (C?.pending) {
+    const out = C.pending, g = (out.games || out)[0];
+    toast("Back to your game");
+    if (g?.sim) gameScreen(g, "pregame", () => afterPlay(out)); else afterPlay(out);
+  }
 }

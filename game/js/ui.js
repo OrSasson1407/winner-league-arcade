@@ -19,14 +19,8 @@ export function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
 }
 
-export const store = {
-  get(key, fallback = null) {
-    try { const v = localStorage.getItem("wla:" + key); return v === null ? fallback : JSON.parse(v); } catch { return fallback; }
-  },
-  set(key, value) {
-    try { localStorage.setItem("wla:" + key, JSON.stringify(value)); } catch { /* storage unavailable */ }
-  },
-};
+import { store, storeReady } from "./lib/storage.js";
+export { store, storeReady };
 
 export function ratingClass(r) {
   return r >= 92 ? "r-elite" : r >= 82 ? "r-good" : r >= 70 ? "r-mid" : "r-low";

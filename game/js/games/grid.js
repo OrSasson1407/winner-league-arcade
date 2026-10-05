@@ -10,6 +10,7 @@ import { markDaily } from "../lib/daily.js";
 import { announce } from "../lib/a11y.js";
 import { shot } from "../lib/shot.js";
 import { answersFor, criterionById, facts, makeGrid, rarity } from "../shared/leagueFacts.js";
+import { arrowGrid, gameKeys, press } from "../lib/shortcuts.js";
 
 const GUESSES = 9;
 const STATS_KEY = "grid:stats";
@@ -145,6 +146,8 @@ export function renderGrid(root, signal, params, query = {}) {
     }, { signal });
   }
 
+  arrowGrid(root, ".gr-cell", 3, signal);
+  gameKeys(signal, Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), press(root, `button.gr-cell[data-cell="${n - 1}"]`)])));
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && active !== null && !document.querySelector("dialog[open]")) { active = null; draw(); } }, { signal });
   load();
 }

@@ -18,7 +18,7 @@ import { cleanAv } from "../game/js/lib/avatarArt.js";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.PORT) || Number(process.argv[2]) || 5173;
 const HOST = process.env.HOST || (process.env.PORT || process.argv.includes("--lan") ? "0.0.0.0" : "127.0.0.1");
-const RECONNECT_GRACE = 20000;
+const RECONNECT_GRACE = 45000; // a dropped player keeps their seat this long (phones switching networks)
 
 // ---------------------------------------------------------------- static files
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json",

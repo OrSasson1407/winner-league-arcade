@@ -1,6 +1,6 @@
 // Online 1v1 (#/online, #/online/join/<CODE>): lobby, random matchmaking, invite codes, and the
 // four duels. The server runs the game; this page only shows it and sends the player's moves.
-import { undoToast } from "../lib/ux.js";
+import { skeletonRows, undoToast } from "../lib/ux.js";
 import { clueValue } from "../lib/units.js";
 import { careerSummary, namedPlayers, playersById, psByKey, teamName } from "../data.js";
 import { autocomplete, esc, fmt1, html, store, toast } from "../ui.js";
@@ -14,7 +14,7 @@ import { emit } from "../lib/achievements.js";
 import { levelInfo } from "../lib/progress.js";
 import { SIXTH, slotValue } from "../shared/draftLogic.js";
 import { openBoxScore, openLiveGame } from "../games/draft_live.js";
-import { connect, deadlineFrom, lastStats, latency, myCode, myRecord, netStatus, onNet, send } from "../online/net.js";
+import { RECONNECT_GRACE_MS, connect, deadlineFrom, lastStats, latency, myCode, myRecord, netStatus, onNet, quality, send } from "../online/net.js";
 import { GAME_ICONS, GAME_NAMES, addFriend, addHistory, getFriends, getHistory, headToHead, isFriend, refreshFriends, removeFriend, rivals } from "../online/social.js";
 import { buzz, countdown } from "../online/feel.js";
 import { announce } from "../lib/a11y.js";
@@ -27,6 +27,7 @@ import { CHAT, RANKS, cleanCode, rankOf } from "../shared/rating.js";
 import { criterionById, facts } from "../shared/leagueFacts.js";
 import { crestSvg } from "../lib/icons.js";
 import { bindGamePlan, gamePlanHtml, readGamePlan } from "../lib/gamePlan.js";
+import { arrowGrid, gameKeys, press } from "../lib/shortcuts.js";
 
 export const ONLINE_GAMES = {
   hl: { name: "Higher or Lower", ic: "chart", short: "Speed duel",
@@ -56,6 +57,8 @@ const getLeagues = () => store.get("online:leagues", []);
 const saveLeague = (L) => { const list = getLeagues().filter((x) => x.id !== L.id); list.unshift(L); store.set("online:leagues", list.slice(0, 10)); };
 const REASONS = { forfeit: "Your opponent left the match.", disconnect: "Your opponent lost their connection." };
 const BOTS = { easy: { name: "Rookie", ic: "whistle" }, normal: { name: "Veteran", ic: "rocket" }, hard: { name: "Legend", ic: "crown" } };
+const botFor = (elo) => (elo < 1100 ? "easy" : elo < 1250 ? "normal" : "hard"); // Bronze: Rookie, Silver: Veteran, Gold and up: Legend
+const AUTO_BOT_S = 20;
 const slotLabel = (s) => (s === SIXTH ? "6th" : s);
 
 /** Online record per game: { hl: { w, l, d }, ... } */
@@ -71,7 +74,10 @@ function addRecord(game, result) {
 export function renderOnline(root, signal, params = []) {
   let game = ONLINE_GAMES[store.get("online:game")] ? store.get("online:game") : "hl";
   let phase = "lobby"; // lobby | searching | inviting | match | end
-  let invite = null, searchStart = 0, lobbyMsg = "";
+  let invite = null, searchStart = 0, lobbyMsg = "", autoBotSent = false;
+  // nobody else searching this game: offer the bot right away; otherwise after a short wait
+  const aloneInQueue = () => (lastStats?.waiting?.[game] ?? 0) <= 1;
+  const botOfferNow = () => phase === "searching" && (Date.now() - searchStart > 12000 || (aloneInQueue() && Date.now() - searchStart > 2500));
   let M = null; // the current match
   let G = null; // the current game's state
   let tick = null;
@@ -109,8 +115,12 @@ export function renderOnline(root, signal, params = []) {
         if (m.status === "online" && joinCode && !joinTried && phase === "lobby") { joinTried = true; send({ t: "join", code: joinCode }); }
         if (m.status === "online") { syncLeagues(); if (leagueLink && !getLeagues().some((x) => x.id === leagueLink) && !joinTried) { joinTried = true; send({ t: "league:join", id: leagueLink }); } }
         return;
+      case "quality":
+        drawConnBadge();
+        if (m.quality === "poor" && phase === "match" && M && !M.spectator && !M.warnedSlow) { M.warnedSlow = true; toast("Unstable connection: your moves may arrive late"); }
+        return;
       case "welcome": case "stats": if (phase === "lobby" || phase === "searching" || phase === "inviting") drawLobbyStats(); return;
-      case "queued": phase = "searching"; searchStart = Date.now(); return drawLobby();
+      case "queued": phase = "searching"; searchStart = Date.now(); autoBotSent = false; return drawLobby();
       case "invited": phase = "inviting"; invite = m; tab = "play"; return drawLobby();
       case "invite:declined": if (phase === "inviting") { phase = "lobby"; invite = null; lobbyMsg = `${m.name} can't play right now.`; drawLobby(); } return;
       case "record": if (phase === "lobby" && tab === "play") drawLobby(); return;
@@ -166,8 +176,12 @@ export function renderOnline(root, signal, params = []) {
   // ------------------------------------------------------------ lobby
   function statusText() {
     const s = netStatus();
-    return s === "online" ? "Connected" : s === "unavailable" ? "Online server not found" : s === "replaced" ? "Opened in another tab" : "Connecting…";
+    return s === "online" ? `Connected · ${Math.round(latency())} ms` : s === "unavailable" ? "Online server not found" : s === "replaced" ? "Opened in another tab"
+      : s === "offline" ? "You're offline" : s === "reconnecting" ? "Reconnecting…" : "Connecting…";
   }
+  const QUALITY = { good: "Good connection", fair: "Connection a bit slow", poor: "Unstable connection: moves may arrive late" };
+  const connTitle = () => (netStatus() === "online" ? `${QUALITY[quality()]} · ping ${Math.round(latency())} ms` : statusText());
+  const connClass = () => `conn ${netStatus()} q-${quality()}`;
 
   const rankBadge = (elo, { small = false } = {}) => {
     if (elo == null) return "";
@@ -182,7 +196,7 @@ export function renderOnline(root, signal, params = []) {
     root.innerHTML = html`
       <div class="game-head"><div><a class="back" href="#/">← Home</a><h1>${icon("globe", { size: 30 })} Online 1v1</h1>
         <p>Ranked matches against players at your level, friendly games with friends, or practice against a bot.</p></div>
-        <div class="row"><span class="conn ${s}" id="conn"><i></i>${statusText()}</span><span class="muted" id="online-count"></span></div>
+        <div class="row"><span class="${connClass()}" id="conn" title="${connTitle()}"><i></i>${statusText()}</span><span class="muted" id="online-count"></span></div>
       </div>
       ${s === "unavailable" ? html`<div class="card pad warn-card">${icon("info", { size: 20 })}<div><b>Online play needs the arcade's Node server.</b>
         <p class="muted" style="margin:4px 0 0">This page is being served without it (for example by the Python server). Start the arcade with <code>start_game.bat</code> after installing Node.js, or run <code>npm install</code> and <code>npm start</code> in the project folder.</p></div></div>` : ""}
@@ -220,10 +234,11 @@ export function renderOnline(root, signal, params = []) {
               <h3>Looking for an opponent near ${elo}…</h3>
               <p class="muted" style="margin:0">${ONLINE_GAMES[game].name} · Ranked · <span id="search-time">0:00</span></p>
               <small class="muted">The longer you wait, the wider the search. You can keep this tab open in the background.</small>
-              <div class="bot-offer" id="bot-offer" hidden>
-                <b>Nobody around right now?</b> <span class="muted">Play a bot meanwhile (not ranked):</span>
-                <div class="row" style="justify-content:center">${Object.entries(BOTS).map(([k, b]) => `<button class="btn" data-bot="${k}">${icon(b.ic, { size: 15 })} ${b.name}</button>`).join("")}</div>
+              <div class="bot-offer" id="bot-offer" ${botOfferNow() ? "" : "hidden"}>
+                <b>${aloneInQueue() ? "Nobody else is searching right now." : "Taking a while?"}</b> <span class="muted">Play a bot meanwhile (not ranked):</span>
+                <div class="row" style="justify-content:center">${Object.entries(BOTS).map(([k, b]) => `<button class="btn ${k === botFor(elo) ? "primary" : ""}" data-bot="${k}">${icon(b.ic, { size: 15 })} ${b.name}${k === botFor(elo) ? ` <small>(your level)</small>` : ""}</button>`).join("")}</div>
               </div>
+              <label class="check og-autobot"><input type="checkbox" id="autobot" ${store.get("online:autobot", false) ? "checked" : ""}> <span>Nobody after ${AUTO_BOT_S} s? Start a bot game at my level</span></label>
               <button class="btn" id="cancel">${icon("close", { size: 15 })} Cancel</button>
             </div>`
           : phase === "inviting" ? html`<div class="card pad og-wait pop">
@@ -265,6 +280,7 @@ export function renderOnline(root, signal, params = []) {
     $("#find")?.addEventListener("click", () => { lobbyMsg = ""; send({ t: "queue", game }); }, { signal });
     $("#invite")?.addEventListener("click", () => { lobbyMsg = ""; send({ t: "invite", game }); }, { signal });
     $("#cancel")?.addEventListener("click", () => send({ t: "cancel" }), { signal });
+    $("#autobot")?.addEventListener("change", (e) => store.set("online:autobot", e.target.checked), { signal });
     body.querySelectorAll("[data-bot]").forEach((b) => b.addEventListener("click", () => { lobbyMsg = ""; send({ t: "bot", game, level: b.dataset.bot }); }, { signal }));
     const join = () => {
       const code = $("#join-in").value.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -360,7 +376,7 @@ export function renderOnline(root, signal, params = []) {
               <td>${r.me ? "" : r.playing ? `<button class="btn sm" data-watch="${r.code}">Watch</button>` : r.online ? `<button class="btn sm" data-inv="${r.code}">Invite</button>` : ""}</td></tr>`).join("")}
             </tbody></table></div>
             <p class="muted" style="font-size:12px;margin:8px 0 0">Points from online matches against people this week (not bots): win 3, draw 1. A new week starts on Monday (UTC). Up to ${T.max} players.</p>`
-            : `<p class="muted">Loading the table…</p>`}
+            : `<div aria-busy="true"><span class="sr-only">Loading the table…</span>${skeletonRows(5)}</div>`}
           <div class="row" style="margin-top:10px"><span class="muted" style="font-size:13px">League code <b class="led">${esc(L.id)}</b></span><span class="spacer"></span><button class="btn ghost" id="lg-leave">${icon("x", { size: 14 })} Leave league</button></div>
         </div>` : html`<div class="card pad"><h3>${icon("medal")} Friend leagues</h3><p class="muted">Start a private league with your friends: everyone's online results this week go into one table. Share the code, and the table resets every Monday.</p></div>`}
       </div>
@@ -400,7 +416,7 @@ export function renderOnline(root, signal, params = []) {
     body.innerHTML = html`<div class="card pad">
       <div class="row" style="margin-bottom:10px"><h3 style="margin:0">${icon("trophy")} Leaderboard</h3><span class="spacer"></span>
         <div class="seg sm" id="lb-game">${[["all", "All games"], ...Object.entries(ONLINE_GAMES).map(([k, g]) => [k, g.name])].map(([k, l]) => `<button class="${k === leadersGame ? "on" : ""}" data-lg="${k}">${l}</button>`).join("")}</div></div>
-      ${!L ? `<p class="muted">Loading…</p>` : L.rows.length ? html`<div class="grid-wrap"><table class="stat-table lb-table"><thead><tr><th>#</th><th>Player</th><th>Rank</th><th>${leadersGame === "all" ? "Wins" : "Rating"}</th><th>W-L</th></tr></thead>
+      ${!L ? `<div aria-busy="true"><span class="sr-only">Loading…</span>${skeletonRows(8)}</div>` : L.rows.length ? html`<div class="grid-wrap"><table class="stat-table lb-table"><thead><tr><th>#</th><th>Player</th><th>Rank</th><th>${leadersGame === "all" ? "Wins" : "Rating"}</th><th>W-L</th></tr></thead>
         <tbody>${L.rows.map(row).join("")}${L.me ? `<tr class="gap"><td colspan="5">⋯</td></tr>${row(L.me)}` : ""}</tbody></table></div>
         <p class="muted" style="font-size:12px;margin:8px 0 0">Ranked matches only. ${L.total} ranked player${L.total === 1 ? "" : "s"}. The board refills as players come back online after a server restart.</p>`
         : `<p class="muted">No ranked matches yet${leadersGame === "all" ? "" : " in this game"}. Win one to take the top spot!</p>`}
@@ -456,7 +472,31 @@ export function renderOnline(root, signal, params = []) {
 
   function drawConnBadge() {
     const el = root.querySelector("#conn");
-    if (el) { el.className = `conn ${netStatus()}`; el.innerHTML = `<i></i>${statusText()}`; }
+    if (el) {
+      el.className = connClass(); el.title = connTitle();
+      if (el.closest(".duel-bar")) el.setAttribute("aria-label", connTitle()); else el.innerHTML = `<i></i>${statusText()}`;
+    }
+    drawReconnect();
+  }
+  // your own connection dropped during a match: say so, and how long the server keeps your seat
+  let droppedAt = 0;
+  function drawReconnect() {
+    const inMatch = (phase === "match" || phase === "end") && M && !M.spectator;
+    const down = inMatch && netStatus() !== "online";
+    let el = root.querySelector("#og-reconn");
+    if (!down) { droppedAt = 0; el?.remove(); return; }
+    droppedAt ||= Date.now();
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "og-reconn"; el.className = "og-reconn";
+      root.querySelector(".duel-bar")?.after(el);
+      if (!el.isConnected) root.prepend(el);
+      announce("Connection lost. Reconnecting.");
+    }
+    const left = Math.max(0, Math.ceil((droppedAt + RECONNECT_GRACE_MS - Date.now()) / 1000));
+    const html1 = `<span class="spin-dot" aria-hidden="true"></span><div><b>${netStatus() === "offline" ? "You're offline" : "Connection lost: reconnecting…"}</b>
+      <small>${left ? `Your seat in the match is held for <b>${left}</b> more seconds. Moves you make now are sent when you're back.` : "Still trying. If the match ended, you'll see the result when you're back."}</small></div>`;
+    if (el.innerHTML !== html1) el.innerHTML = html1;
   }
 
   // ------------------------------------------------------------ match shell
@@ -470,7 +510,7 @@ export function renderOnline(root, signal, params = []) {
     return html`<div class="card duel-bar">
       <div class="duel-p p-me">${avatarHtml(M.you, 40)}<div><b>${esc(M.you.name)}</b><small class="muted">${M.spectator ? "" : "You · "}${M.rated ? rankBadge(M.you.elo, { small: true }) : `Lv ${M.you.level}`}</small></div><span class="duel-score led" id="score-me">${score(M.seat)}</span><span class="chat-bubble me" id="chat-me" hidden></span></div>
       <div class="duel-mid"><span class="muted">${icon(g.ic, { size: 16 })} ${g.name}</span><b id="duel-round"></b>
-        <span class="row" style="gap:6px;justify-content:center"><span class="mode-chip ${M.mode}">${M.mode === "ranked" ? "Ranked" : M.mode === "bot" ? "vs Bot" : "Friendly"}</span><span class="muted" id="watchers" style="font-size:12px">${M.watchers ? `👁 ${M.watchers} watching` : ""}</span><span class="conn ${netStatus()}" id="conn" title="Ping ${Math.round(latency())} ms"><i></i></span></span></div>
+        <span class="row" style="gap:6px;justify-content:center"><span class="mode-chip ${M.mode}">${M.mode === "ranked" ? "Ranked" : M.mode === "bot" ? "vs Bot" : "Friendly"}</span><span class="muted" id="watchers" style="font-size:12px">${M.watchers ? `👁 ${M.watchers} watching` : ""}</span><span class="${connClass()}" id="conn" role="img" title="${connTitle()}" aria-label="${connTitle()}"><i></i></span></span></div>
       <div class="duel-p p-them"><span class="chat-bubble opp" id="chat-opp" hidden></span><span class="duel-score led" id="score-opp">${score(opp())}</span><div style="text-align:right"><b>${esc(M.opp.name)}</b><small class="muted" id="opp-state"></small></div>${avatarHtml(M.opp, 40)}</div>
     </div>`;
   }
@@ -577,6 +617,7 @@ export function renderOnline(root, signal, params = []) {
 
   // timers: elements carry the moment they run out
   function updateClocks() {
+    if (droppedAt) drawReconnect();
     if (phase === "searching") {
       const el = root.querySelector("#search-time");
       if (el) { const s = Math.floor((Date.now() - searchStart) / 1000); el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
@@ -600,7 +641,16 @@ export function renderOnline(root, signal, params = []) {
         if (sec <= 3) buzz(40);
       }
     });
-    if (phase === "searching") { const offer = root.querySelector("#bot-offer"); if (offer && offer.hidden && Date.now() - searchStart > 30000) offer.hidden = false; }
+    if (phase === "searching") {
+      const offer = root.querySelector("#bot-offer");
+      if (offer && offer.hidden && botOfferNow()) offer.hidden = false;
+      // opted in: nobody came, so play the bot at your level
+      if (store.get("online:autobot", false) && Date.now() - searchStart > AUTO_BOT_S * 1000 && !autoBotSent) {
+        autoBotSent = true;
+        toast("Nobody around: starting a bot game at your level");
+        send({ t: "bot", game, level: botFor(myRecord()?.elo?.[game] ?? 1000) });
+      }
+    }
   }
   const timerBar = (deadline, total, urgent = false) => `<div class="duel-timer" role="timer" aria-label="Time left" data-deadline="${deadline}" data-total="${total}" data-urgent="${urgent ? 1 : 0}"><i aria-hidden="true"></i><b></b></div>`;
   const youThem = (seat) => (seat === M.seat ? (M.spectator ? esc(M.you.name) : "You") : esc(M.opp.name));
@@ -1135,6 +1185,13 @@ export function renderOnline(root, signal, params = []) {
     }
   }
 
+  arrowGrid(root, ".cn-tile", 4, signal);
+  arrowGrid(root, ".gr-cell", 3, signal);
+  gameKeys(signal, {
+    f: () => (phase === "lobby" ? press(root, "#find")() : false),
+    b: () => (phase === "lobby" || phase === "searching" ? press(root, `[data-bot="${botFor(myRecord()?.elo?.[game] ?? 1000)}"]`)() : false),
+    Escape: () => (phase === "searching" || phase === "inviting" ? press(root, "#cancel")() : false),
+  });
   // keyboard: ↑/↓ in Higher or Lower
   document.addEventListener("keydown", (e) => {
     if (phase !== "match" || G?.t !== "hl" || e.target.closest?.("input,select,textarea") || document.querySelector("dialog[open]")) return;

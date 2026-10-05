@@ -14,6 +14,7 @@ import { shot } from "../lib/shot.js";
 import { challengeFor, challengeRng } from "../lib/challenge.js";
 import { decoys, eligible } from "../shared/careerLogic.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
+import { gameKeys, press } from "../lib/shortcuts.js";
 
 const SAVE_KEY = "career:save";
 
@@ -148,5 +149,6 @@ export function renderCareer(root, signal, params, query) {
     }, { signal });
   }
 
+  gameKeys(signal, { h: press(root, "#hint"), n: press(root, "#next") });
   if (ch || !resume()) start();
 }

@@ -9,6 +9,7 @@ import { markDaily } from "../lib/daily.js";
 import { announce } from "../lib/a11y.js";
 import { shot } from "../lib/shot.js";
 import { makeConnections } from "../shared/leagueFacts.js";
+import { arrowGrid, gameKeys, press } from "../lib/shortcuts.js";
 
 const MISTAKES = 4;
 const LEVEL_NAMES = ["Easiest", "Medium", "Hard", "Trickiest"];
@@ -135,6 +136,8 @@ export function renderConnections(root, signal, params, query = {}) {
     if (e.target.closest?.("input,textarea,select") || document.querySelector("dialog[open]")) return;
     if (e.key === "Enter" && S.selected.length === 4 && !e.target.closest?.("button")) { e.preventDefault(); submit(); }
   }, { signal });
+  arrowGrid(root, ".cn-tile", 4, signal);
+  gameKeys(signal, { s: press(root, "#shuffle"), Escape: press(root, "#clear"), Backspace: press(root, "#clear") });
 
   load();
 }

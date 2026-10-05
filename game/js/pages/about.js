@@ -63,12 +63,11 @@ export function renderPrivacy(root, signal) {
       </section>
     </div>`;
   root.querySelector("#pv-clear").addEventListener("click", () => {
-    const snap = {};
-    try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith("wla:")) snap[k] = localStorage.getItem(k); } } catch {}
+    const snap = store.snapshot();
     const keys = Object.keys(snap);
     if (!keys.length) return undoToast("Nothing stored on this device", () => {});
-    keys.forEach((k) => localStorage.removeItem(k));
+    keys.forEach((k) => store.remove(k));
     store.set("onboarded", true); // don't greet them with the intro right after
-    undoToast(`Deleted ${keys.length} saved item${keys.length === 1 ? "" : "s"}. Reload to start fresh`, () => { for (const [k, v] of Object.entries(snap)) localStorage.setItem(k, v); }, { ms: 10000 });
+    undoToast(`Deleted ${keys.length} saved item${keys.length === 1 ? "" : "s"}. Reload to start fresh`, () => store.restore(snap), { ms: 10000 });
   }, { signal });
 }

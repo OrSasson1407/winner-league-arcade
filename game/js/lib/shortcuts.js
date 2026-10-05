@@ -15,6 +15,13 @@ export const SHORTCUTS = [
     [["R"], "Re-spin"], [["Esc"], "Cancel the selected player"]] },
   { group: "Higher or Lower", items: [[["↑"], "Higher"], [["↓"], "Lower"]] },
   { group: "Guess the Player", items: [[["↑", "↓"], "Move through suggestions"], [["Enter"], "Guess the highlighted player"]] },
+  { group: "Connections", items: [[["←", "→", "↑", "↓"], "Move between players"], [["Space"], "Select / deselect"], [["Enter"], "Submit four"], [["S"], "Shuffle"], [["Esc"], "Deselect all"]] },
+  { group: "The Grid", items: [[["1–9"], "Open a square"], [["←", "→", "↑", "↓"], "Move between squares"], [["Esc"], "Close the search"]] },
+  { group: "Career Path", items: [[["H"], "Hint"], [["N"], "Next career"]] },
+  { group: "My Career", items: [[["P"], "Play the next game"], [["1–5"], "Switch tabs"], [["←", "→"], "Switch tabs (on the tab bar)"]] },
+  { group: "Single game", items: [[["T"], "Tip-off"]] },
+  { group: "Game screen", items: [[["L"], "Watch live"], [["F"], "Final score"], [["Space"], "Pause / resume"], [["1", "2", "4"], "Speed"]] },
+  { group: "Online 1v1", items: [[["F"], "Find a ranked match"], [["B"], "Play a bot at your level"], [["Esc"], "Cancel the search"]] },
 ];
 
 const keyHtml = (keys) => keys.map((k) => `<kbd>${esc(k)}</kbd>`).join(" ");
@@ -39,10 +46,42 @@ export function openShortcuts() {
 }
 
 const typing = (e) => e.target.closest?.("input, textarea, select, [contenteditable]");
+let gPending = 0; // "g" was just pressed: the next key is a "go to" key, not a game key
+
+/**
+ * A game's own keys while its page is open: map { key: fn } (fn returning false lets the key through).
+ * Ignored while typing, with a window open, with Ctrl/Alt/Cmd, or right after "g".
+ */
+export function gameKeys(signal, map) {
+  document.addEventListener("keydown", (e) => {
+    if (typing(e) || e.ctrlKey || e.metaKey || e.altKey || document.querySelector("dialog[open]") || Date.now() - gPending < 1200) return;
+    const fn = map[e.key] ?? map[e.key.length === 1 ? e.key.toLowerCase() : ""];
+    if (fn && fn(e) !== false) e.preventDefault();
+  }, { signal });
+}
+/** Click a button by selector if it's there and enabled (for gameKeys maps). */
+export const press = (root, sel) => () => { const b = root.querySelector(sel); if (!b || b.disabled) return false; b.click(); };
+
+/**
+ * Arrow keys move the focus between the items of a board laid out `cols` wide (items found by `sel`
+ * inside root, numbered by their order). Items that can't take focus are skipped.
+ */
+export function arrowGrid(root, sel, cols, signal) {
+  root.addEventListener("keydown", (e) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
+    const from = step && e.target.closest?.(sel);
+    if (!from) return;
+    const items = [...root.querySelectorAll(sel)];
+    let i = items.indexOf(from);
+    for (i += step; i >= 0 && i < items.length; i += step) {
+      const t = items[i];
+      if (t.matches("button:not([disabled]), a[href], [tabindex]")) { e.preventDefault(); t.focus(); return; }
+    }
+  }, { signal });
+}
 
 /** Global keys: "?" shortcuts, "/" and Ctrl+K search, "g x" navigation. */
 export function initShortcuts({ openSearch }) {
-  let gPending = 0;
   document.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openSearch(); return; }
     if (typing(e) || e.ctrlKey || e.metaKey || e.altKey || document.querySelector("dialog[open]")) return;
@@ -52,6 +91,7 @@ export function initShortcuts({ openSearch }) {
     if (Date.now() - gPending < 1200) {
       const to = { h: "#/", g: "#/games", p: "#/players", c: "#/clubs", s: "#/seasons", m: "#/me", a: "#/achievements", v: "#/compare", r: "#/recap", f: "#/challenge", o: "#/online", y: "#/daily", t: "#/today", e: "#/records", "?": "#/help", "/": "#/help" }[k];
       gPending = 0;
+      e.stopImmediatePropagation(); // the key after "g" is never also a game key
       if (to) { e.preventDefault(); location.hash = to; }
       return;
     }
