@@ -7,9 +7,10 @@ import { getMe } from "../lib/me.js";
 import { levelInfo } from "../lib/progress.js";
 import { shareOrDownload } from "../games/draft_card.js";
 import { esc, html, store, toast } from "../ui.js";
+import { dateLocale } from "../i18n/index.js";
 
 const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-const monthName = (key) => new Date(`${key}-01T12:00:00`).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+const monthName = (key) => new Date(`${key}-01T12:00:00`).toLocaleDateString(dateLocale(), { month: "long", year: "numeric" });
 
 export function monthsWithActivity() {
   const set = new Set([monthKey(new Date())]);

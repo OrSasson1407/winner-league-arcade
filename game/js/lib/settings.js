@@ -1,5 +1,6 @@
 // Display & accessibility settings: theme, colour-blind palette, text size, motion, sound.
 import { store } from "../ui.js";
+import { LANGS } from "../i18n/index.js";
 import { canVibrate, haptics, sound } from "./fx.js";
 import { ILS_PER_USD, getUnits, setUnits } from "./units.js";
 import { disableReminders, enableReminders, reminderStatus } from "./notify.js";
@@ -8,7 +9,7 @@ import { applyClubTheme } from "./clubTheme.js";
 import { db } from "../data.js";
 import { installRowHtml, onInstallChange, promptInstall } from "./install.js";
 
-const DEFAULTS = { theme: "dark", cb: false, size: "md", motion: "system", club: "", contrast: "system" };
+const DEFAULTS = { theme: "dark", cb: false, size: "md", motion: "system", club: "", contrast: "system", lang: "en" };
 
 export function getSettings() {
   return { ...DEFAULTS, ...store.get("settings", {}) };
@@ -50,6 +51,7 @@ export function initSettingsButton(btn) {
     const s = getSettings();
     pop.innerHTML = `
       <div class="row"><h3>Settings</h3><span class="spacer"></span><button class="icon-btn" data-close aria-label="Close settings">${icon("close", { size: 18 })}</button></div>
+      <div class="field"><label>Language · שפה</label><div data-no-tr>${seg("lang", Object.entries(LANGS), s.lang)}</div></div>
       <div class="field"><label>Theme</label>${seg("theme", [["dark", `${icon("moon", { size: 14 })} Dark`], ["light", `${icon("sun", { size: 14 })} Light`], ["auto", "Auto"]], s.theme)}</div>
       <div class="field"><label for="club-theme">Accent colour</label>
         <div class="club-pick"><span class="club-sw" style="background:var(--accent)"></span>
@@ -99,6 +101,7 @@ export function initSettingsButton(btn) {
       if (key === "sound") sound.on = val;
       else if (key === "haptics") { haptics.on = val; if (val) navigator.vibrate?.(15); }
       else if (key === "u-height" || key === "u-money") setUnits({ [key.slice(2)]: val });
+      else if (key === "lang") { if (val !== getSettings().lang) { save({ lang: val }); location.reload(); } return; } // the whole page is redrawn in the new language
       else save({ [key]: val });
       sound.play("tick");
       render();

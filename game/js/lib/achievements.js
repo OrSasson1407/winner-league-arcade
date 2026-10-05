@@ -4,6 +4,7 @@ import { localDate, store } from "../ui.js";
 import { ICON_PATHS } from "./icons.js";
 import { sound } from "./fx.js";
 import { XP_FOR_TIER, addXP, logActivity, xpFor } from "./progress.js";
+import { tr } from "../i18n/index.js";
 
 export const GAMES = {
   draft: { name: "All-Time Draft", short: "DRAFT", color: "#ff7a1a" },
@@ -258,7 +259,7 @@ const TIER_FILL = {
 };
 
 function wrap(title, max = 12) {
-  const words = title.toUpperCase().split(" ");
+  const words = tr(title).toUpperCase().split(" "); // the banner's words, in the interface language
   const lines = [""];
   for (const w of words) {
     const cur = lines[lines.length - 1];

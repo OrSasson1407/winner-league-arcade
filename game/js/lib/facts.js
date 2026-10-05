@@ -8,15 +8,17 @@ function build() {
   const out = [];
   const name = (pid) => playersById.get(pid).name;
   // season leaders (regular season, 10+ games)
+  // whole sentences (not pieces), so the Hebrew dictionary can word each one as a sentence
   const LEAD = [
-    ["ppg", "led the league in scoring with", "points per game"], ["rpg", "led the league in rebounding with", "rebounds per game"],
-    ["apg", "led the league in assists with", "assists per game"], ["valuation_per_game", "had the league's best efficiency with", "VAL per game"],
+    ["ppg", "In {0}, {1} led the league in scoring with {2} points per game for {3}."], ["rpg", "In {0}, {1} led the league in rebounding with {2} rebounds per game for {3}."],
+    ["apg", "In {0}, {1} led the league in assists with {2} assists per game for {3}."], ["valuation_per_game", "In {0}, {1} had the league's best efficiency with {2} VAL per game for {3}."],
   ];
+  const fill = (t, ...v) => t.replace(/\{(\d)\}/g, (_, i) => v[i]);
   for (const s of PLAYED_SEASONS) {
     const recs = H.getPlayersBySeason(s).filter((r) => isPlayable(r, 10));
-    for (const [k, verb, unit] of LEAD) {
+    for (const [k, sentence] of LEAD) {
       const top = recs.filter((r) => r.stats[k] !== null && r.stats[k] !== undefined).sort((a, b) => b.stats[k] - a.stats[k])[0];
-      if (top) out.push({ pid: top.player_id, season: s, text: `In ${s}, ${name(top.player_id)} ${verb} ${fmt1(top.stats[k])} ${unit} for ${teamName(top.team_id)}.` });
+      if (top) out.push({ pid: top.player_id, season: s, text: fill(sentence, s, name(top.player_id), fmt1(top.stats[k]), teamName(top.team_id)) });
     }
     const big = recs.filter((r) => r.stats.ppg >= 10 && r.stats.rpg >= 10).sort((a, b) => b.stats.ppg - a.stats.ppg)[0];
     if (big) out.push({ pid: big.player_id, season: s, text: `${name(big.player_id)} averaged a double-double in ${s}: ${fmt1(big.stats.ppg)} points and ${fmt1(big.stats.rpg)} rebounds a game for ${teamName(big.team_id)}.` });

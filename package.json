@@ -5,12 +5,19 @@
   "type": "module",
   "description": "Winner League Arcade: Israeli Premier League games with online 1v1",
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "build:rtl": "node game/tools/build_rtl.mjs",
+    "i18n:missing": "node game/tools/extract_ui_strings.mjs --missing"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "acorn": "^8.19.0",
+    "axe-core": "^4.13.0",
+    "rtlcss": "^4.3.0"
   }
 }

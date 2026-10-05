@@ -1,0 +1,18 @@
+/* Hebrew only: loaded after the mirrored stylesheets (style.rtl.css, broadcast.rtl.css). */
+
+/* Hebrew letters are never spaced out (the broadcast look spaces out English capitals) */
+html[lang="he"] body, html[lang="he"] body * { letter-spacing: normal !important; }
+html[lang="he"] h1, html[lang="he"] h2, html[lang="he"] h3 { line-height: 1.2; }
+
+/* direction icons point the other way */
+[dir="rtl"] .ic-arrowRight, [dir="rtl"] .ic-arrowLeft, [dir="rtl"] .ic-skip, [dir="rtl"] .ic-play, [dir="rtl"] .ic-chevronRight, [dir="rtl"] .ic-chevronLeft { transform: scaleX(-1); }
+
+/* things that read left to right whatever the language: codes, scores typed as one line, keyboard keys */
+[dir="rtl"] .ch-code, [dir="rtl"] .og-code, [dir="rtl"] kbd, [dir="rtl"] input[type="number"], [dir="rtl"] .ch-input { direction: ltr; unicode-bidi: isolate; }
+
+/* text that the stylesheet writes itself */
+[dir="rtl"] .pc.used::after { content: "נבחר"; font-family: Heebo, sans-serif; }
+[dir="rtl"] .pbp:empty::before { content: "ממתינים לכדור הפתיחה…"; }
+
+/* a clock or label in front of a sentence keeps its place in a right-to-left line */
+[dir="rtl"] .lv-feed > *, [dir="rtl"] .gv-feed > *, [dir="rtl"] .pbp small, [dir="rtl"] .muted > small { unicode-bidi: isolate; }

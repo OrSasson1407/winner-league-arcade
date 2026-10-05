@@ -22,6 +22,7 @@
       if (s.cb) r.dataset.cb = "1";
       if (s.size && s.size !== "md") r.dataset.size = s.size;
       if (s.motion && s.motion !== "system") r.dataset.motion = s.motion;
+      if (s.lang === "he") { r.lang = "he"; r.dir = "rtl"; } // Hebrew: right to left from the first paint
       if (s.contrast === "high" || (s.contrast !== "standard" && matchMedia("(prefers-contrast: more)").matches)) r.dataset.contrast = "high";
       try { // club colours computed last time, so the accent doesn't flash orange first
         var cv = JSON.parse(localStorage.getItem("wla:clubvars") || "null");
@@ -33,9 +34,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Fonts load in the background so a slow connection never blocks the page. -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700;800&family=Saira+Condensed:wght@600;700;800&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-  <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="css/broadcast.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700;800&family=Saira+Condensed:wght@600;700;800&family=Orbitron:wght@600;700;800&family=Heebo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <link rel="stylesheet" href="css/style.css" data-rtl="css/style.rtl.css">
+  <link rel="stylesheet" href="css/broadcast.css" data-rtl="css/broadcast.rtl.css">
+  <script>
+    // Hebrew: the mirrored (right-to-left) stylesheets, plus the Hebrew-only touches
+    if (document.documentElement.dir === "rtl") {
+      document.querySelectorAll("link[data-rtl]").forEach(function (l) { l.href = l.getAttribute("data-rtl"); });
+      document.write('<link rel="stylesheet" href="css/he.css">');
+    }
+  </script>
 </head>
 <body>
   <script>

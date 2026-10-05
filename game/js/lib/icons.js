@@ -72,7 +72,7 @@ export const ICON_PATHS = P;
 /** Inline SVG icon. Decorative by default; pass label to make it announced. */
 export function icon(name, { size = 18, cls = "", label = "" } = {}) {
   const a11y = label ? `role="img" aria-label="${label}"` : 'aria-hidden="true"';
-  return `<svg class="ic ${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${a11y}>${P[name] || P.info}</svg>`;
+  return `<svg class="ic ic-${name} ${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${a11y}>${P[name] || P.info}</svg>`;
 }
 
 /** Arcade crest: shield, ball through a hoop, three stars. */

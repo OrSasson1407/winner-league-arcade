@@ -4,6 +4,7 @@ import { esc } from "../ui.js";
 import { icon } from "./icons.js";
 import { announce } from "./a11y.js";
 import { openFeedback } from "./feedback.js";
+import { dateLocale } from "../i18n/index.js";
 
 // ---------------------------------------------------------------- undo
 let undoEl = null, undoTimer = 0;
@@ -104,5 +105,5 @@ export const skeletonRows = (n = 6) => Array.from({ length: n }, (_, i) => `<div
 
 export const dataUpdated = () => {
   const d = new Date(db.metadata.generated_at);
-  return isNaN(d) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  return isNaN(d) ? "" : d.toLocaleDateString(dateLocale(), { day: "numeric", month: "long", year: "numeric" });
 };

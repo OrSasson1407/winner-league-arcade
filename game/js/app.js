@@ -17,6 +17,10 @@ import { crumbsFor, renderCrumbs, showError, skeletonHtml, undoToast } from "./l
 import { openFeedback } from "./lib/feedback.js";
 import { openOnboarding, shouldOnboard } from "./lib/onboarding.js";
 import { initReminders } from "./lib/notify.js";
+import { getLang, startHebrew } from "./i18n/index.js";
+
+// Hebrew: the dictionary is in before the first screen draws (the page direction is set in index.html)
+const langReady = getLang() === "he" ? startHebrew().catch((e) => console.error("Hebrew", e)) : Promise.resolve();
 
 // Each page's code loads when it's first needed (and ahead of time when you point at a link to it).
 const lazy = (load, name) => () => load().then((m) => m[name]);
@@ -269,7 +273,7 @@ initReminders(); // opt-in daily reminder
 // new units: redraw pages that show them (not a game in progress, which would lose its state)
 document.addEventListener("units-changed", () => { const k = keyOf(location.hash); if (!GAME_ROUTES.has(k) || k === "mycareer") renderRoute(); });
 // saved games in IndexedDB are read before the first screen draws
-storeReady.finally(() => { window.addEventListener("hashchange", route); route(); });
+Promise.allSettled([storeReady, langReady]).then(() => { window.addEventListener("hashchange", route); route(); });
 document.getElementById("fb-link")?.addEventListener("click", (e) => { e.preventDefault(); openFeedback(); });
 // installed app: the splash screen fades once the first page is up
 const splash = document.getElementById("splash");

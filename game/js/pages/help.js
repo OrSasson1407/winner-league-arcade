@@ -90,7 +90,7 @@ const SECTIONS = [
     <p>Players, teams and regular-season stats from 2010-11 to 2026-27 come from the official Israeli Basketball Premier League site (bsl.org.il). Missing values are left empty, never invented. 2026-27 is in progress: rosters only, no stats yet. Playoff and cup games are not included in the stats.</p>` },
   { id: "privacy", ic: "shield", title: "Your data and settings", body: `
     <p>Your nickname, avatar, scores, saved games and settings are stored only in this browser on this device. Nothing is sent anywhere, except during online play: then your nickname, avatar and level are shared with the game server and your opponent. Clearing your browser's site data resets them.</p>
-    <p>Settings (gear icon): dark / light theme, colour-blind safe colours, text size, animations and sound. The pause icon stops every animation at once.</p>` },
+    <p>Settings (gear icon): language (English or Hebrew, right to left), dark / light theme, colour-blind safe colours, text size, animations and sound. The pause icon stops every animation at once.</p>` },
 ];
 
 export function renderHelp(root) {

@@ -68,7 +68,8 @@ export const press = (root, sel) => () => { const b = root.querySelector(sel); i
  */
 export function arrowGrid(root, sel, cols, signal) {
   root.addEventListener("keydown", (e) => {
-    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols }[e.key];
+    const side = document.documentElement.dir === "rtl" ? -1 : 1; // right to left: → moves to the item on the right, which comes earlier
+    const step = { ArrowRight: side, ArrowLeft: -side, ArrowDown: cols, ArrowUp: -cols }[e.key];
     const from = step && e.target.closest?.(sel);
     if (!from) return;
     const items = [...root.querySelectorAll(sel)];

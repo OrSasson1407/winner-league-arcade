@@ -224,7 +224,8 @@ export async function renderMyCareer(root, signal) {
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
       const order = [...bar.querySelectorAll("[data-tab]")].map((b) => b.dataset.tab);
       e.preventDefault();
-      goTab(order[(order.indexOf(tab) + (e.key === "ArrowRight" ? 1 : -1) + order.length) % order.length], true);
+      const fwd = (e.key === "ArrowRight") !== (document.documentElement.dir === "rtl"); // right to left: ← is "next"
+      goTab(order[(order.indexOf(tab) + (fwd ? 1 : -1) + order.length) % order.length], true);
     }, { signal });
     if (swipeBound) return;
     swipeBound = true;
@@ -244,7 +245,7 @@ export async function renderMyCareer(root, signal) {
       const t = e.changedTouches[0], dx = t.clientX - st.x, dy = t.clientY - st.y;
       if (Math.abs(dx) < 70 || Math.abs(dy) > 45 || Date.now() - st.at > 700) return;
       const order = [...root.querySelectorAll("#mc-tabs [data-tab]")].map((b) => b.dataset.tab);
-      const next = order[order.indexOf(tab) + (dx < 0 ? 1 : -1)];
+      const next = order[order.indexOf(tab) + ((dx < 0) !== (document.documentElement.dir === "rtl") ? 1 : -1)]; // right to left: swipe right for the next tab
       if (next) goTab(next);
     }, { passive: true, signal });
   }
