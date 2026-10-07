@@ -66,3 +66,27 @@ export function initReminders() {
     } catch {}
   }, 10 * 60 * 1000);
 }
+
+// ---------------------------------------------------------------- online alerts (opt-in)
+// A friend's invite, or a match found while the arcade is in a background tab. Shown only while the
+// tab is open but hidden: nothing is sent through a push server.
+export function onlineAlertStatus() {
+  if (!remindersSupported()) return "unsupported";
+  if (Notification.permission === "denied") return "blocked";
+  return store.get("notify:online", false) && Notification.permission === "granted" ? "on" : "off";
+}
+export async function enableOnlineAlerts() {
+  if (!remindersSupported()) return "unsupported";
+  const p = Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission;
+  store.set("notify:online", p === "granted");
+  return p === "granted" ? "on" : p === "denied" ? "blocked" : "off";
+}
+export function disableOnlineAlerts() { store.set("notify:online", false); return "off"; }
+/** Show an online alert if they're switched on and the tab isn't being looked at. */
+export async function alertOnline(title, { body = "", url = "./#/online", tag = "wla-online" } = {}) {
+  if (onlineAlertStatus() !== "on" || !document.hidden) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    await reg.showNotification(title, { body, icon: "icons/icon-192.png", badge: "icons/icon-192.png", tag, renotify: true, data: { url } });
+  } catch { /* no service worker: nothing to show */ }
+}

@@ -8,9 +8,10 @@ import { emit } from "../lib/achievements.js";
 import { cleanCode } from "../shared/rating.js";
 import { connect, onNet, send } from "./net.js";
 import { buzz } from "./feel.js";
+import { alertOnline } from "../lib/notify.js";
 
-export const GAME_NAMES = { hl: "Higher or Lower", guess: "Guess the Player", career: "Career Path", draft: "All-Time Draft", conn: "Connections", grid: "The Grid" };
-export const GAME_ICONS = { hl: "chart", guess: "search", career: "arrowRight", draft: "trophy", conn: "link", grid: "games" };
+export const GAME_NAMES = { hl: "Higher or Lower", guess: "Guess the Player", career: "Career Path", draft: "All-Time Draft", conn: "Connections", grid: "The Grid", coach: "Single game" };
+export const GAME_ICONS = { hl: "chart", guess: "search", career: "arrowRight", draft: "trophy", conn: "link", grid: "games", coach: "whistle" };
 
 // ---------------------------------------------------------------- friends
 export const getFriends = () => store.get("online:friends", []);
@@ -88,7 +89,7 @@ function showInvite(m) {
 export function initSocial() {
   connect({ quiet: true });
   onNet((m) => {
-    if (m.t === "invite:incoming") showInvite(m);
+    if (m.t === "invite:incoming") { showInvite(m); alertOnline(`${m.from?.name || "A friend"} invited you`, { body: `${GAME_NAMES[m.game] || "Online"}: the invite is open for a minute.`, tag: "wla-invite" }); }
     if (m.t === "invite:gone" && box?.dataset.code === m.code) { closeInvite(); toast("The invite was cancelled"); }
   });
 }

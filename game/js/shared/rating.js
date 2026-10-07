@@ -1,6 +1,6 @@
 // Online ranking rules shared by the server and the browser: ELO per game and the rank ladder.
 export const START_ELO = 1000;
-export const RATED_GAMES = ["hl", "guess", "career", "draft", "conn", "grid"];
+export const RATED_GAMES = ["hl", "guess", "career", "draft", "conn", "grid", "coach"];
 
 export const RANKS = [
   { id: "bronze", name: "Bronze", min: 0, color: "#c47b44" },

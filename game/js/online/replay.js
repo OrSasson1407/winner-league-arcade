@@ -13,7 +13,7 @@ const mark = (ok) => (ok ? `<span class="rp-ok">${icon("check", { size: 14 })}</
 const secs = (ms) => (ms == null ? "" : `<small class="muted">${(ms / 1000).toFixed(1)} s</small>`);
 
 /**
- * game: hl | career | guess | draft | conn | grid. seat: your seat (0/1). names: [yours, theirs]. scores: per seat.
+ * game: hl | career | guess | draft | conn | grid | coach. seat: your seat (0/1). names: [yours, theirs]. scores: per seat.
  */
 export function openReplay({ game, seat, names, replay, scores }) {
   const me = seat, op = 1 - seat;
@@ -40,6 +40,14 @@ export function openReplay({ game, seat, names, replay, scores }) {
     body = `<div class="rp-groups">${(replay.groups || []).map((g) => `<div class="cn-group lv${g.level}"><b>${esc(g.label)}</b><span>${g.players.map((p) => esc(name(p))).join(", ")}</span></div>`).join("")}</div>
       <table class="stat-table rp-table"><thead><tr><th>Time</th><th>Who</th><th>Four</th><th></th></tr></thead><tbody>${(replay.tries || []).map((t) => `<tr>
       <td>${secs(t.ms)}</td><td>${esc(names[t.seat === me ? 0 : 1])}</td><td>${t.pids.map((p) => esc(name(p))).join(", ")}</td><td>${mark(t.ok)} ${t.ok ? esc(levelName(t.level)) : ""}</td></tr>`).join("")}</tbody></table>`;
+  } else if (game === "coach") {
+    const PLAN = { pace: "Pace", defense: "Defense", focus: "Focus" };
+    const plan = (t) => (t ? Object.keys(PLAN).map((k) => `${PLAN[k]}: ${esc(t[k])}`).join("<br>") : `<span class="muted">Default plan</span>`);
+    body = `<table class="stat-table rp-table"><thead><tr><th>Team-season</th><th>Rating</th><th>Picked by</th></tr></thead><tbody>${(replay.choices || []).map((c, i) => {
+      const by = replay.picks?.indexOf(i);
+      return `<tr><td>${esc(teamName(c.team_id))} ${esc(c.season)}</td><td>${c.s}</td><td>${by >= 0 ? `${esc(names[by === me ? 0 : 1])}${by === replay.first ? ` <small class="muted">(first pick)</small>` : ""}` : `<span class="muted">–</span>`}</td></tr>`;
+    }).join("")}</tbody></table>
+      <table class="stat-table rp-table"><thead><tr><th>Game plan</th>${head}</tr></thead><tbody><tr><td></td>${both((s) => plan(replay.tactics?.[s]))}</tr></tbody></table>`;
   } else if (game === "grid") {
     body = `<table class="stat-table rp-table"><thead><tr><th>Time</th><th>Who</th><th>Square</th><th>Player</th><th></th></tr></thead><tbody>${(replay.tries || []).map((t) => `<tr>
       <td>${secs(t.ms)}</td><td>${esc(names[t.seat === me ? 0 : 1])}</td><td>${Math.floor(t.cell / 3) + 1}·${(t.cell % 3) + 1}</td><td>${esc(name(t.pid))}</td><td>${mark(t.right)}${t.right ? ` rarity ${t.rarity}` : ""}</td></tr>`).join("")}</tbody></table>`;

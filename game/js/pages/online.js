@@ -14,7 +14,7 @@ import { emit } from "../lib/achievements.js";
 import { levelInfo } from "../lib/progress.js";
 import { SIXTH, slotValue } from "../shared/draftLogic.js";
 import { openBoxScore, openLiveGame } from "../games/draft_live.js";
-import { RECONNECT_GRACE_MS, connect, deadlineFrom, lastStats, latency, myCode, myRecord, netStatus, onNet, quality, send } from "../online/net.js";
+import { RECONNECT_GRACE_MS, wakingUp, connect, deadlineFrom, lastStats, latency, myCode, myRecord, netStatus, onNet, quality, send } from "../online/net.js";
 import { GAME_ICONS, GAME_NAMES, addFriend, addHistory, getFriends, getHistory, headToHead, isFriend, refreshFriends, removeFriend, rivals } from "../online/social.js";
 import { buzz, countdown } from "../online/feel.js";
 import { announce } from "../lib/a11y.js";
@@ -33,6 +33,8 @@ import { ITEMS, ownedStickers } from "../lib/shop.js";
 import { equipped } from "../lib/wallet.js";
 import { owns } from "../lib/wallet.js";
 import { openReplay } from "../online/replay.js";
+import { realRoster, teamSeasonSide } from "../games/draft_sim.js";
+import { alertOnline } from "../lib/notify.js";
 const LEAGUE_COLORS = ["#e4002b", "#ffc629", "#0a3e8c", "#00843d", "#6d28d9", "#0ea5e9", "#ff7a1a", "#e11d48", "#111111"]; // as server/leagues.js
 const LEAGUE_ICONS = ["trophy", "crown", "flame", "star", "shield", "rocket", "medal", "ball"];
 
@@ -49,6 +51,8 @@ export const ONLINE_GAMES = {
     rules: "The same 16 players for both of you. Find the four groups; four mistakes and you're out. 4 minutes. More groups wins, then fewer mistakes, then the faster finish." },
   grid: { name: "The Grid", ic: "games", short: "Rarity duel",
     rules: "The same 3×3 board for both. 9 guesses and 3 minutes each; every right answer scores its rarity (0–100). Highest total wins." },
+  coach: { name: "Single game", ic: "whistle", short: "Coach duel",
+    rules: "Four real team-seasons. A coin toss decides who picks first; the second pick plays at home. Both of you set a game plan, then the game engine plays it out: watch it live." },
 };
 const HL_CATS = {
   ppg: { label: "Points per game", get: (ps) => ps.stats.ppg, dec: 1 },
@@ -166,6 +170,8 @@ export function renderOnline(root, signal, params = []) {
         G = null; phase = "match";
         if (joinCode) history.replaceState(null, "", "#/online");
         sound.play("spin"); buzz(150);
+        if (m.unrated === "pair" && !m.resumed) toast("Ranked games against the same opponent count 5 times a day: this one won't change your rating");
+        if (!M.spectator && !m.resumed) alertOnline(`Match found: ${m.opp.name}`, { body: `${ONLINE_GAMES[m.game].name} starts in 3 seconds.`, tag: "wla-match" });
         if (M.spectator) announce(`Watching ${m.you.name} against ${m.opp.name}, ${ONLINE_GAMES[m.game].name}.`);
         else if (!m.resumed) announce(`Match found: ${m.opp.name}. ${ONLINE_GAMES[m.game].name}, ${m.mode === "ranked" ? "ranked" : m.mode === "bot" ? "against a bot" : "friendly"}. Starting in 3 seconds.`, { assertive: true });
         stopCount?.(); stopCount = m.resumed ? null : countdown(M.startAt);
@@ -173,7 +179,7 @@ export function renderOnline(root, signal, params = []) {
       case "opp:away": if (M) { M.oppAway = Date.now() + m.ms; drawOppState(); } return;
       case "opp:back": if (M) { M.oppAway = false; drawOppState(); } return;
       case "opp:left": if (M) { M.oppLeft = true; if (phase === "end") drawEnd(); } return;
-      case "opp:rematch": if (M) { M.oppRematch = true; if (phase === "end") drawEnd(); toast(`${M.opp.name} wants a rematch`); } return;
+      case "opp:rematch": if (M) { M.oppRematch = true; if (phase === "end") drawEnd(); toast(`${M.opp.name} wants a rematch`); alertOnline(`${M.opp.name} wants a rematch`, { tag: "wla-match" }); } return;
       case "react": return showReaction(m.e, m.from || "opp");
       case "end": return onEnd(m);
     }
@@ -182,6 +188,7 @@ export function renderOnline(root, signal, params = []) {
     if (m.t.startsWith("car:") || (m.t === "opp:wrong" && M.game === "career")) return careerMessage(m);
     if (m.t.startsWith("guess:")) return guessMessage(m);
     if (m.t.startsWith("draft:")) return draftMessage(m);
+    if (m.t.startsWith("coach:")) return coachMessage(m);
     if (m.t.startsWith("conn:")) return connMessage(m);
     if (m.t.startsWith("grid:")) return gridMessage(m);
   }
@@ -190,7 +197,7 @@ export function renderOnline(root, signal, params = []) {
   function statusText() {
     const s = netStatus();
     return s === "online" ? `Connected · ${Math.round(latency())} ms` : s === "unavailable" ? "Online server not found" : s === "replaced" ? "Opened in another tab"
-      : s === "offline" ? "You're offline" : s === "reconnecting" ? "Reconnecting…" : "Connecting…";
+      : s === "offline" ? "You're offline" : wakingUp() ? "Waking up the server (up to a minute)…" : s === "reconnecting" ? "Reconnecting…" : "Connecting…";
   }
   const QUALITY = { good: "Good connection", fair: "Connection a bit slow", poor: "Unstable connection: moves may arrive late" };
   const connTitle = () => (netStatus() === "online" ? `${QUALITY[quality()]} · ping ${Math.round(latency())} ms` : statusText());
@@ -433,7 +440,7 @@ export function renderOnline(root, signal, params = []) {
     const L = leaders?.game === leadersGame && (leaders.period || "all") === leadersPeriod ? leaders : null;
     const timed = leadersPeriod !== "all"; // this week / this month: points from ranked results
     const row = (r) => html`<tr class="${r.me ? "me-row" : ""}"><td class="pos">${r.pos <= 3 ? ["🥇", "🥈", "🥉"][r.pos - 1] : r.pos}</td>
-      <td><span class="lb-name">${avatarHtml({ icon: r.icon, color: r.color, frame: r.frame, style: r.style, av: r.av }, 30)}<span><b>${esc(r.name)}</b><small class="muted">Lv ${r.level}${r.streak >= 3 ? ` · 🔥${r.streak}` : ""}</small></span>${!r.me && r.code && r.name !== "Player" ? `<button class="icon-btn lb-report" data-report="${esc(r.code)}" data-name="${esc(r.name)}" aria-label="Report the nickname ${esc(r.name)}" title="Report nickname">${icon("flag", { size: 13 })}</button>` : ""}</span></td>
+      <td><span class="lb-name">${avatarHtml({ icon: r.icon, color: r.color, frame: r.frame, style: r.style, av: r.av }, 30)}<span>${r.code ? `<a href="#/op/${esc(r.code)}"><b>${esc(r.name)}</b></a>` : `<b>${esc(r.name)}</b>`}<small class="muted">Lv ${r.level}${r.streak >= 3 ? ` · 🔥${r.streak}` : ""}</small></span>${!r.me && r.code && r.name !== "Player" ? `<button class="icon-btn lb-report" data-report="${esc(r.code)}" data-name="${esc(r.name)}" aria-label="Report the nickname ${esc(r.name)}" title="Report nickname">${icon("flag", { size: 13 })}</button>` : ""}</span></td>
       <td>${rankBadge(r.elo, { small: true })}</td>${timed ? `<td><b>${r.pts}</b></td><td class="muted">${r.w}-${r.d}-${r.l}</td>`
         : `<td><b>${leadersGame === "all" ? r.w : r.elo}</b></td><td class="muted">${r.w}-${r.l}</td>`}</tr>`;
     const since = timed && L?.since ? new Date(L.since).toLocaleDateString(dateLocale(), { day: "numeric", month: "long" }) : "";
@@ -475,7 +482,7 @@ export function renderOnline(root, signal, params = []) {
         ${list.length ? `<div class="hist-list">${list.map((h, i) => html`<div class="hist-row ${h.result}">
           <span class="hist-res">${h.result === "win" ? "W" : h.result === "lose" ? "L" : "D"}</span>
           ${avatarHtml({ icon: h.opp?.icon || "ball", color: h.opp?.color || "#64748b", frame: h.opp?.frame || "none", style: h.opp?.style, av: h.opp?.av }, 34)}
-          <div class="hist-info"><b>${esc(h.opp?.name || "?")}</b><small class="muted">${icon(GAME_ICONS[h.game], { size: 12 })} ${GAME_NAMES[h.game]} · ${esc(h.score || "")} · ${new Date(h.at).toLocaleDateString()}</small></div>
+          <div class="hist-info">${h.oppCode && h.mode !== "bot" ? `<a href="#/op/${esc(h.oppCode)}"><b>${esc(h.opp?.name || "?")}</b></a>` : `<b>${esc(h.opp?.name || "?")}</b>`}<small class="muted">${icon(GAME_ICONS[h.game], { size: 12 })} ${GAME_NAMES[h.game]} · ${esc(h.score || "")} · ${new Date(h.at).toLocaleDateString()}</small></div>
           ${h.replay && h.id ? `<button class="btn ghost" data-rp="${esc(h.id)}" ${s === "online" ? "" : "disabled"} title="Watch the match again" aria-label="Replay">${icon("clock", { size: 14 })}<span class="hide-sm"> Replay</span></button>` : ""}
           ${modeChip(h.mode)}${h.mode === "ranked" && h.delta != null ? `<span class="elo-d ${h.delta >= 0 ? "up" : "down"}">${h.delta >= 0 ? "+" : ""}${h.delta}</span>` : ""}
           ${h.oppCode && h.mode !== "bot" ? `<button class="btn ghost" data-again="${i}" ${s === "online" ? "" : "disabled"} title="Invite to a rematch">${icon("refresh", { size: 14 })}<span class="hide-sm"> Challenge</span></button>` : ""}
@@ -542,9 +549,11 @@ export function renderOnline(root, signal, params = []) {
   const mine = (arr) => arr[M.seat];
   const theirs = (arr) => arr[opp()];
 
+  // Single game: the bar shows each side's team rating once picked, then the final score
+  const coachScore = (i) => (G?.t === "coach" && G.picks?.[i] != null ? G.choices[G.picks[i]].s : M.scores?.[i] || "–");
   function duelBar() {
     const g = ONLINE_GAMES[M.game];
-    const score = (i) => (M.game === "guess" ? `${G?.tries?.[i] ?? 0}/8` : M.game === "draft" ? `${G?.picked?.[i] ?? 0}/6` : M.game === "conn" ? `${M.scores[i] ?? 0}/4` : M.scores[i]);
+    const score = (i) => (M.game === "guess" ? `${G?.tries?.[i] ?? 0}/8` : M.game === "draft" ? `${G?.picked?.[i] ?? 0}/6` : M.game === "conn" ? `${M.scores[i] ?? 0}/4` : M.game === "coach" ? coachScore(i) : M.scores[i]);
     return html`<div class="card duel-bar">
       <div class="duel-p p-me">${avatarHtml(M.you, 40)}<div><b>${esc(M.you.name)}</b><small class="muted">${M.spectator ? "" : "You · "}${M.rated ? rankBadge(M.you.elo, { small: true }) : `Lv ${M.you.level}`}</small></div><span class="duel-score led" id="score-me">${score(M.seat)}</span><span class="chat-bubble me" id="chat-me" hidden></span></div>
       <div class="duel-mid"><span class="muted">${icon(g.ic, { size: 16 })} ${g.name}</span><b id="duel-round"></b>
@@ -591,21 +600,34 @@ export function renderOnline(root, signal, params = []) {
     for (const [who, c] of Object.entries(M.chat || {})) if (c.until > Date.now()) showChat(c.i, who, c.until - Date.now());
   }
 
+  // the match intro: the tale of the tape, broadcast style
   function drawCountdown() {
     const a = root.querySelector("#arena");
-    a.innerHTML = html`<div class="card center-card og-vs pop">
-      <span class="bc-strap">Tip-off</span><small class="muted">MATCH FOUND</small>
-      <div class="og-vs-row">${avatarHtml(M.you, 64)}<b class="led">VS</b>${avatarHtml(M.opp, 64)}</div>
-      <h2>${esc(M.you.name)} <span class="muted">vs</span> ${esc(M.opp.name)}</h2>
-      <p class="muted" style="max-width:520px">${ONLINE_GAMES[M.game].rules}</p>
-      <div class="og-count led" data-until="${M.startAt}">3</div>
+    const h2h = M.opp.code && !M.spectator ? headToHead(M.opp.code) : null;
+    const side = (p, cls) => html`<div class="tt-side ${cls}">
+      ${avatarHtml(p, 92)}
+      <b class="tt-name">${esc(p.name)}</b>
+      <small class="muted">${p.bot ? `Bot · ${esc(BOTS[p.botLevel]?.name || "")}` : `Level ${p.level}`}</small>
+      ${M.rated && p.elo != null ? `<span>${rankBadge(p.elo)}</span>` : ""}
+      <ul class="clean tt-stats">
+        ${p.wl ? `<li><small>RECORD</small><b>${p.wl[0]}-${p.wl[1]}</b></li>` : ""}
+        ${p.streak >= 2 ? `<li><small>STREAK</small><b>🔥 ${p.streak}</b></li>` : ""}
+      </ul></div>`;
+    a.innerHTML = html`<div class="card og-vs og-tape pop">
+      <div class="tt-top"><span class="bc-strap">${M.mode === "ranked" ? "Ranked" : M.mode === "bot" ? "vs Bot" : "Friendly"}</span>
+        <small>${icon(ONLINE_GAMES[M.game].ic, { size: 14 })} ${esc(ONLINE_GAMES[M.game].name)}</small></div>
+      <div class="tt-row">${side(M.you, "tt-me")}
+        <div class="tt-mid"><b class="led tt-vs">VS</b><div class="og-count led" data-until="${M.startAt}">3</div>
+          ${h2h && h2h.w + h2h.l + h2h.d ? `<small class="tt-h2h">Head to head <b>${h2h.w}-${h2h.l}${h2h.d ? `-${h2h.d}` : ""}</b></small>` : `<small class="tt-h2h">First meeting</small>`}</div>
+        ${side(M.opp, "tt-them")}</div>
+      <p class="muted tt-rules">${ONLINE_GAMES[M.game].rules}</p>
     </div>`;
   }
 
   function drawArena() {
     const a = root.querySelector("#arena");
     if (!a || !G) return;
-    ({ hl: drawHL, career: drawCareer, guess: drawGuess, draft: drawDraft, conn: drawConn, grid: drawGridDuel })[M.game](a);
+    ({ hl: drawHL, career: drawCareer, guess: drawGuess, draft: drawDraft, conn: drawConn, grid: drawGridDuel, coach: drawCoach })[M.game](a);
     updateScores();
   }
 
@@ -614,6 +636,7 @@ export function renderOnline(root, signal, params = []) {
     if (!me || !M) return;
     if (M.game === "guess") { me.textContent = `${G?.tries?.[M.seat] ?? 0}/8`; them.textContent = `${G?.tries?.[opp()] ?? 0}/8`; }
     else if (M.game === "draft") { me.textContent = `${G?.picked?.[M.seat] ?? 0}/6`; them.textContent = `${G?.picked?.[opp()] ?? 0}/6`; }
+    else if (M.game === "coach") { me.textContent = coachScore(M.seat); them.textContent = coachScore(opp()); }
     else if (M.game === "conn") { me.textContent = `${mine(M.scores) ?? 0}/4`; them.textContent = `${theirs(M.scores) ?? 0}/4`; }
     else { me.textContent = mine(M.scores); them.textContent = theirs(M.scores); }
     const r = root.querySelector("#duel-round");
@@ -654,8 +677,10 @@ export function renderOnline(root, signal, params = []) {
   }
 
   // timers: elements carry the moment they run out
+  let lastBadge = 0;
   function updateClocks() {
     if (droppedAt) drawReconnect();
+    if (netStatus() !== "online" && Date.now() - lastBadge > 1000) { lastBadge = Date.now(); drawConnBadge(); }
     if (phase === "searching") {
       const el = root.querySelector("#search-time");
       if (el) { const s = Math.floor((Date.now() - searchStart) / 1000); el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
@@ -1115,6 +1140,61 @@ export function renderOnline(root, signal, params = []) {
     drawEnd();
   }
 
+  // ------------------------------------------------------------ Single game (coach duel)
+  function coachMessage(m) {
+    if (m.t === "coach:opp") { if (G?.t === "coach") { G.oppDone = true; drawArena(); } return; }
+    if (m.t !== "coach:state") return;
+    const fresh = G?.t !== "coach";
+    const mine = G?.t === "coach" && G.done ? G.done : null;
+    G = { ...m, t: "coach", deadline: deadlineFrom(m.ms), total: 20000, oppDone: m.done?.[opp()] || G?.oppDone || false, sentPlan: mine?.[M.seat] || G?.sentPlan || m.done?.[M.seat] || false,
+      roundLabel: m.phase === "pick" ? "Pick a team" : "Game plan" };
+    if (m.last && m.last.seat !== M.seat && !M.spectator) { const c = m.choices[m.last.i]; toast(`${M.opp.name} took ${teamName(c.team_id)} ${c.season}${m.last.auto ? " (time ran out)" : ""}`); }
+    if (m.phase === "plan" && fresh === false && !G.sentPlan) announce("Both teams are picked. Choose a game plan: 20 seconds.");
+    if (fresh) return drawMatch();
+    drawArena(); updateScores();
+  }
+  const coachTop = (c, n = 3) => realRoster(c.season, c.team_id).slice(0, n);
+  function coachCard(c, i, { pickable, owner }) {
+    return html`<button class="card og-coach ${owner !== null ? "taken" : ""} ${pickable ? "pickable" : ""}" data-ci="${i}" ${pickable ? "" : "disabled"} style="--club:${clubColors(c.team_id)[0]}"
+      aria-label="${esc(teamName(c.team_id))} ${esc(c.season)}, team rating ${c.s}${owner !== null ? `, taken by ${esc(owner)}` : ""}">
+      <span class="oc-head">${crestSvg(c.team_id, teamName(c.team_id), 40)}<span><b>${esc(teamName(c.team_id))}</b><small class="muted">${esc(c.season)} · rating ${c.s}</small></span></span>
+      <ol class="clean oc-top">${coachTop(c).map((ps) => `<li>${esc(playersById.get(ps.player_id)?.name || ps.player_id)} <small class="muted">${esc(ps.position || "")} · ${ps.stats.ppg ?? "–"} PPG</small></li>`).join("")}</ol>
+      ${owner !== null ? `<span class="oc-owner">${esc(owner)}</span>` : ""}</button>`;
+  }
+  function drawCoach(a) {
+    const g = G, me = M.seat;
+    const ownerOf = (i) => (g.picks[me] === i ? (M.spectator ? M.you.name : "You") : g.picks[opp()] === i ? M.opp.name : null);
+    if (g.phase === "pick") {
+      const myTurn = g.turn === me && !M.spectator;
+      a.innerHTML = html`${timerBar(g.deadline, 20000, myTurn)}
+        <div class="card pad og-plan"><span class="bc-strap">${myTurn ? "Your pick" : `${esc(M.opp.name)} is picking…`}</span>
+          <p class="muted" style="margin:8px 0 12px">${g.first === me ? "You won the coin toss and pick first." : `${esc(M.opp.name)} picks first.`} The second pick plays at home. Team rating comes from each club's real players that season.</p>
+          <div class="oc-grid">${g.choices.map((c, i) => coachCard(c, i, { pickable: myTurn && !g.picks.includes(i), owner: ownerOf(i) })).join("")}</div></div>`;
+      a.querySelectorAll("[data-ci]:not([disabled])").forEach((b) => b.addEventListener("click", () => { send({ t: "coach:pick", i: Number(b.dataset.ci) }); sound.play("select"); }, { signal }));
+      return;
+    }
+    const side = (seat) => { const c = g.choices[g.picks[seat]]; return html`<div class="oc-side">${crestSvg(c.team_id, teamName(c.team_id), 48)}<b>${esc(teamName(c.team_id))} ${esc(c.season)}</b>
+      <small class="muted">${seat === me ? (M.spectator ? esc(M.you.name) : "You") : esc(M.opp.name)} · rating ${c.s}${g.home === seat ? " · home" : ""}</small></div>`; };
+    a.innerHTML = html`${timerBar(g.deadline, 20000, !g.sentPlan && !M.spectator)}
+      <div class="card pad og-plan"><span class="bc-strap">Game plan</span>
+        <div class="oc-vs">${side(me)}<b class="led tt-vs">VS</b>${side(opp())}</div>
+        ${M.spectator ? "" : g.sentPlan ? `<p class="og-done">${icon("check", { size: 18, cls: "ic-good" })} Plan locked. <span class="muted">${g.oppDone ? "Tip-off!" : `Waiting for ${esc(M.opp.name)}…`}</span></p>`
+          : html`<div id="plan-box">${gamePlanHtml({})}</div><div class="row" style="justify-content:center;margin-top:10px"><button class="btn primary" id="plan-go">${icon("check", { size: 15 })} Lock in the plan</button></div>`}
+        ${g.oppDone && !g.sentPlan ? `<p class="muted" style="text-align:center">${esc(M.opp.name)} has locked in.</p>` : ""}
+      </div>`;
+    const box = a.querySelector("#plan-box");
+    if (box) {
+      bindGamePlan(box, { signal });
+      a.querySelector("#plan-go").addEventListener("click", () => { send({ t: "coach:tactics", tactics: readGamePlan(box).tactics }); g.sentPlan = true; drawArena(); });
+    }
+  }
+  /** The single game, rebuilt in the browser from its seed (the same game the server played). */
+  function coachGame(d) {
+    const sides = d.teams.map((t, seat) => teamSeasonSide(t.season, t.team_id, t.name, d.game.tactics?.[seat]));
+    const home = d.game.home, away = 1 - home;
+    return { seed: d.game.seed, home: sides[home], away: sides[away], hs: d.game.hs, as: d.game.as, neutral: false, winner: d.game.hs > d.game.as ? sides[home] : sides[away], label: "Online single game" };
+  }
+
   function draftGame(d) {
     const sides = d.teams.map((t, seat) => ({ name: t.name, strength: t.total, drafted: true, id: "online-" + seat, roster: G_SLOTS.map((s) => psByKey(t.slots[s])).filter(Boolean), tactics: d.game.tactics?.[seat] }));
     return { seed: d.game.seed, home: sides[0], away: sides[1], hs: d.game.hs, as: d.game.as, neutral: true, winner: sides[d.game.winner], label: "Online final" };
@@ -1156,6 +1236,14 @@ export function renderOnline(root, signal, params = []) {
       return html`<div class="og-final"><div><small class="muted">${M.spectator ? esc(M.you.name).toUpperCase() : "YOU"}</small><b class="led">${mine(m.scores)}</b></div><span class="muted">–</span><div><small class="muted">${esc(M.opp.name).toUpperCase()}</small><b class="led">${theirs(m.scores)}</b></div></div>
         <div class="og-teams">${board(M.seat)}${board(opp())}</div>`;
     }
+    if (M.game === "coach") {
+      const team = (seat) => { const t = d.teams[seat]; return html`<div class="card pad og-team" style="--club:${clubColors(t.team_id)[0]}"><div class="row">${crestSvg(t.team_id, teamName(t.team_id), 36)}<b>${seat === M.seat && !M.spectator ? "Your team" : esc(t.name)}</b></div>
+        <div class="muted" style="font-size:13px">${esc(teamName(t.team_id))} ${esc(t.season)} · rating ${t.s}${d.game.home === seat ? " · home" : ""}</div>
+        <ol class="clean og-lineup">${coachTop(t, 5).map((ps) => `<li>${nameLink(ps.player_id, playersById.get(ps.player_id)?.name || ps.player_id)} <span class="muted">${esc(ps.position || "")}</span></li>`).join("")}</ol></div>`; };
+      return html`<div class="og-final"><div><small class="muted">YOU</small><b class="led">${m.scores[M.seat]}</b></div><span class="muted">–</span><div><small class="muted">${esc(M.opp.name).toUpperCase()}</small><b class="led">${m.scores[opp()]}</b></div></div>
+        <div class="row" style="justify-content:center"><button class="btn primary" id="watch">${icon("play", { size: 15 })} Watch the game</button><button class="btn" id="box">${icon("chart", { size: 15 })} Box score</button></div>
+        <div class="og-teams">${team(M.seat)}${team(opp())}</div>`;
+    }
     if (M.game === "draft") {
       const team = (seat) => {
         const t = d.teams[seat];
@@ -1193,6 +1281,7 @@ export function renderOnline(root, signal, params = []) {
           ${promoted ? `<span class="promo pop">${icon("star", { size: 15 })} Promoted to ${rankOf(m.elo).name}!</span>` : demoted ? `<span class="muted">Down to ${rankOf(m.elo).name}</span>` : ""}
           ${m.streak >= 2 ? `<span class="streak-fire">🔥 ${m.streak} in a row</span>` : ""}
         </div>` : ""}
+      ${m.voided === "speed" ? `<p class="muted" style="margin:0">${icon("shield", { size: 14 })} This match wasn't rated: answers came in faster than a person can play.</p>` : ""}
       ${h2h && h2h.w + h2h.l + h2h.d > 1 ? `<small class="muted">You vs ${esc(M.opp.name)}: ${h2h.w}-${h2h.l}${h2h.d ? `-${h2h.d}` : ""}</small>` : ""}
       <div class="row" style="justify-content:center;margin-top:8px">
         ${M.spectator ? "" : M.oppLeft ? `<span class="muted">${esc(M.opp.name)} left the room.</span>`
@@ -1219,8 +1308,8 @@ export function renderOnline(root, signal, params = []) {
       toast(how === "shared" ? "Shared!" : "Image saved: post it anywhere");
     });
     a.querySelector("#lobby").addEventListener("click", () => { send({ t: M.spectator ? "unspectate" : "leave" }); M = null; G = null; phase = "lobby"; drawLobby(); });
-    if (M.game === "draft" && m.reason === "done") {
-      const g = draftGame(m.detail);
+    if ((M.game === "draft" || M.game === "coach") && m.reason === "done") {
+      const g = M.game === "coach" ? coachGame(m.detail) : draftGame(m.detail);
       a.querySelector("#watch").addEventListener("click", () => openLiveGame(g, { celebrate: (x) => x.winner === (M.seat === 0 ? x.home : x.away) }));
       a.querySelector("#box").addEventListener("click", () => openBoxScore(g));
     }

@@ -3,7 +3,7 @@ import { store } from "../ui.js";
 import { LANGS } from "../i18n/index.js";
 import { canVibrate, haptics, sound } from "./fx.js";
 import { ILS_PER_USD, getUnits, setUnits } from "./units.js";
-import { disableReminders, enableReminders, reminderStatus } from "./notify.js";
+import { disableOnlineAlerts, disableReminders, enableOnlineAlerts, enableReminders, onlineAlertStatus, reminderStatus } from "./notify.js";
 import { icon } from "./icons.js";
 import { applyClubTheme } from "./clubTheme.js";
 import { db } from "../data.js";
@@ -68,6 +68,7 @@ export function initSettingsButton(btn) {
         if (r === "unsupported") return `<small class="muted">Not supported in this browser.</small>`;
         if (r === "blocked") return `<small class="muted">Notifications are blocked for this site in your browser settings.</small>`;
         return seg("remind", [[true, `${icon("bell", { size: 14 })} On`], [false, "Off"]], r === "on"); })()}</div>
+      ${onlineAlertStatus() === "unsupported" || onlineAlertStatus() === "blocked" ? "" : `<div class="field"><label>Online alerts <small class="muted">(friend invites, match found)</small></label>${seg("notify-online", [[true, `${icon("bell", { size: 14 })} On`], [false, "Off"]], onlineAlertStatus() === "on")}</div>`}
       <div class="field"><label>App</label><div class="install-row">${installRowHtml()}</div></div>`;
   };
   btn.addEventListener("click", (e) => {
@@ -97,6 +98,7 @@ export function initSettingsButton(btn) {
       const key = b.parentElement.dataset.key;
       const raw = b.dataset.v;
       const val = raw === "true" ? true : raw === "false" ? false : raw;
+      if (key === "notify-online") { (val ? enableOnlineAlerts() : Promise.resolve(disableOnlineAlerts())).then(() => pop && render()); return; }
       if (key === "remind") { (val ? enableReminders() : disableReminders()).then(() => pop && render()); return; }
       if (key === "sound") sound.on = val;
       else if (key === "haptics") { haptics.on = val; if (val) navigator.vibrate?.(15); }

@@ -7,11 +7,11 @@ import { H, PLAYED_SEASONS, careerSummary, db, isPlayable, namedPlayers, pick, p
 import { SIXTH, SLOT_WEIGHT, slotValue, teamSummary } from "../game/js/shared/draftLogic.js";
 import { decoys, eligible } from "../game/js/shared/careerLogic.js";
 import { COLS, attrs, compare, pool as guessPool } from "../game/js/shared/guessLogic.js";
-import { playGame } from "../game/js/games/draft_sim.js";
+import { playGame, realTeamStrength, teamSeasonSide } from "../game/js/games/draft_sim.js";
 import { DEFAULT_TACTICS, TACTICS } from "../game/js/shared/gameSim.js";
 import { answersFor, criterionById, facts, makeConnections, makeGrid, rarity } from "../game/js/shared/leagueFacts.js";
 
-export const GAMES = ["hl", "guess", "career", "draft", "conn", "grid"];
+export const GAMES = ["hl", "guess", "career", "draft", "conn", "grid", "coach"];
 
 // pools are computed once, on first use
 let _hlPool, _careerPool, _guessTargets;
@@ -27,9 +27,12 @@ const HL_CATS = {
 };
 const HL_ROUNDS = 15, HL_MS = 10000, HL_PAUSE = 2600;
 
+const HUMAN_MS = 350; // nobody reads two player cards and decides faster than this
 class HLDuel {
-  constructor(room, rnd) { this.room = room; this.rnd = rnd; this.scores = [0, 0]; this.i = -1; this.log = []; }
+  constructor(room, rnd) { this.room = room; this.rnd = rnd; this.scores = [0, 0]; this.i = -1; this.log = []; this.fast = [0, 0]; }
   replay() { return { rounds: this.log }; }
+  /** Seats whose answers were mostly faster than a person can manage (the match then isn't rated). */
+  suspicion() { return this.fast.map((n) => n >= Math.ceil(HL_ROUNDS / 2)); }
   start() { this.next(); }
   next() {
     this.i++;
@@ -53,7 +56,8 @@ class HLDuel {
     if (m.c !== "higher" && m.c !== "lower") return;
     const ms = Date.now() - c.at;
     if (ms > HL_MS + 400) return;
-    c.answers[seat] = { c: m.c, ms };
+    c.answers[seat] = { c: m.c, ms: Math.max(ms, 250) }; // no speed bonus below human reaction time
+    if (ms < HUMAN_MS) this.fast[seat]++;
     this.room.send(1 - seat, { t: "opp:answered", i: this.i });
     if (c.answers.every(Boolean)) this.reveal();
   }
@@ -82,10 +86,11 @@ const CAR_ROUNDS = 10, CAR_MS = 20000, CAR_PAUSE = 3200;
 
 class CareerDuel {
   constructor(room, rnd) {
-    this.room = room; this.rnd = rnd; this.scores = [0, 0]; this.i = -1; this.log = [];
+    this.room = room; this.rnd = rnd; this.scores = [0, 0]; this.i = -1; this.log = []; this.fast = [0, 0];
     this.targets = shuffle(careerPool().slice(), rnd).slice(0, CAR_ROUNDS);
   }
   replay() { return { rounds: this.log }; }
+  suspicion() { return this.fast.map((n) => n >= Math.ceil(CAR_ROUNDS / 2)); }
   start() { this.next(); }
   next() {
     this.i++;
@@ -106,6 +111,7 @@ class CareerDuel {
     const c = this.cur;
     if (m.t !== "car:answer" || !c || c.done || m.i !== this.i || c.picks[seat] || !c.options.includes(m.pid)) return;
     c.picks[seat] = m.pid;
+    if (m.pid === c.target && Date.now() - c.at < 900) this.fast[seat]++; // right before the path could even be read
     if (m.pid === c.target) { this.scores[seat] += 3; return this.reveal(seat); }
     this.room.send(seat, { t: "car:wrong", i: this.i, pid: m.pid });
     this.room.send(1 - seat, { t: "opp:wrong", i: this.i });
@@ -456,7 +462,82 @@ class GridDuel {
 
 function winnerOf([a, b]) { return a === b ? null : a > b ? 0 : 1; }
 
-const ENGINES = { hl: HLDuel, career: CareerDuel, guess: GuessDuel, draft: DraftDuel, conn: ConnDuel, grid: GridDuel };
+// ---------------------------------------------------------------- Single game (coach duel)
+// Four real team-seasons. One side (by coin toss) picks first; the other picks from the remaining three
+// and gets home court. Both choose a game plan, then the game engine plays it; the browsers re-play the
+// same game from its seed to watch it live.
+const COACH_PICK_MS = 20000, COACH_PLAN_MS = 20000;
+let _coachPool;
+/** Team-seasons from the stronger half of every season: no hopeless picks. */
+const coachPool = () => (_coachPool ??= PLAYED_SEASONS.flatMap((season) => {
+  const teams = H.getTeamsBySeason(season).map((t) => ({ season, team_id: t.team_id, s: Math.round(realTeamStrength(season, t.team_id) * 10) / 10 })).sort((a, b) => b.s - a.s);
+  return teams.slice(0, Math.ceil(teams.length / 2));
+}));
+const cleanTactics = (t) => { const tac = { ...DEFAULT_TACTICS }; for (const k of Object.keys(TACTICS)) if (TACTICS[k][t?.[k]]) tac[k] = t[k]; return tac; };
+
+class CoachDuel {
+  constructor(room, rnd) {
+    this.room = room; this.rnd = rnd; this.first = rnd() < 0.5 ? 0 : 1;
+    const seen = new Set();
+    this.choices = shuffle(coachPool().slice(), rnd).filter((c) => !seen.has(c.team_id) && seen.add(c.team_id)).slice(0, 4);
+    this.picks = [null, null]; this.turn = this.first; this.phase = "pick"; this.tactics = [null, null];
+  }
+  start() { this.turnAt = Date.now(); this.room.broadcast(this.stateMsg()); this.pickTimer(); }
+  get home() { return 1 - this.first; } // the second pick plays at home
+  stateMsg() {
+    const ms = this.phase === "pick" ? COACH_PICK_MS : COACH_PLAN_MS;
+    return { t: "coach:state", phase: this.phase, choices: this.choices, picks: this.picks, turn: this.turn, first: this.first, home: this.home,
+      done: this.tactics.map(Boolean), ms: Math.max(0, ms - (Date.now() - this.turnAt)) };
+  }
+  pickTimer() { const turn = this.turn; this.room.timer(() => { if (this.phase === "pick" && this.turn === turn) this.pick(turn, this.best(), true); }, COACH_PICK_MS + 500); }
+  best() { return this.choices.map((c, i) => [c.s, i]).filter(([, i]) => !this.picks.includes(i)).sort((a, b) => b[0] - a[0])[0][1]; }
+  onMessage(seat, m) {
+    if (m.t === "coach:pick" && this.phase === "pick" && seat === this.turn) {
+      const i = Number(m.i);
+      if (Number.isInteger(i) && i >= 0 && i < this.choices.length && !this.picks.includes(i)) this.pick(seat, i, false);
+      return;
+    }
+    if (m.t === "coach:tactics" && this.phase === "plan" && !this.tactics[seat]) {
+      this.tactics[seat] = cleanTactics(m.tactics);
+      this.room.send(1 - seat, { t: "coach:opp", done: true });
+      if (this.tactics.every(Boolean)) this.play();
+    }
+  }
+  pick(seat, i, auto) {
+    this.picks[seat] = i;
+    this.room.clearTimers();
+    this.turnAt = Date.now();
+    if (this.picks.every((p) => p !== null)) {
+      this.phase = "plan";
+      this.room.broadcast(this.stateMsg());
+      this.room.timer(() => this.play(), COACH_PLAN_MS + 500);
+      return;
+    }
+    this.turn = 1 - seat;
+    this.room.broadcast({ ...this.stateMsg(), last: { seat, i, auto } });
+    this.pickTimer();
+  }
+  play() {
+    if (this.over) return;
+    this.over = true;
+    this.room.clearTimers();
+    const names = this.room.names();
+    const tactics = this.tactics.map((t) => t || { ...DEFAULT_TACTICS });
+    const side = (seat) => { const c = this.choices[this.picks[seat]]; return teamSeasonSide(c.season, c.team_id, names[seat], tactics[seat]); };
+    const home = this.home, away = 1 - home;
+    const g = playGame(side(home), side(away), this.rnd, false);
+    const pts = []; pts[home] = g.hs; pts[away] = g.as;
+    const winner = g.hs > g.as ? home : away;
+    this.room.finish({ winner, scores: pts, reason: "done", detail: {
+      teams: [0, 1].map((seat) => ({ name: names[seat], ...this.choices[this.picks[seat]] })),
+      game: { seed: g.seed, home, hs: g.hs, as: g.as, tactics, ot: g.ot },
+    } });
+  }
+  replay() { return { choices: this.choices, picks: this.picks, first: this.first, tactics: this.tactics }; }
+  resync(seat) { if (!this.over) this.room.send(seat, this.stateMsg()); }
+}
+
+const ENGINES = { hl: HLDuel, career: CareerDuel, guess: GuessDuel, draft: DraftDuel, conn: ConnDuel, grid: GridDuel, coach: CoachDuel };
 export function createEngine(game, room, seed) {
   return new ENGINES[game](room, seededRng("online-" + seed));
 }

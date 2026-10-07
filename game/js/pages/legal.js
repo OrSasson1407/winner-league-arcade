@@ -43,13 +43,13 @@ export function renderPrivacy(root, signal) {
       ["globe", L("Stored on the server", "נשמר בשרת"), L(
         `<p>While the arcade is open it connects to its server so friends can see you online and you can play online. The server stores:</p>
         <ul class="pv-list"><li><b>Your online profile:</b> nickname, avatar, level and a random device ID created by your browser. The ID is not linked to your name, email, phone or location.</li>
-        <li><b>Online results:</b> ratings, wins and losses, streaks, and the history of your online matches (game, date, opponent's nickname and avatar, score). Your nickname, avatar and results appear on public leaderboards and in your opponents' history.</li>
+        <li><b>Online results:</b> ratings, wins and losses, streaks, and the history of your online matches (game, date, opponent's nickname and avatar, score). Your nickname, avatar and results appear on public leaderboards, in your opponents' history and on your online profile page (ranks, record, your last 10 matches and the opponents you meet most).</li>
         <li><b>Friend leagues</b> you create or join (league name and members' player codes).</li>
         <li><b>Messages you send:</b> feedback, and technical details if you leave that box ticked; nickname reports.</li></ul>
         <p>We do not collect real names, email addresses, phone numbers, contacts or location, and we don't sell or share data with anyone.</p>`,
         `<p>כשהארקייד פתוח הוא מתחבר לשרת שלו, כדי שחברים יראו שאתה אונליין ותוכל לשחק אונליין. בשרת נשמרים:</p>
         <ul class="pv-list"><li><b>הפרופיל האונליין:</b> כינוי, אווטאר, רמה ומזהה מכשיר אקראי שהדפדפן יוצר. המזהה לא מקושר לשם, למייל, לטלפון או למיקום שלך.</li>
-        <li><b>תוצאות אונליין:</b> דירוגים, ניצחונות והפסדים, רצפים, והיסטוריית משחקי האונליין שלך (משחק, תאריך, הכינוי והאווטאר של היריב, תוצאה). הכינוי, האווטאר והתוצאות מופיעים בטבלאות מובילים פומביות ובהיסטוריה של היריבים שלך.</li>
+        <li><b>תוצאות אונליין:</b> דירוגים, ניצחונות והפסדים, רצפים, והיסטוריית משחקי האונליין שלך (משחק, תאריך, הכינוי והאווטאר של היריב, תוצאה). הכינוי, האווטאר והתוצאות מופיעים בטבלאות מובילים פומביות, בהיסטוריה של היריבים שלך ובעמוד הפרופיל האונליין שלך (דרגות, מאזן, 10 המשחקים האחרונים והיריבים שפגשת הכי הרבה).</li>
         <li><b>ליגות חברים</b> שיצרת או הצטרפת אליהן (שם הליגה וקודי השחקנים של החברים).</li>
         <li><b>הודעות ששלחת:</b> משוב, ופרטים טכניים אם התיבה נשארה מסומנת; דיווחים על כינויים.</li></ul>
         <p>אנחנו לא אוספים שמות אמיתיים, כתובות מייל, מספרי טלפון, אנשי קשר או מיקום, ולא מוכרים או משתפים מידע עם אף אחד.</p>`)],

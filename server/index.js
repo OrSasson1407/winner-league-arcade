@@ -138,7 +138,9 @@ const send = (c, msg) => {
 const clean = (s, n) => String(s ?? "").replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, n);
 const eloOf = (c, game) => (c.isBot ? null : c.rec?.elo[game] ?? 1000);
 const publicProfile = (c, game) => ({ name: c.profile.name, icon: c.profile.icon, color: c.profile.color, frame: c.profile.frame, level: c.profile.level, style: c.profile.style, av: c.profile.av,
-  code: c.isBot ? null : friendCode(c.sid), elo: eloOf(c, game), bot: !!c.isBot, botLevel: c.botLevel || null });
+  code: c.isBot ? null : friendCode(c.sid), elo: eloOf(c, game), bot: !!c.isBot, botLevel: c.botLevel || null,
+  // for the match intro (public, like the leaderboard): this game's record and the current win streak
+  wl: c.isBot || !c.rec ? null : [c.rec.w[game] ?? 0, c.rec.l[game] ?? 0], streak: c.isBot ? 0 : c.rec?.streak ?? 0 });
 const onlineByCode = (code) => { for (const c of clients.values()) if (c.ws && friendCode(c.sid) === code) return c; return null; };
 
 function newCode() {
@@ -191,7 +193,7 @@ setInterval(() => GAMES.forEach(matchQueue), 2000).unref();
 function createRoom(game, a, b, mode) {
   leaveLobby(a); leaveLobby(b);
   const room = {
-    id: crypto.randomUUID(), game, mode, rated: mode === "ranked", players: [a, b], timers: new Set(), over: false, rematch: new Set(), seq: 0,
+    id: crypto.randomUUID(), game, mode, rated: mode === "ranked" && !pairCapped(a, b), players: [a, b], timers: new Set(), over: false, rematch: new Set(), seq: 0,
     spectators: new Set(), only: null,
     send(seat, msg) {
       if (this.only) { if (seat === 0) send(this.only, msg); return; } // re-sending the state to a new spectator
@@ -222,7 +224,22 @@ function startMatch(room) {
   // a short countdown before the first round
   room.timer(() => room.engine.start(), 3500);
 }
+// ---------------------------------------------------------------- fair play
+// Rated games between the same two players count up to PAIR_DAILY times a day (no rating farming with a friend).
+const PAIR_DAILY = 5;
+const pairGames = new Map(); // "sidA|sidB" -> [timestamps]
+const pairKey = (a, b) => [a.sid, b.sid].sort().join("|");
+function pairCapped(a, b) {
+  if (a.isBot || b.isBot) return false;
+  const k = pairKey(a, b), day = Date.now() - 864e5;
+  const list = (pairGames.get(k) || []).filter((t) => t > day);
+  pairGames.set(k, list);
+  return list.length >= PAIR_DAILY;
+}
+function countPair(room) { if (room.rated) { const k = pairKey(...room.players); pairGames.set(k, [...(pairGames.get(k) || []), Date.now()]); } }
+
 const matchMsg = (room, seat, extra = {}) => ({ t: "match", room: room.id, game: room.game, mode: room.mode, rated: room.rated, seat,
+  unrated: room.mode === "ranked" && !room.rated ? "pair" : null,
   you: publicProfile(room.players[seat], room.game), opp: publicProfile(room.players[1 - seat], room.game), seq: room.seq, ...extra });
 
 function finishRoom(room, { winner, scores, reason, detail = null, replay = room.engine?.replay?.() ?? null }) {
@@ -230,6 +247,15 @@ function finishRoom(room, { winner, scores, reason, detail = null, replay = room
   room.over = true;
   room.clearTimers();
   let delta = [0, 0];
+  // answers faster than a person can manage: the match isn't rated, and the admin hears about it
+  const suspect = room.engine?.suspicion?.() || [false, false];
+  let voided = null;
+  if (room.rated && suspect.some(Boolean)) {
+    room.rated = false; voided = "speed";
+    const who = room.players.filter((p, i) => suspect[i]).map((p) => `${p.profile?.name} (${friendCode(p.sid)})`).join(", ");
+    store?.addFeedback({ at: new Date().toISOString(), kind: "cheat", message: `Unrated: answers too fast to be human in ${room.game} by ${who}`, tech: "" }).catch(() => {});
+  }
+  countPair(room);
   if (room.rated && room.players.every((p) => p.rec)) {
     delta = applyResult(room.game, room.players.map((p) => p.rec), winner);
   }
@@ -237,7 +263,7 @@ function finishRoom(room, { winner, scores, reason, detail = null, replay = room
   if (human) addWeekly(room.players.map((p) => p.rec), winner);
   room.players.forEach((p, seat) => {
     send(p, {
-      t: "end", game: room.game, seat, winner, scores, reason, detail, replay, mode: room.mode, rated: room.rated,
+      t: "end", game: room.game, seat, winner, scores, reason, detail, replay, mode: room.mode, rated: room.rated, voided,
       result: winner === null ? "draw" : winner === seat ? "win" : "lose",
       delta: delta[seat], elo: room.rated ? p.rec?.elo[room.game] : null, streak: room.rated ? p.rec?.streak : null,
     });
@@ -274,6 +300,29 @@ async function historyFor(sid) {
       opp: { name: o.name, icon: o.icon, color: o.color, frame: o.frame, style: o.style, av: o.av }, oppCode: o.code || null,
       score: m.players[seat]?.score || (m.reason !== "done" ? (m.winner === seat ? "opponent left" : "left") : ""), delta: m.players[seat]?.delta ?? null };
   });
+}
+
+/** The public online profile: ranks and record per game, streaks, the last matches and the most-played opponents. */
+async function publicOnlineProfile(rec) {
+  const p = rec.profile;
+  const rows = await store.listMatches(rec.sid, 60);
+  const seatOf_ = (m) => (m.sid0 === rec.sid ? 0 : 1);
+  const recent = rows.slice(0, 10).map((m) => {
+    const seat = seatOf_(m), o = m.players[1 - seat] || {};
+    return { at: m.at, game: m.game, mode: m.mode, result: m.winner === null ? "draw" : m.winner === seat ? "win" : "lose", score: m.players[seat]?.score || "",
+      opp: { name: o.name, icon: o.icon, color: o.color, frame: o.frame, style: o.style, av: o.av, code: o.code || null, bot: !!o.bot } };
+  });
+  const riv = new Map();
+  for (const m of rows) {
+    const seat = seatOf_(m), o = m.players[1 - seat];
+    if (!o?.code || o.bot) continue;
+    const r = riv.get(o.code) || { code: o.code, name: o.name, icon: o.icon, color: o.color, frame: o.frame, style: o.style, av: o.av, w: 0, l: 0, d: 0, n: 0 };
+    r[m.winner === null ? "d" : m.winner === seat ? "w" : "l"]++; r.n++;
+    riv.set(o.code, r);
+  }
+  return { code: p.code, name: p.name, icon: p.icon, color: p.color, frame: p.frame, style: p.style, av: p.av, level: p.level,
+    elo: rec.elo, peak: rec.peak, w: rec.w, l: rec.l, d: rec.d, streak: rec.streak, best: rec.best, games: rec.n,
+    recent, rivals: [...riv.values()].sort((a, b) => b.n - a.n).slice(0, 5) };
 }
 
 // ---------------------------------------------------------------- leaderboards by period
@@ -369,6 +418,12 @@ function onMessage(c, m) {
     case "replay": { // one of your matches, round by round
       store.getMatch(m.id, c.sid).then((r) => send(c, r?.replay ? { t: "replay", id: r.id, game: r.game, seat: r.sid0 === c.sid ? 0 : 1, players: r.players, scores: r.scores, winner: r.winner, replay: r.replay }
         : { t: "replay", id: m.id, missing: true }), () => send(c, { t: "replay", id: m.id, missing: true }));
+      return;
+    }
+    case "profile:get": { // a player's public online profile (what leaderboards and opponents already see)
+      const rec = findByCode(cleanCode(m.code));
+      if (!rec?.profile) return send(c, { t: "profile:data", code: cleanCode(m.code), missing: true });
+      publicOnlineProfile(rec).then((p) => send(c, { t: "profile:data", ...p }), (e) => { console.error("[db] profile failed:", e.message); send(c, { t: "profile:data", code: rec.profile.code, missing: true }); });
       return;
     }
     case "history": // the player's matches saved on the server (this device)

@@ -11,6 +11,9 @@ export let lastStats = null;
 export let myCode = null;
 let rtt = 120; // round-trip time to the server (ms), measured with pings
 let jitter = 0, lastSeen = 0, lostPings = 0, pingOut = 0, qual = "good";
+const opened0 = Date.now(); let everOnline = false;
+/** Still waiting for the very first connection after a while: the free host is probably waking up. */
+export const wakingUp = () => !everOnline && Date.now() - opened0 > 5000;
 export const RECONNECT_GRACE_MS = 45000; // how long the server holds your seat in a match (server/index.js)
 
 function sid() {
@@ -57,7 +60,7 @@ export function connect({ quiet = false } = {}) {
   let opened = false;
   try { ws = new WebSocket(url); } catch { return fail(); }
   ws.onopen = () => {
-    opened = true; retry = 0; lastSeen = Date.now(); lostPings = 0; pingOut = 0;
+    opened = true; retry = 0; lastSeen = Date.now(); lostPings = 0; pingOut = 0; everOnline = true;
     ws.send(JSON.stringify(profileMsg()));
     setStatus("online");
     const q = outbox; outbox = [];

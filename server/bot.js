@@ -129,6 +129,24 @@ export function createBot(levelKey) {
         };
         later(step, between(...every));
       }
+      if (m.t === "coach:state" && !room.over) { // Single game: pick a team, then a plan
+        const e = eng();
+        if (m.phase === "pick" && m.turn === seat && !bot.coachPicked?.[e.picks.filter((p) => p !== null).length]) {
+          (bot.coachPicked ||= {})[e.picks.filter((p) => p !== null).length] = true;
+          later(() => {
+            const open = m.choices.map((c, i) => [c.s, i]).filter(([, i]) => !e.picks.includes(i)).sort((a, b) => b[0] - a[0]);
+            const i = Math.random() < (bot.botLevel === "easy" ? 0.5 : bot.botLevel === "normal" ? 0.75 : 0.95) ? open[0][1] : pickOne(open)[1];
+            act({ t: "coach:pick", i });
+          }, between(1500, 4000));
+        }
+        if (m.phase === "plan" && !bot.coachPlanned) {
+          bot.coachPlanned = true;
+          later(() => {
+            const pick = (o) => o[Math.floor(Math.random() * o.length)];
+            act({ t: "coach:tactics", tactics: { pace: pick(["slow", "normal", "fast"]), defense: pick(["man", "man", "zone", "press"]), focus: pick(["balanced", "star", "paint", "threes"]) } });
+          }, between(2000, 6000));
+        }
+      }
       if (m.t === "draft:plan") { // the bot picks a game plan
         later(() => {
           const pick = (o) => o[Math.floor(Math.random() * o.length)];
@@ -137,7 +155,7 @@ export function createBot(levelKey) {
       }
       if (m.t === "end") { bot.guessing = false; bot.connecting = false; bot.gridding = false; later(() => room.chatFrom?.(bot, m.result === "win" ? 6 : 1), 1200); }
       if (m.t === "opp:rematch") later(() => room.rematchFrom?.(bot), 1500);
-      if (m.t === "match") { bot.guessing = false; bot.connecting = false; bot.gridding = false; }
+      if (m.t === "match") { bot.guessing = false; bot.connecting = false; bot.gridding = false; bot.coachPicked = null; bot.coachPlanned = false; }
     },
   };
   return bot;

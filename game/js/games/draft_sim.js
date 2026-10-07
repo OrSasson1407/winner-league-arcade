@@ -7,7 +7,7 @@ import { H, isPlayable, playersById, seededRng } from "../data.js";
 import { DEFAULT_TACTICS, profileFromSeason, simulateGame } from "../shared/gameSim.js";
 
 
-function realRoster(season, teamId) {
+export function realRoster(season, teamId) {
   const best = new Map();
   for (const ps of H.getPlayersByTeam(teamId, season)) {
     if (!isPlayable(ps, 8)) continue;
@@ -34,6 +34,10 @@ export function simTeam(t) {
   const seen = new Map();
   players.forEach((p) => { const n = seen.get(p.id) || 0; seen.set(p.id, n + 1); if (n) p.id = `${p.id}#${n}`; });
   return (t._sim = { name: t.name, id: t.id, strength: t.strength, players, tactics: { ...DEFAULT_TACTICS, ...(t.tactics || {}) }, minutes: t.minutes || null });
+}
+/** A real team-season as a side for the engine: the server and the browser build it the same way, so a seed replays the same game. */
+export function teamSeasonSide(season, teamId, name, tactics) {
+  return { name, id: teamId, strength: realTeamStrength(season, teamId), roster: realRoster(season, teamId).slice(0, 9), drafted: false, tactics: tactics || undefined };
 }
 /** Run (or re-run) a game through the engine. The same seed and teams always give the same game. */
 export function runGame(home, away, seed, neutral, events = false) {
