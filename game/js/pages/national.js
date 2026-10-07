@@ -23,7 +23,9 @@ const playerCell = (N, row) => {
 };
 
 export function renderNational(root, signal, params = []) {
-  root.innerHTML = `<div class="card pad"><p class="muted">Loading the national-team rosters…</p></div>`;
+  // the heading is there from the start (the page title comes from it); the rosters arrive after
+  const pre = params[0] && ntTeam(params[0]);
+  root.innerHTML = `<div class="game-head"><div><h1>${esc(pre ? pre.name : "National teams")}</h1></div></div><div class="card pad"><p class="muted">Loading the national-team rosters…</p></div>`;
   root.setAttribute("aria-busy", "true");
   loadNational().then((N) => {
     if (signal.aborted) return;
