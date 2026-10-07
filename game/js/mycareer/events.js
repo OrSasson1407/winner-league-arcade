@@ -1,6 +1,7 @@
 // My Career: events between games (media, the coach, teammates, the community). Each event offers
 // choices with consequences for coach trust, popularity, money, attributes or injury risk.
 import { teamName } from "../data.js";
+import { lifestyle } from "./develop.js";
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -17,8 +18,8 @@ const EVENTS = [
   { id: "media-bad", when: (C, g) => g && !g.won && g.line.min > 10 && g.line.pts <= 4, title: "Tough questions",
     text: () => "A quiet night. A reporter asks if you're in a slump.",
     choices: [
-      { label: "\"I'll work harder\"", do: (C) => { C.trust += 2; return "Honest answer. (Trust +2)"; } },
-      { label: "Blame your minutes", do: (C) => { C.trust -= 6; C.pop += 2; return "The coach read it in the paper. (Trust −6)"; } },
+      { label: "\"I'll work harder\"", do: (C) => { C.trust += 2; lifestyle(C, "honest"); return "Honest answer. (Trust +2)"; } },
+      { label: "Blame your minutes", do: (C) => { C.trust -= 6; lifestyle(C, "excuse"); C.pop += 2; return "The coach read it in the paper. (Trust −6)"; } },
       { label: "No comment", do: () => "The story dies down." },
     ] },
   { id: "coach-bench", when: (C) => C.cur.role === "starter", title: "Coach's idea",
@@ -30,8 +31,8 @@ const EVENTS = [
   { id: "coach-defense", when: (C) => C.attrs.def < 70, title: "Film session",
     text: () => "The coach shows clips of your defense. It isn't pretty.",
     choices: [
-      { label: "Extra defensive drills", do: (C) => { C.attrs.def = Math.min(99, C.attrs.def + 1); C.trust += 3; return "Defense +1, trust +3."; } },
-      { label: "Argue your case", do: (C) => { C.trust -= 7; return "The coach doesn't agree. (Trust −7)"; } },
+      { label: "Extra defensive drills", do: (C) => { lifestyle(C, "film"); C.attrs.def = Math.min(99, C.attrs.def + 1); C.trust += 3; return "Defense +1, trust +3."; } },
+      { label: "Argue your case", do: (C) => { C.trust -= 7; lifestyle(C, "argue"); return "The coach doesn't agree. (Trust −7)"; } },
     ] },
   { id: "coach-position", when: (C) => C.pos2 && C.pos2 !== C.pos, title: "Out of position",
     text: (C) => `Injuries on the team. The coach asks you to play ${C.pos2} for a while.`,
@@ -42,14 +43,14 @@ const EVENTS = [
   { id: "extra-shooting", when: () => true, title: "Empty gym",
     text: () => "The arena is empty after practice. Stay and shoot?",
     choices: [
-      { label: "500 more threes", do: (C) => { C.attrs.thr = Math.min(99, C.attrs.thr + 1); C.fatigue = (C.fatigue || 0) + 1; return "Three-point +1 (a bit tired)."; } },
+      { label: "500 more threes", do: (C) => { lifestyle(C, "gym"); C.attrs.thr = Math.min(99, C.attrs.thr + 1); C.fatigue = (C.fatigue || 0) + 1; return "Three-point +1 (a bit tired)."; } },
       { label: "Go rest", do: () => "Fresh legs for the next game." },
     ] },
   { id: "party", when: (C) => C.age >= 18, title: "Night out",
     text: () => "Teammates are going out the night before a game.",
     choices: [
-      { label: "Stay home", do: (C) => { C.trust += 2; return "Professional. (Trust +2)"; } },
-      { label: "Go with them", do: (C) => { C.pop += 3; C.injuryRisk = 0.04; C.fatigue = (C.fatigue || 0) + 1; C.trust -= 2; return "Fun night, heavy legs. (Popularity +3, trust −2)"; } },
+      { label: "Stay home", do: (C) => { C.trust += 2; lifestyle(C, "home"); return "Professional. (Trust +2)"; } },
+      { label: "Go with them", do: (C) => { lifestyle(C, "party"); C.pop += 3; C.injuryRisk = 0.04; C.fatigue = (C.fatigue || 0) + 1; C.trust -= 2; return "Fun night, heavy legs. (Popularity +3, trust −2)"; } },
     ] },
   { id: "teammate", when: () => true, title: "Locker-room tension",
     text: (C) => `A veteran at ${teamName(C.cur.team)} isn't happy about your role.`,
@@ -66,7 +67,7 @@ const EVENTS = [
   { id: "charity-camp", when: () => true, title: "Youth camp",
     text: () => "Your old neighbourhood asks you to run a free basketball camp.",
     choices: [
-      { label: "Run the camp", do: (C) => { C.pop += 4; C.attrs.iq = Math.min(99, C.attrs.iq + 1); C.charity = (C.charity || 0) + 1; return "Teaching sharpens you too. (Popularity +4, IQ +1)"; } },
+      { label: "Run the camp", do: (C) => { lifestyle(C, "camp"); C.pop += 4; C.attrs.iq = Math.min(99, C.attrs.iq + 1); C.charity = (C.charity || 0) + 1; return "Teaching sharpens you too. (Popularity +4, IQ +1)"; } },
       { label: "Send a video message", do: (C) => { C.pop += 1; return "Popularity +1."; } },
     ] },
   { id: "sponsor", when: (C) => C.pop >= 30, title: "Sponsor offer",

@@ -64,6 +64,7 @@ export async function renderMyCareer(root, signal) {
     C.v = 2;
     store.set(KEY, C);
   }
+  if (C && !C.ceil) { E.ensureDev(C); store.set(KEY, C); } // talent, staff and work ethic for older saves
   let tab = "season", lastGame = null, view = null;
   const save = () => store.set(KEY, C);
   const av = () => C?.av || (getMe().style === "player" ? getMe().av : DEFAULT_AV);
@@ -161,7 +162,7 @@ export async function renderMyCareer(root, signal) {
     $("#mc-debut").addEventListener("change", (e) => { f.debut = e.target.value; redraw(); }, { signal });
     $("#mc-acad").addEventListener("change", (e) => { f.academy = e.target.value; redraw(); }, { signal });
     $("#mc-go").addEventListener("click", () => {
-      C = E.createPlayer({ ...f, av: getMe().style === "player" ? getMe().av : null });
+      C = E.newPlayer({ ...f, av: getMe().style === "player" ? getMe().av : null });
       view = null; save(); sound.play("place");
       draw();
       const club = teamName(C.academy.club);
@@ -261,7 +262,7 @@ export async function renderMyCareer(root, signal) {
           <p class="muted">You're ${C.age}. Train hard in the youth team, or go on loan to another club's youth team for more minutes (faster growth, but away from your club).</p>
           <div class="field"><label>This season</label><div class="mc-cards two" id="ac-where">
             <button class="mc-pick ${!view?.loan ? "on" : ""}" data-v="">${icon("shield", { size: 18 })}<b>Stay at ${esc(teamName(C.academy.club))}</b><small>Your academy. The club will offer you your first contract.</small></button>
-            <button class="mc-pick ${view?.loan ? "on" : ""}" data-v="loan">${icon("arrowRight", { size: 18 })}<b>Go on loan</b><small>More minutes elsewhere: +0.8 to every skill this year.</small></button></div></div>
+            <button class="mc-pick ${view?.loan ? "on" : ""}" data-v="loan">${icon("arrowRight", { size: 18 })}<b>Go on loan</b><small>More of the ball elsewhere: you grow about 5% faster this year.</small></button></div></div>
           ${view?.loan ? `<div class="field"><label for="ac-loan">Loan to</label><select id="ac-loan" class="input">${clubs.map((c) => `<option value="${c}" ${c === view.loan ? "selected" : ""}>${esc(teamName(c))} youth team</option>`).join("")}</select></div>` : ""}
           <div class="field"><label>Focus</label><div class="seg sm" id="ac-focus">${[["balanced", "Balanced"], ...Object.entries(E.SUMMER_CAMPS).map(([k, c]) => [k, c.name])].map(([k, l]) => `<button data-v="${k}" class="${(view?.focus || "balanced") === k ? "on" : ""}">${l}</button>`).join("")}</div></div>
           <button class="btn primary big-btn" id="ac-play">${icon("play", { size: 16 })} Play the academy season</button>
@@ -280,6 +281,7 @@ export async function renderMyCareer(root, signal) {
       const r = E.academySeason(C, { loanTo: view?.loan || null, focus: view?.focus || "balanced" });
       view = null; save(); sound.play("place");
       toast(`Academy season: ${r.entry.ppg} PPG · overall ${r.entry.overall}`);
+      setTimeout(() => showDevReport(r.dev, "Academy year review"), 200);
       announce(`Academy season done. ${r.entry.ppg} points per game. Overall ${r.entry.overall}.`);
       draw();
     }, { signal });
@@ -291,13 +293,56 @@ export async function renderMyCareer(root, signal) {
     const lastAttrs = C.history.filter((h) => h.pro && h.attrs).slice(-1)[0]?.attrs || null;
     return html`<div class="mc-train">
       ${compact ? "" : radar(C.attrs, lastAttrs)}
+      ${compact ? "" : talentHtml()}
       <div class="mc-attrs">${Object.entries(E.ATTRS).map(([k, l]) => {
-        const v = C.attrs[k], cost = E.trainCost(v), capped = v >= Math.min(99, E.ageCap(C.age));
-        return `<div class="mc-attr"><span>${l}</span><div class="progress"><i style="width:${v}%"></i></div><b>${Math.floor(v)}</b>
-          <button class="btn" data-train="${k}" ${C.tp < cost || capped ? "disabled" : ""} aria-label="Train ${l} (${cost} TP)">+1 <small>${capped ? "max" : `${cost} TP`}</small></button></div>`;
+        const v = C.attrs[k], cost = E.trainCost(v), capped = v >= E.trainLimit(C, k);
+        const [lo, hi] = E.scoutRange(C, k), pot = lo === hi ? `${lo}` : `${lo}–${hi}`;
+        return `<div class="mc-attr"><span>${l}</span><div class="progress mc-pot" title="Potential ${pot}"><s style="inset-inline-start:${lo}%;width:${Math.max(1, hi - lo)}%"></s><i style="width:${v}%"></i></div><b>${Math.floor(v)}<small class="muted mc-potv">/${pot}</small></b>
+          <button class="btn" data-train="${k}" ${C.tp < cost || capped ? "disabled" : ""} aria-label="Train ${l} (${cost} TP), potential ${pot}">+1 <small>${capped ? "max" : `${cost} TP`}</small></button></div>`;
       }).join("")}</div>
       ${compact ? "" : html`<h3 style="margin-top:14px">${icon("medal")} Badges</h3>${badgeMedals(C, { fresh: freshBadge, cost: E.badgeCost })}`}
     </div>`;
+  }
+  /** What the scouts and the staff know about you: development type, work ethic, the miles on your legs. */
+  function talentHtml() {
+    const trait = C.scouted >= 2 ? E.TRAITS[C.trait] : null;
+    return html`<div class="mc-talent">
+      <span title="${trait ? esc(trait.desc) : "The scouts need two seasons to tell"}">${icon("chart", { size: 14 })} ${trait ? esc(trait.name) : "Development type: unknown yet"}</span>
+      <span>${icon("bolt", { size: 14 })} Work ethic: <b>${E.workLabel(C.work ?? 55)}</b></span>
+      <span>${icon("clock", { size: 14 })} ${Math.round(C.mileage || 0).toLocaleString("en-US")} career minutes</span>
+    </div>
+    <p class="muted" style="font-size:12px;margin:4px 0 8px">The shaded band is your potential as the scouts see it: it narrows every season. Training can't pass it.${(C.work ?? 55) >= 75 ? " <span>A gym rat gets 3 extra points.</span>" : ""}</p>`;
+  }
+  /** The yearly development report: changes, and why. */
+  function devReportHtml(rep) {
+    if (!rep) return "";
+    const bad = (f) => f.id === "mileage" || f.id === "rushed" || f.value < 0.995;
+    const fx = (f) => {
+      if (f.id === "rushed") return `${f.value}`;
+      if (f.id === "mentor" || f.id === "staff-nutrition") return "✓";
+      if (f.id === "mileage") return `+${Math.round((f.value - 1) * 100)}% decline`;
+      const p = Math.round(Math.abs(f.value - 1) * 100);
+      return p ? `${f.value >= 1 ? "+" : "−"}${p}%` : "±0%";
+    };
+    const phase = rep.growthPhase === "growing" ? `At ${rep.age - 1} you're still growing: these factors decide how much.` : rep.growthPhase === "peak" ? "Your peak years: growth now comes from training." : "Past the peak: staff, work ethic and fewer miles slow the decline.";
+    return html`<div class="mc-dev">
+      ${rep.breakout ? `<p class="mc-dev-flag good">${icon("rocket", { size: 16 })} Breakout summer: your ceiling went up too.</p>` : rep.slump ? `<p class="mc-dev-flag bad">${icon("x", { size: 16 })} A lost summer.</p>` : ""}
+      <div class="mc-growth">${Object.entries(rep.ch).map(([k, v]) => `<span class="${v >= 0 ? "up" : "down"}">${E.ATTRS[k]} ${v >= 0 ? "+" : ""}${v}</span>`).join("")}</div>
+      <h4 style="margin:12px 0 6px">Why</h4>
+      <p class="muted" style="font-size:13px;margin:0 0 6px">${phase}</p>
+      <ul class="clean mc-factors">${rep.factors.map((f) => `<li class="${bad(f) ? "down" : f.value > 1.005 || f.id === "mentor" || f.id === "staff-nutrition" ? "up" : ""}"><b>${esc(f.label)}</b><span class="mc-fx" dir="ltr">${fx(f)}</span><small class="muted">${esc(f.text)}</small></li>`).join("")}</ul>
+      ${rep.trait ? `<p class="muted" style="font-size:13px">Scouts: you're a <b>${esc(E.TRAITS[rep.trait].name.toLowerCase())}</b>. ${esc(E.TRAITS[rep.trait].desc)}</p>` : ""}
+    </div>`;
+  }
+  function showDevReport(rep, title = "Development report") {
+    const d = modal(title);
+    d.innerHTML = html`<button class="icon-btn profile-close" aria-label="Close">${icon("close", { size: 18 })}</button>
+      <div class="profile mc-review"><small class="muted">DEVELOPMENT · AGE ${rep.age}</small><h2>${esc(title)}</h2>${devReportHtml(rep)}
+      <button class="btn primary" id="mc-dev-ok">${icon("check", { size: 15 })} Got it</button></div>`;
+    const close = () => closeModal(d);
+    d.querySelector(".profile-close").addEventListener("click", close);
+    d.querySelector("#mc-dev-ok").addEventListener("click", close);
+    openModal(d);
   }
   function bindTrain(redraw) {
     root.querySelectorAll("[data-train]").forEach((b) => b.addEventListener("click", () => { if (E.train(C, b.dataset.train)) { save(); sound.play("tick"); const y = scrollY; redraw(); scrollTo(0, y); } }, { signal }));
@@ -374,9 +419,11 @@ export async function renderMyCareer(root, signal) {
           <p>Contract: <b>${esc(teamName(C.contract.team))}</b>, ${money(C.contract.salary)}/season (≈ ${money(E.netPay(C.contract.salary, C.agent))} net), ${C.contract.left} season${C.contract.left === 1 ? "" : "s"} left. Expected role: <b>${roleName(expected)}</b>.</p>
           ${depthHtml(nextLabel, C.loan?.team || C.contract.team)}
           ${C.injury ? `<p class="bad-text">${icon("heart", { size: 15 })} Still recovering from a ${esc(C.injury.name.toLowerCase())}: about ${C.injury.games} more games.</p>` : ""}
-          <div class="field"><label>Summer camp ${view?.camp ? `<span class="muted">(done)</span>` : ""}</label><div class="mc-cards two" id="mc-camp">${Object.entries(E.SUMMER_CAMPS).map(([k, c]) => `<button class="mc-pick" data-v="${k}" ${view?.camp ? "disabled" : ""}><b>${c.name}</b><small>${c.attrs.map((a) => E.ATTRS[a]).join(" & ")} +1 to +3${C.coach ? " (+1 coach)" : ""}</small></button>`).join("")}</div></div>
-          <div class="field"><label>Personal coach</label><button class="btn ${C.coach ? "primary" : ""}" id="mc-coach">${icon("whistle", { size: 15 })} ${C.coach ? `Hired (${money(E.COACH_COST)}/season) · fire` : `Hire for ${money(E.COACH_COST)}/season`}</button>
-            <small class="muted">More training points after games, and a bigger summer camp.</small></div>
+          ${C.lastDev ? `<button class="btn ghost" id="mc-devrep">${icon("chart", { size: 15 })} Last summer's development report</button>` : ""}
+          <div class="field"><label>Summer camp ${view?.camp ? `<span class="muted">(done)</span>` : ""}</label><div class="mc-cards two" id="mc-camp">${Object.entries(E.SUMMER_CAMPS).map(([k, c]) => `<button class="mc-pick" data-v="${k}" ${view?.camp ? "disabled" : ""}><b>${c.name}</b><small>${c.attrs.map((a) => `<span>${E.ATTRS[a]}</span>`).join(" & ")} <span>+1 to +3, up to your potential</span></small>${C.staff?.skills ? `<small>+1 more with your skills coach</small>` : ""}</button>`).join("")}</div></div>
+          <div class="field"><label>Your staff <small class="muted">(paid from your savings, ${money(C.money)} now, at the end of each season)</small></label>
+            <div class="mc-cards" id="mc-staff">${Object.entries(E.STAFF).map(([k, st]) => { const on = !!C.staff?.[k], can = on || C.money >= st.cost;
+              return `<button class="mc-pick ${on ? "on" : ""}" data-v="${k}" aria-pressed="${on}" ${can ? "" : "disabled"}><b>${icon(k === "nutrition" ? "heart" : k === "strength" ? "bolt" : "whistle", { size: 15 })} ${st.name}</b><small>${st.desc}</small><small><b>${money(st.cost)}</b> a season</small>${on ? `<small>Hired (tap to let go)</small>` : can ? "" : `<small>Not enough savings</small>`}</button>`; }).join("")}</div></div>
           ${expected === "bench" && !C.loan ? (weaker.length ? html`<div class="field"><label for="mc-loan">Not enough minutes? Go on loan for a season</label>
             <div class="row"><select id="mc-loan" class="input" style="flex:1">${weaker.map((t) => `<option value="${t.id}">${esc(t.name)} (${roleName(t.role)})</option>`).join("")}</select><button class="btn" id="mc-loan-go">Loan me out</button></div></div>`
             : `<p class="muted">No club would give you more minutes yet. Keep training: the coach notices.</p>`) : ""}
@@ -395,7 +442,13 @@ export async function renderMyCareer(root, signal) {
       toast(Object.entries(g).map(([k, v]) => `${E.ATTRS[k]} +${v}`).join(" · "));
       drawOffseason();
     }, { signal });
-    root.querySelector("#mc-coach")?.addEventListener("click", () => { C.coach = !C.coach; save(); drawOffseason(); }, { signal });
+    root.querySelector("#mc-staff")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-v]"); if (!b || b.disabled) return;
+      C.staff ??= {}; C.staff[b.dataset.v] = !C.staff[b.dataset.v]; save(); sound.play("tick");
+      const y = scrollY; drawOffseason(); scrollTo(0, y);
+      root.querySelector(`#mc-staff [data-v="${b.dataset.v}"]`)?.focus();
+    }, { signal });
+    root.querySelector("#mc-devrep")?.addEventListener("click", () => showDevReport(C.lastDev), { signal });
     root.querySelector("#mc-loan-go")?.addEventListener("click", () => {
       const t = root.querySelector("#mc-loan").value;
       C.loan = { team: t, season: nextLabel }; save(); emit("mc:loan", {});
@@ -505,7 +558,7 @@ export async function renderMyCareer(root, signal) {
       <p>${esc(inj.desc || "")} The doctors expect you to miss about <b>${inj.games} game${inj.games === 1 ? "" : "s"}</b>${inj.severe ? ", into next season (the summer counts as about 15 games of rehab)" : ""}.</p>
       ${inj.ath ? `<p class="bad-text">Lasting effect: athleticism ${inj.ath}, defense ${Math.round(inj.ath / 2)}.</p>` : ""}
       <div class="mc-choices"><button class="btn primary" data-r="0">${inj.severe ? "Surgery and full rehab" : `Full recovery (${inj.games} games)`}</button>
-        ${inj.noRush ? `<p class="muted" style="margin:0">${inj.severe ? "There's no rushing back from this one." : "League protocol: no early return."}</p>` : `<button class="btn" data-r="1">Rush back (${Math.max(1, Math.round(inj.games * 0.45))} games). For the next 10 games you're three times as likely to get hurt again.</button>`}</div></div>`;
+        ${inj.noRush ? `<p class="muted" style="margin:0">${inj.severe ? "There's no rushing back from this one." : "League protocol: no early return."}</p>` : `<button class="btn" data-r="1">Rush back (${Math.max(1, Math.round(inj.games * 0.45))} games). For the next 10 games you're three times as likely to get hurt again, and it costs a little athleticism for good.</button>`}</div></div>`;
     d.querySelectorAll("[data-r]").forEach((b) => b.addEventListener("click", () => { E.treatInjury(C, b.dataset.r === "1"); save(); closeModal(d); draw(); }));
     openModal(d);
     d.querySelector("[data-r]")?.focus();
@@ -561,7 +614,7 @@ export async function renderMyCareer(root, signal) {
   function finishSeason() {
     const S = C.cur;
     const title = S.playoffs?.champion === S.team;
-    const { summary, growth } = E.endSeason(C);
+    const { summary, dev } = E.endSeason(C);
     if (title) { confetti(4500); sound.play("victory"); emit("mc:trophy", { type: "title" }); }
     for (const a of summary.awards) emit("mc:award", { name: a });
     emit("mc:season", { seasons: C.history.filter((h) => h.pro).length, pts: C.totals.pts, overall: summary.overall });
@@ -576,7 +629,7 @@ export async function renderMyCareer(root, signal) {
       ${summary.euro ? `<p>${icon("globe", { size: 15 })} EuroLeague: ${summary.euro.champion ? "<b>champions!</b>" : summary.euro.f4 ? "Final Four" : `#${summary.euro.rank} of ${summary.euro.of}`} · ${summary.euro.avg.gp} games, ${summary.euro.avg.ppg} PPG</p>` : ""}
       ${summary.league === "el" ? `<p class="muted">A season abroad in the EuroLeague. Individual awards are only given in the Winner League here.</p>` : ""}
       <h3>Summer development (age ${C.age})</h3>
-      <div class="mc-growth">${Object.entries(growth).map(([k, v]) => `<span class="${v >= 0 ? "up" : "down"}">${E.ATTRS[k]} ${v >= 0 ? "+" : ""}${v}</span>`).join("")}</div>
+      ${devReportHtml(dev)}
       <p class="muted">Income after agent fee: ${money(summary.income)}</p>
       <button class="btn primary" id="mc-next">${icon("arrowRight", { size: 15 })} To the off-season</button></div>`;
     const go = () => { closeModal(d); tab = "train"; draw(); };
@@ -718,7 +771,8 @@ export async function renderMyCareer(root, signal) {
       </div>
       <div class="card pad"><h3>${icon("heart")} Injury history</h3>
         ${(C.injuries || []).length ? `<ul class="clean mc-news">${C.injuries.slice().reverse().map((i) => `<li><b>${esc(i.name)}</b> <span class="muted">${i.season || ""} · age ${i.age} · ${i.games} games</span></li>`).join("")}</ul>` : `<p class="muted">Clean bill of health.</p>`}
-        <p class="muted" style="font-size:13px;margin:8px 0 0">Career earnings (net, after expenses): ${money(C.money)}</p></div>
+        <p class="muted" style="font-size:13px;margin:8px 0 0">Career earnings (net, after expenses): ${money(C.money)}</p>
+        <p class="muted" style="font-size:13px;margin:4px 0 0"><span>Work ethic: ${E.workLabel(C.work ?? 55)}</span> · <span>${Math.round(C.mileage || 0).toLocaleString("en-US")} career minutes on the legs</span>${Object.keys(E.STAFF).some((k) => C.staff?.[k]) ? ` · <span>Staff: ${Object.keys(E.STAFF).filter((k) => C.staff?.[k]).map((k) => E.STAFF[k].name).join(", ")}</span>` : ""}</p></div>
       </div>
     </div>`;
   }

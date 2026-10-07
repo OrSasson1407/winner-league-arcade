@@ -6,6 +6,8 @@ import { H, PLAYED_SEASONS, db, isPlayable, playersById, seededRng, teamName } f
 import { realTeamStrength } from "../games/draft_sim.js";
 import { elPlayerName, elReady, elRoster, elSeasonFor, elTeams, inElSeason } from "./europe.js";
 import { profile, profileFromSeason, simulateGame } from "../shared/gameSim.js";
+import { ensureDev, findMentor, gameTrainingPoints, newSeasonLog, seasonDevelopment, staffCost, trackGame, trainLimit } from "./develop.js";
+export { STAFF, TRAITS, bodyCap, ceilingOf, ensureDev, lifestyle, scoutRange, staffCost, trainLimit, workLabel } from "./develop.js";
 
 // ---------------------------------------------------------------- player model
 export const ATTRS = {
@@ -74,7 +76,7 @@ export function createPlayer({ name, pos, pos2, height, arch, diff, alloc = {}, 
   const academyStart = PLAYED_SEASONS.indexOf(debut) - 2;
   return {
     v: 2, chem: {}, trustBy: {}, injuries: [], name: String(name || "Rookie").slice(0, 22), pos, pos2: pos2 || pos, height: clamp(Number(height) || 196, 170, 225), arch, diff, nat, av,
-    age: 16, attrs, badges: {}, tp: 6, money: 0, pop: 5, trust: 50, agent: "rookie", coach: false,
+    age: 16, attrs, badges: {}, tp: 6, money: 0, pop: 5, trust: 50, agent: "rookie", staff: { skills: false, strength: false, nutrition: false }, work: 55, mileage: 0,
     phase: "academy", academy: { club: academy, year: 1, loan: null, log: [] },
     debut, seasonNo: 0, label: null, club: null, contract: null, loan: null,
     yearsAt: {}, history: [], trophies: [], awards: [], milestones: {}, injury: null, retired: false,
@@ -82,36 +84,17 @@ export function createPlayer({ name, pos, pos2, height, arch, diff, alloc = {}, 
     startedAt: new Date().toISOString(), seedBase: Math.floor(Math.random() * 1e9),
   };
 }
+/** A new player with their hidden talent (ceilings, development trait) rolled. */
+export function newPlayer(opts) { return ensureDev(createPlayer(opts)); }
 
 // ---------------------------------------------------------------- development
-function growth(age) {
-  if (age <= 18) return 2.6; if (age <= 21) return 2.1; if (age <= 24) return 1.4; if (age <= 27) return 0.6;
-  if (age <= 29) return 0; if (age <= 31) return -1.3; if (age <= 34) return -2.2; return -3.2;
-}
-/** Natural yearly development (runs once each off-season); returns the changes. */
-export function ageUp(C, rnd = Math.random) {
-  const D = DIFFICULTY[C.diff] || DIFFICULTY.star;
-  const g = growth(C.age);
-  const boost = ARCHETYPES[C.arch]?.boost || {};
-  const ch = {};
-  for (const k of Object.keys(ATTRS)) {
-    let d = g * (g > 0 ? D.potential : 1) * (0.6 + rnd() * 0.8) * (boost[k] ? 1.15 : 1);
-    if (k === "ath" && g < 0) d *= 1.8; // athleticism goes first
-    if (k === "iq" && g < 0) d *= 0.3; // the brain stays
-    if (k === "iq" && g >= 0) d += 0.4;
-    const before = C.attrs[k];
-    C.attrs[k] = clamp(Math.round((C.attrs[k] + d) * 10) / 10, 20, 99);
-    ch[k] = r1(C.attrs[k] - before);
-  }
-  C.age++;
-  return ch;
-}
 export const trainCost = (v) => (v < 60 ? 1 : v < 72 ? 2 : v < 82 ? 3 : v < 90 ? 4 : 6);
 /** After 30, training can't push an attribute past what the body allows. */
 export const ageCap = (age) => 99 - Math.max(0, age - 30) * 3;
+/** +1 in an attribute for training points, up to your talent ceiling (see develop.js). */
 export function train(C, k) {
   const cost = trainCost(C.attrs[k]);
-  if (C.tp < cost || C.attrs[k] >= Math.min(99, ageCap(C.age))) return false;
+  if (C.tp < cost || C.attrs[k] >= trainLimit(ensureDev(C), k)) return false;
   C.tp -= cost; C.attrs[k] = Math.min(99, Math.round((C.attrs[k] + 1) * 10) / 10);
   return true;
 }
@@ -132,7 +115,12 @@ export const SUMMER_CAMPS = {
 export function summerCamp(C, id, rnd = Math.random) {
   const camp = SUMMER_CAMPS[id];
   const gains = {};
-  for (const k of camp.attrs) { const g = 1 + Math.round(rnd() * 2) + (C.coach ? 1 : 0); C.attrs[k] = Math.min(99, C.attrs[k] + g); gains[k] = g; }
+  ensureDev(C);
+  for (const k of camp.attrs) {
+    const g = 1 + Math.round(rnd() * 2) + (C.staff?.skills ? 1 : 0);
+    const to = Math.max(C.attrs[k], Math.min(C.attrs[k] + g, trainLimit(C, k))); // camps can't beat your ceiling either
+    gains[k] = Math.round((to - C.attrs[k]) * 10) / 10; C.attrs[k] = to;
+  }
   return gains;
 }
 
@@ -184,7 +172,23 @@ function rosterFor(label, tid, { europe = false } = {}) {
     const r = elRoster(label, tid, wlStrength);
     if (r.length) return r;
   }
-  return rosterOf(dataSeason(label), tid);
+  return nearestRoster(dataSeason(label), tid);
+}
+/** A club out of the league that season (relegated while you're under contract): its closest real roster. */
+function nearestRoster(season, tid) {
+  const own = rosterOf(season, tid);
+  if (own.length >= 5) return own;
+  const i = PLAYED_SEASONS.indexOf(season);
+  const near = PLAYED_SEASONS.map((s, j) => [s, Math.abs(j - i)]).sort((a, b) => a[1] - b[1]);
+  for (const [s] of near) { const r = rosterOf(s, tid); if (r.length >= 5) return r; }
+  return own;
+}
+/** Strength of a club that isn't in the league that season: from its closest real season. */
+function nearestStrength(season, tid) {
+  const i = PLAYED_SEASONS.indexOf(season);
+  const near = PLAYED_SEASONS.map((s, j) => [s, Math.abs(j - i)]).sort((a, b) => a[1] - b[1]);
+  for (const [s] of near) { const v = wlStrength(s, tid); if (v != null) return v; }
+  return 80;
 }
 /** A player's name from either competition's data. */
 export const playerName = (pid) => playersById.get(pid)?.name ?? elPlayerName(pid);
@@ -300,7 +304,7 @@ const ME = "me";
 /** The two teams of one of your games, for the game engine. g: { opp, home, eu, me (snapshot or null), st: [your team, opponent] strengths }. */
 function matchTeams(C, S, g) {
   const europe = !!g.eu || S.league === "el";
-  const players = (tid) => (europe ? rosterFor(S.label, tid, { europe: true }) : rosterOf(dataSeason(S.label), tid)).slice(0, 9)
+  const players = (tid) => rosterFor(S.label, tid, { europe }).slice(0, 9)
     .map((ps) => profileFromSeason(ps, playerName(ps.player_id)));
   let mates = players(S.team);
   const mine = { name: teamName(S.team), id: S.team, strength: g.st[0], players: mates };
@@ -348,10 +352,9 @@ export function boxScore(C, S, g) {
     return { team: r.box[mySide].filter(keep).map(map).sort((a, b) => b.min - a.min), opp: r.box[1 - mySide].filter(keep).map(map).sort((a, b) => b.min - a.min), sim: true };
   }
   const rnd = seededRng("mc-box-" + g.seed);
-  const ds = dataSeason(S.label);
   const europe = !!g.eu || S.league === "el";
   const lines = (tid, points, minutes, skipOne) => {
-    let roster = (europe ? rosterFor(S.label, tid, { europe: true }) : rosterOf(ds, tid)).slice(0, 9);
+    let roster = rosterFor(S.label, tid, { europe }).slice(0, 9);
     if (skipOne) roster = roster.slice(0, 8);
     const w = roster.map((ps) => Math.max(4, ps.stats.mpg ?? 10) * (0.85 + rnd() * 0.3));
     const sw = w.reduce((a, b) => a + b, 0);
@@ -387,13 +390,14 @@ function roundRobin(ids, rnd) {
 
 /** Start a pro season with your current club. */
 export function startSeason(C) {
+  ensureDev(C);
   const label = seasonLabel(C.debut, C.seasonNo);
   const rnd = seededRng(`mc-${C.seedBase}-${label}`);
   const team = C.loan?.team || C.contract.team;
   const abroad = isAbroad(label, team);
   const teams = abroad ? euroTeams(label) : teamsOf(label);
   if (!teams.some((t) => t.id === team)) { // club not in the league that season: it plays anyway with its last roster strength
-    teams.push({ id: team, name: teamName(team), strength: 82 });
+    teams.push({ id: team, name: teamName(team), strength: nearestStrength(dataSeason(label), team) });
   }
   // abroad the season is the EuroLeague: double round-robin (single when the field was bigger than 18)
   const rr = roundRobin(teams.map((t) => t.id), rnd);
@@ -424,6 +428,7 @@ export function startSeason(C) {
     games: [], phase: "regular", cup: abroad ? { teams: [], round: 0, alive: false, results: [], none: true } : { teams: cupTeams.map((t) => t.id), round: 0, alive: true, results: [] },
     allStar: null, playoffs: null, events: [], startOverall: bestOverall(C), league: abroad ? "el" : "wl",
     el: abroad ? null : euroCampaign(label, team, me.strength, rnd),
+    dev: { ...newSeasonLog(), mentor: findMentor(C, rosterFor(label, team), bestOverall(C)) },
   };
   return C.cur;
 }
@@ -556,13 +561,15 @@ function afterGame(C, g) {
       C.log.unshift({ t: "injury", text: `Back from the ${C.injury.name.toLowerCase()}.` });
       C.injury = null;
     }
+    trackGame(C, l, { injured: true });
     return;
   }
-  if (l.dnp) { C.trust = clamp(C.trust - 0.5, 0, 100); return; }
+  if (l.dnp) { C.trust = clamp(C.trust - 0.5, 0, 100); trackGame(C, l); return; }
   C.chem[C.cur.team] = clamp((C.chem[C.cur.team] || 0) + (l.min / 36) * 1.1, 0, 100);
   const gs = gameScore(l);
   const expected = { starter: 14, rotation: 8, bench: 3 }[C.cur.role];
-  C.tp += 1 + (gs >= expected ? 1 : 0) + (gs >= expected * 1.6 ? 1 : 0) + (C.coach && Math.random() < 0.35 ? 1 : 0);
+  C.tp += gameTrainingPoints(C, gs, expected);
+  trackGame(C, l, { gs });
   C.trust = clamp(C.trust + clamp((gs - expected) / 4, -3, 3) + (g.won ? 0.5 : -0.3), 0, 100);
   C.pop = clamp(C.pop + (gs > expected * 1.5 ? 0.8 : 0.1), 0, 100);
   const tot = g.eu || C.cur.league === "el" ? (C.elTotals ||= { pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, gp: 0 }) : C.totals;
@@ -578,7 +585,7 @@ function afterGame(C, g) {
   if (dd >= 3 && !m.td) m.td = C.cur.label;
   if (C.totals.pts >= 1000 && !m.k1) m.k1 = C.cur.label;
   // injuries: more likely with heavy minutes, age, a recent rushed comeback; less with Iron man
-  let risk = 0.017 + (C.injuryRisk || 0) + Math.max(0, C.age - 30) * 0.003 - badgeLv(C, "ironman") * 0.006 + (l.min > 34 ? 0.01 : 0);
+  let risk = (0.017 + (C.injuryRisk || 0) + Math.max(0, C.age - 30) * 0.003 - badgeLv(C, "ironman") * 0.006 + (l.min > 34 ? 0.01 : 0)) * (C.staff?.nutrition ? 0.8 : 1);
   if (C.reinjury) { risk *= 3; if (--C.reinjury.games <= 0) C.reinjury = null; }
   C.injuryRisk = 0;
   if (Math.random() < risk) injure(C, C.reinjury && Math.random() < 0.5 ? C.reinjury.name : null);
@@ -618,7 +625,7 @@ function injure(C, forced = null) {
 export function treatInjury(C, rush) {
   if (!C.injury) return;
   C.injury.pending = false;
-  if (rush && !C.injury.noRush) { C.injury.games = Math.max(1, Math.round(C.injury.games * 0.45)); C.injury.rushed = true; }
+  if (rush && !C.injury.noRush) { C.injury.games = Math.max(1, Math.round(C.injury.games * 0.45)); C.injury.rushed = true; if (C.cur) (C.cur.dev ||= newSeasonLog()).rushed++; }
   if (badgeLv(C, "ironman")) C.injury.games = Math.max(1, C.injury.games - badgeLv(C, "ironman"));
 }
 
@@ -773,7 +780,6 @@ export const value = (C) => Math.round((25000 * 1.075 ** (bestOverall(C) - 55) +
 /** Simplified effective income tax on a season's salary (an estimate, not tax advice). */
 export const taxRate = (gross) => (gross < 60000 ? 0.22 : gross < 150000 ? 0.3 : gross < 350000 ? 0.38 : 0.44);
 export const netPay = (gross, agent) => Math.round(gross * (1 - taxRate(gross) - (AGENTS[agent]?.fee || 0)));
-export const COACH_COST = 12000;
 
 /** Contract offers for the coming season. */
 export function makeOffers(C, { homeGrown = null } = {}) {
@@ -833,7 +839,7 @@ export function endSeason(C) {
   const club = S.team;
   const cupWon = S.cup.winner === club, title = S.playoffs?.champion === club;
   const income = C.contract ? netPay(C.contract.salary, C.agent) : 0;
-  C.money += income - (C.coach ? COACH_COST : 0);
+  C.money += income - staffCost(ensureDev(C));
   (C.trustBy ??= {})[club] = Math.round(C.trust);
   // the summer heals: about four months of recovery
   if (C.injury) { C.injury.games -= 15; if (C.injury.games <= 0) C.injury = null; else C.injury.pending = false; }
@@ -847,13 +853,14 @@ export function endSeason(C) {
   };
   if (S.league === "el") summary.playoffs = !S.playoffs ? null : title ? "EuroLeague champions" : S.playoffs.outAt === -1 ? "Missed the playoffs" : S.playoffs.outAt === 0 ? "Out in the playoffs" : S.playoffs.outAt === 1 ? "Lost in the Final Four semi-final" : "Lost the EuroLeague final";
   C.history.push(summary);
+  const dev = seasonDevelopment(C, S, { potential: (DIFFICULTY[C.diff] || DIFFICULTY.star).potential });
+  summary.dev = { ch: dev.ch, breakout: dev.breakout, slump: dev.slump };
   if (C.contract) C.contract.left--;
   if (C.loan) C.loan = null;
   C.seasonNo++;
   C.cur = null;
   C.phase = "offseason";
-  const growthCh = ageUp(C);
-  return { summary, growth: growthCh };
+  return { summary, growth: dev.ch, dev };
 }
 
 // ---------------------------------------------------------------- academy (ages 16–17)
@@ -866,15 +873,18 @@ export function academySeason(C, { loanTo = null, focus = "balanced" } = {}) {
   const ov = bestOverall(C);
   // youth league: you play big minutes against players your age
   const per = { ppg: r1(Math.max(4, (ov - 30) * 0.45 * minutesBoost * (0.85 + rnd() * 0.3))), rpg: r1(Math.max(1, (effective(C).reb - 30) * 0.12 * minutesBoost)), apg: r1(Math.max(0.5, (C.attrs.pas - 30) * 0.08 * minutesBoost)) };
-  const ch = ageUp(C);
-  if (loanTo) for (const k of Object.keys(ATTRS)) { C.attrs[k] = Math.min(99, C.attrs[k] + 0.8); ch[k] = r1((ch[k] || 0) + 0.8); }
-  if (focus !== "balanced" && SUMMER_CAMPS[focus]) for (const k of SUMMER_CAMPS[focus].attrs) { C.attrs[k] = Math.min(99, C.attrs[k] + 2); ch[k] = r1((ch[k] || 0) + 2); }
+  const dev = seasonDevelopment(ensureDev(C), null, { academy: true, loan: !!loanTo, potential: (DIFFICULTY[C.diff] || DIFFICULTY.star).potential });
+  const ch = dev.ch;
+  if (focus !== "balanced" && SUMMER_CAMPS[focus]) for (const k of SUMMER_CAMPS[focus].attrs) {
+    const to = Math.max(C.attrs[k], Math.min(C.attrs[k] + 2, trainLimit(C, k)));
+    ch[k] = r1((ch[k] || 0) + to - C.attrs[k]); C.attrs[k] = to;
+  }
   C.tp += 6;
   const entry = { year: C.academy.year, age: C.age - 1, club, loan: !!loanTo, games, ...per, overall: bestOverall(C) };
   C.academy.log.push(entry);
   C.academy.year++;
   if (C.academy.year > 2) C.phase = "turnpro";
-  return { entry, growth: ch };
+  return { entry, growth: ch, dev };
 }
 
 // ---------------------------------------------------------------- legacy

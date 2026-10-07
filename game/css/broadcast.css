@@ -666,3 +666,23 @@ a.friend-row:hover b { color: var(--accent); }
 /* phones: the header keeps quick game, search, settings, Buckets and you; "pause animations" is in Settings */
 @media (max-width: 520px) { #motion-btn { display: none; } }
 @media (max-width: 430px) { #quick-btn { display: none; } } /* phones: quick game is on Home and Games */
+
+/* ---- My Career: potential and the development report ---- */
+.progress.mc-pot { position: relative; }
+.progress.mc-pot s { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, rgb(255 198 41 / .35) 0 4px, rgb(255 198 41 / .12) 4px 8px); border-inline: 1px solid rgb(255 198 41 / .7); text-decoration: none; pointer-events: none; }
+.progress.mc-pot i { position: relative; }
+.mc-potv { font-size: 11px; font-weight: 600; margin-inline-start: 2px; }
+.mc-talent { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+.mc-talent span { display: inline-flex; align-items: center; gap: 5px; }
+.mc-factors { display: grid; gap: 6px; }
+.mc-factors li { display: grid; grid-template-columns: auto auto 1fr; gap: 2px 10px; align-items: baseline; padding: 6px 10px; border-radius: 8px; background: var(--card2, rgb(255 255 255 / .04)); border-inline-start: 3px solid var(--line); }
+.mc-factors li small { grid-column: 1 / -1; }
+.mc-factors li.up { border-inline-start-color: var(--good, #22c55e); }
+.mc-factors li.down { border-inline-start-color: var(--bad, #ef4444); }
+.mc-fx { font-family: var(--f-display); font-weight: 800; }
+.mc-factors li.up .mc-fx { color: var(--good, #22c55e); }
+.mc-factors li.down .mc-fx { color: var(--bad, #ef4444); }
+.mc-dev-flag { display: flex; align-items: center; gap: 6px; font-weight: 700; padding: 8px 12px; border-radius: 10px; }
+.mc-dev-flag.good { background: rgb(34 197 94 / .14); color: var(--good, #22c55e); }
+.mc-dev-flag.bad { background: rgb(239 68 68 / .14); color: var(--bad, #ef4444); }
+#mc-staff .mc-pick small + small { margin-top: 4px; }
