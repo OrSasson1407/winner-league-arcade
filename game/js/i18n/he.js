@@ -3730,4 +3730,5 @@ export const HE = {
   "{0}, {1}: {2}. {3}-{4}, {5} games, {6} points.": "{0}, {1}: {2}. {3}-{4}, {5} משחקים, {6} נקודות.",
   "{0}, {1}: {2}-{3}, {4} games, {5} points.": "{0}, {1}: {2}-{3}, {4} משחקים, {5} נקודות.",
   "national flags": "דגלי המדינות",
+  "An independent, non-commercial fan project. Not affiliated with the Israeli Basketball Premier League, its clubs, Winner (the Israel Sports Betting Board) or Euroleague Basketball; their names are trademarks of their owners, used only to describe the real competitions. Club colours and logos identify the teams; logos are the clubs' trademarks, shown only for that, and removed at a club's request. Clubs without a logo here get simple initials drawn by the game. No betting, money or prizes.": "פרויקט אוהדים עצמאי ולא מסחרי. לא קשור לליגת העל בכדורסל, לקבוצות שלה, לווינר (המועצה להסדר ההימורים בספורט) או ליורוליג; השמות שלהם הם סימנים מסחריים של בעליהם ומשמשים רק לתיאור המסגרות האמיתיות. צבעי הקבוצות והלוגואים שלהן מזהים אותן; הלוגואים הם סימנים מסחריים של הקבוצות, מוצגים רק לשם כך, ויוסרו לבקשת קבוצה. קבוצות בלי לוגו מקבלות ראשי תיבות פשוטים שהמשחק מצייר. בלי הימורים, כסף או פרסים.",
 };

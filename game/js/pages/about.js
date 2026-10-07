@@ -22,7 +22,7 @@ export function renderAbout(root, signal) {
         <p class="muted">Player ratings are calculated by the game from real stats. They are not official league ratings. In My Career, seasons after ${PLAYED_SEASONS[PLAYED_SEASONS.length - 1]} are simulated from the latest rosters and labelled as such.</p>
       </section>
       <section class="card pad"><h2>${icon("info")} The arcade</h2>
-        <p>An independent, non-commercial fan project. Not affiliated with the Israeli Basketball Premier League, its clubs, Winner (the Israel Sports Betting Board) or Euroleague Basketball; their names are trademarks of their owners, used only to describe the real competitions. Club colours identify the teams; the crests are simple initials drawn by the game, not official logos. No betting, money or prizes.</p>
+        <p>An independent, non-commercial fan project. Not affiliated with the Israeli Basketball Premier League, its clubs, Winner (the Israel Sports Betting Board) or Euroleague Basketball; their names are trademarks of their owners, used only to describe the real competitions. Club colours and logos identify the teams; logos are the clubs' trademarks, shown only for that, and removed at a club's request. Clubs without a logo here get simple initials drawn by the game. No betting, money or prizes.</p>
         <ul class="clean about-list">
           <li><span>Version</span><b>${APP_VERSION}</b></li>
           <li><span>Works offline</span><b>Single-player games, once the site has loaded</b></li>

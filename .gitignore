@@ -1,3 +1,6 @@
 node_modules/
 server/data/
 game/tools/ui_strings.json
+
+# logos set aside for a check (not published)
+game/crests/_review/
