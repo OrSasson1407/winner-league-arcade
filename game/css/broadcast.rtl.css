@@ -750,3 +750,5 @@ button.nt-wl { border: 0; cursor: pointer; font: inherit; font-size: 10px; }
 .pill.nt-gold { border-color: #f5c542; } .pill.nt-silver { border-color: #cbd5e1; } .pill.nt-bronze { border-color: #d4945b; }
 /* your own club logos (local only) */
 img.crest-logo { object-fit: contain; display: inline-block; vertical-align: middle; flex: none; }
+/* dark theme: a thin light outline so dark parts of club logos read on the dark background */
+:root[data-theme="dark"] img.crest-logo { filter: drop-shadow(0 0 1px rgb(255 255 255 / .85)) drop-shadow(0 0 2px rgb(255 255 255 / .35)); }
