@@ -12,6 +12,8 @@ import { bornOn } from "./pages/today.js";
 import { levelInfo } from "./lib/progress.js";
 import { lastStats } from "./online/net.js";
 import { reducedMotion } from "./lib/settings.js";
+import { missionText, missions } from "./lib/missions.js";
+import { coins } from "./lib/wallet.js";
 
 /** Slides for the home page's LED board (each links somewhere). */
 function boardSlides(potd, potdSeason) {
@@ -154,6 +156,14 @@ export function renderHome(root, signal) {
           <span class="dh-flame">${icon("star", { size: 24 })}</span>
           <div><small>TODAY IN THE LEAGUE</small><b>${born.length ? `${esc(born[0].p.name)}${born.length > 1 ? ` + ${born.length - 1} more` : ""} born today` : "Birthdays & flashbacks"}</b>
             <span class="muted" style="font-size:12px">Season flashbacks: 5, 10 and 15 years ago</span></div>
+          ${icon("arrowRight", { size: 18 })}</a>`;
+      })()}
+      ${(() => {
+        const m = missions(), done = m.list.filter((x) => x.done).length;
+        return html`<a class="card daily-home" href="#/shop">
+          <span class="dh-flame">${icon("flag", { size: 24 })}</span>
+          <div><small>WEEKLY MISSIONS · SHOP</small><b>${done}/4 missions done · 🏀 ${coins().toLocaleString("en-US")}</b>
+            <span class="dh-dots">${m.list.map((x) => `<i class="${x.done ? "on" : ""}" title="${esc(missionText(x.def))}"></i>`).join("")}</span></div>
           ${icon("arrowRight", { size: 18 })}</a>`;
       })()}
     </section>

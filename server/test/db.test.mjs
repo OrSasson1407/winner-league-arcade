@@ -86,6 +86,17 @@ assert.equal(hlOnly.find((r) => r.sid === "y").g, 2);
 const ever = await store.periodTable("all", 0);
 assert.equal(ever.find((r) => r.sid === "y").w, 2);
 
+// replays: kept with the match, given only to its players; history says which matches have one
+await store.addMatch({ ...match("p", "q", 0, 0), replay: { rounds: [{ cat: "ppg", va: 10, vb: 12 }] } });
+const pq = (await store.listMatches("p", 5))[0];
+assert.equal(pq.has_replay, true);
+assert.equal(pq.replay, undefined); // the list stays light
+assert.equal((await store.getMatch(pq.id, "p")).replay.rounds[0].vb, 12);
+assert.equal(await store.getMatch(pq.id, "someone-else"), null);
+// league style
+await store.saveLeague({ id: "LSTYLE", name: "Styled", owner: "AAAAAA", members: ["AAAAAA"], created: 1, style: { color: "#e4002b", icon: "crown" } });
+assert.deepEqual((await store.loadLeagues()).find((x) => x.id === "LSTYLE").style, { color: "#e4002b", icon: "crown" });
+
 // "Delete my data": the record goes, other players' history keeps the match without the person
 await store.deleteRecord("sid-aaaaaaaa");
 assert.equal((await store.loadRecords()).some((r) => r.sid === "sid-aaaaaaaa"), false);

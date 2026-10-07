@@ -29,6 +29,12 @@ import { crestSvg } from "../lib/icons.js";
 import { bindGamePlan, gamePlanHtml, readGamePlan } from "../lib/gamePlan.js";
 import { arrowGrid, gameKeys, press } from "../lib/shortcuts.js";
 import { dateLocale } from "../i18n/index.js";
+import { ITEMS, ownedStickers } from "../lib/shop.js";
+import { equipped } from "../lib/wallet.js";
+import { owns } from "../lib/wallet.js";
+import { openReplay } from "../online/replay.js";
+const LEAGUE_COLORS = ["#e4002b", "#ffc629", "#0a3e8c", "#00843d", "#6d28d9", "#0ea5e9", "#ff7a1a", "#e11d48", "#111111"]; // as server/leagues.js
+const LEAGUE_ICONS = ["trophy", "crown", "flame", "star", "shield", "rocket", "medal", "ball"];
 
 export const ONLINE_GAMES = {
   hl: { name: "Higher or Lower", ic: "chart", short: "Speed duel",
@@ -53,7 +59,8 @@ const HL_CATS = {
 };
 // broadcast-style stickers (sent by id, so nothing free-form goes between players)
 const STICKERS = [["andone", "AND ONE!"], ["swish", "SWISH"], ["defense", "DEFENSE!"], ["buzzer", "BUZZER BEATER"], ["onfire", "ON FIRE"], ["airball", "AIRBALL"], ["timeout", "TIMEOUT"], ["gg", "GG"]];
-const STICKER_TEXT = Object.fromEntries(STICKERS);
+const SHOP_STICKERS = ITEMS.filter((i) => i.cat === "sticker").map((i) => [i.sticker, i.name]);
+const STICKER_TEXT = Object.fromEntries([...STICKERS, ...SHOP_STICKERS]); // you can receive every sticker, and send the ones you own
 const getLeagues = () => store.get("online:leagues", []);
 const saveLeague = (L) => { const list = getLeagues().filter((x) => x.id !== L.id); list.unshift(L); store.set("online:leagues", list.slice(0, 10)); };
 const REASONS = { forfeit: "Your opponent left the match.", disconnect: "Your opponent lost their connection." };
@@ -129,6 +136,9 @@ export function renderOnline(root, signal, params = []) {
       case "friends": friendsInfo = m.list; refreshFriends(m.list); if (phase === "lobby" && tab === "friends") drawLobby(); return;
       case "leaders": leaders = m; if (phase === "lobby" && tab === "leaders") drawLobby(); return;
       case "history": serverHistory = m.list || []; if (phase === "lobby" && tab === "history") drawLobby(); return;
+      case "replay":
+        if (m.missing) return toast("That replay isn't available");
+        return openReplay({ game: m.game, seat: m.seat, names: [m.players[m.seat]?.name || "You", m.players[1 - m.seat]?.name || "?"], replay: m.replay, scores: m.scores });
       case "whois": {
         if (!m.found) { const el = root.querySelector("#fr-msg"); if (el) el.textContent = "No player with that code. They need to open the arcade online once."; return; }
         addFriend(m); friendsInfo = null; toast(`${m.name} added to friends`);
@@ -226,7 +236,7 @@ export function renderOnline(root, signal, params = []) {
           <div class="ch-games" id="og-games">${Object.entries(ONLINE_GAMES).map(([k, g]) => `<button class="ch-game ${k === game ? "on" : ""}" data-g="${k}" ${busy ? "disabled" : ""} aria-pressed="${k === game}">${icon(g.ic, { size: 22 })}<b>${g.name} <span class="muted og-short">· ${g.short}</span> ${rankBadge(rec?.elo?.[k] ?? 1000, { small: true })}</b><small>${g.rules}</small></button>`).join("")}</div>
         </div>
         <div style="display:grid;gap:18px;align-content:start">
-          <div class="card pad og-me">
+          <div class="card pad og-me ${equipped("card") ? `card-skin-${equipped("card").split(":")[1]}` : ""}">
             ${avatarHtml(getMe(), 48)}
             <div style="min-width:0"><b>${meLabel()}</b><div class="muted">Level ${levelInfo().level}${rec?.streak >= 2 ? ` · <span class="streak-fire">🔥 ${rec.streak} win streak</span>` : ""}</div>
               <div class="og-rankline">${rankBadge(elo)} <span class="muted">in ${ONLINE_GAMES[game].name}</span></div></div>
@@ -370,7 +380,7 @@ export function renderOnline(root, signal, params = []) {
     body.innerHTML = html`<div class="online-grid">
       <div style="display:grid;gap:16px;align-content:start;min-width:0">
         ${L ? html`<div class="card pad lg-card">
-          <div class="row"><div><small class="muted">LEAGUE · WEEK ${esc(T?.week?.split("-W")[1] || "")}</small><h2 style="margin:2px 0 0">${esc(L.name)}</h2></div><span class="spacer"></span>
+          <div class="row"><div><small class="muted">LEAGUE · WEEK ${esc(T?.week?.split("-W")[1] || "")}</small><h2 style="margin:2px 0 0" class="lg-name" ${L.style?.color ? `style="--lg:${esc(L.style.color)}"` : ""}>${L.style?.icon ? icon(L.style.icon, { size: 22 }) + " " : ""}${esc(L.name)}</h2></div><span class="spacer"></span>
             <button class="btn" id="lg-copy">${icon("link", { size: 15 })} Invite link</button></div>
           ${T ? html`<div class="grid-wrap"><table class="stat-table lg-table"><thead><tr><th>#</th><th>Player</th><th>W</th><th>D</th><th>L</th><th>Pts</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
             ${T.rows.map((r, i) => html`<tr class="${r.me ? "me-row" : ""}"><td>${i + 1}</td>
@@ -380,11 +390,15 @@ export function renderOnline(root, signal, params = []) {
             </tbody></table></div>
             <p class="muted" style="font-size:12px;margin:8px 0 0">Points from online matches against people this week (not bots): win 3, draw 1. A new week starts on Monday (UTC). Up to ${T.max} players.</p>`
             : `<div aria-busy="true"><span class="sr-only">Loading the table…</span>${skeletonRows(5)}</div>`}
+          ${L.owner === myCodeNow ? (owns("league:style") ? html`<details class="lg-style"><summary>${icon("star", { size: 14 })} League colours</summary>
+            <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:8px" role="group" aria-label="League colour">${LEAGUE_COLORS.map((c) => `<button class="sw ${L.style?.color === c ? "on" : ""}" data-lgc="${c}" style="background:${c}" aria-label="Colour ${c}" aria-pressed="${L.style?.color === c}"></button>`).join("")}</div>
+            <div class="row" style="flex-wrap:wrap;gap:6px;margin-top:8px" role="group" aria-label="League icon">${LEAGUE_ICONS.map((ic) => `<button class="icon-btn ${L.style?.icon === ic ? "on" : ""}" data-lgi="${ic}" aria-label="Icon ${ic}" aria-pressed="${L.style?.icon === ic}">${icon(ic, { size: 18 })}</button>`).join("")}</div></details>`
+            : `<a class="muted sh-more" href="#/shop/league">${icon("coin", { size: 14 })} League colours are in the shop</a>`) : ""}
           <div class="row" style="margin-top:10px"><span class="muted" style="font-size:13px">League code <b class="led">${esc(L.id)}</b></span><span class="spacer"></span><button class="btn ghost" id="lg-leave">${icon("x", { size: 14 })} Leave league</button></div>
         </div>` : html`<div class="card pad"><h3>${icon("medal")} Friend leagues</h3><p class="muted">Start a private league with your friends: everyone's online results this week go into one table. Share the code, and the table resets every Monday.</p></div>`}
       </div>
       <div style="display:grid;gap:16px;align-content:start">
-        ${mineList.length ? `<div class="card pad"><h3>${icon("users")} Your leagues</h3><div class="lg-list">${mineList.map((x) => `<button class="lg-pick ${x.id === league ? "on" : ""}" data-lg="${x.id}"><b>${esc(x.name)}</b><small class="muted">${(x.members || []).length} player${(x.members || []).length === 1 ? "" : "s"} · ${x.id}</small></button>`).join("")}</div></div>` : ""}
+        ${mineList.length ? `<div class="card pad"><h3>${icon("users")} Your leagues</h3><div class="lg-list">${mineList.map((x) => `<button class="lg-pick ${x.id === league ? "on" : ""}" data-lg="${x.id}"><b class="lg-name" ${x.style?.color ? `style="--lg:${esc(x.style.color)}"` : ""}>${x.style?.icon ? icon(x.style.icon, { size: 14 }) + " " : ""}${esc(x.name)}</b><small class="muted">${(x.members || []).length} player${(x.members || []).length === 1 ? "" : "s"} · ${x.id}</small></button>`).join("")}</div></div>` : ""}
         <div class="card pad" style="display:grid;gap:8px"><h3>${icon("star")} New league</h3>
           <div class="row"><input id="lg-name" class="input" maxlength="32" placeholder="League name" aria-label="League name" style="flex:1"><button class="btn primary" id="lg-create" ${s === "online" ? "" : "disabled"}>Create</button></div></div>
         <div class="card pad" style="display:grid;gap:8px"><h3>${icon("search")} Join a league</h3>
@@ -397,6 +411,10 @@ export function renderOnline(root, signal, params = []) {
     body.querySelectorAll("[data-lg]").forEach((b) => b.addEventListener("click", () => { league = b.dataset.lg; send({ t: "league:table", id: league }); drawLobby(); }, { signal }));
     body.querySelectorAll("[data-inv]").forEach((b) => b.addEventListener("click", () => { lobbyMsg = ""; send({ t: "invite:friend", code: b.dataset.inv, game }); }, { signal }));
     body.querySelectorAll("[data-watch]").forEach((b) => b.addEventListener("click", () => { lobbyMsg = ""; send({ t: "spectate", code: b.dataset.watch }); }, { signal }));
+    // the owner's league colours (bought in the shop)
+    const restyle = (patch) => { if (L) send({ t: "league:style", id: L.id, style: { ...(L.style || {}), ...patch } }); };
+    body.querySelectorAll("[data-lgc]").forEach((b) => b.addEventListener("click", () => restyle({ color: L.style?.color === b.dataset.lgc ? null : b.dataset.lgc }), { signal }));
+    body.querySelectorAll("[data-lgi]").forEach((b) => b.addEventListener("click", () => restyle({ icon: L.style?.icon === b.dataset.lgi ? null : b.dataset.lgi }), { signal }));
     $("#lg-copy")?.addEventListener("click", async () => {
       const link = `${location.origin}${location.pathname}#/online/league/${L.id}`;
       try { await navigator.clipboard.writeText(`Join my league "${L.name}" in Winner League Arcade: ${link}`); toast("Invite link copied"); } catch { toast(link); }
@@ -458,6 +476,7 @@ export function renderOnline(root, signal, params = []) {
           <span class="hist-res">${h.result === "win" ? "W" : h.result === "lose" ? "L" : "D"}</span>
           ${avatarHtml({ icon: h.opp?.icon || "ball", color: h.opp?.color || "#64748b", frame: h.opp?.frame || "none", style: h.opp?.style, av: h.opp?.av }, 34)}
           <div class="hist-info"><b>${esc(h.opp?.name || "?")}</b><small class="muted">${icon(GAME_ICONS[h.game], { size: 12 })} ${GAME_NAMES[h.game]} · ${esc(h.score || "")} · ${new Date(h.at).toLocaleDateString()}</small></div>
+          ${h.replay && h.id ? `<button class="btn ghost" data-rp="${esc(h.id)}" ${s === "online" ? "" : "disabled"} title="Watch the match again" aria-label="Replay">${icon("clock", { size: 14 })}<span class="hide-sm"> Replay</span></button>` : ""}
           ${modeChip(h.mode)}${h.mode === "ranked" && h.delta != null ? `<span class="elo-d ${h.delta >= 0 ? "up" : "down"}">${h.delta >= 0 ? "+" : ""}${h.delta}</span>` : ""}
           ${h.oppCode && h.mode !== "bot" ? `<button class="btn ghost" data-again="${i}" ${s === "online" ? "" : "disabled"} title="Invite to a rematch">${icon("refresh", { size: 14 })}<span class="hide-sm"> Challenge</span></button>` : ""}
         </div>`).join("")}</div>` : `<p class="muted">Your online matches show up here.</p>`}
@@ -472,6 +491,7 @@ export function renderOnline(root, signal, params = []) {
         </div>`).join("") : `<p class="muted">Play real opponents to build up rivalries.</p>`}
       </div>
     </div>`;
+    body.querySelectorAll("[data-rp]").forEach((b) => b.addEventListener("click", () => send({ t: "replay", id: b.dataset.rp }), { signal }));
     body.querySelectorAll("[data-again]").forEach((b) => b.addEventListener("click", () => {
       const h = list[Number(b.dataset.again)];
       lobbyMsg = ""; send({ t: "invite:friend", code: h.oppCode, game: h.game });
@@ -540,7 +560,7 @@ export function renderOnline(root, signal, params = []) {
       ${duelBar()}
       ${M.spectator ? html`<div class="card pad og-watch"><span class="bc-strap">Live</span><span>Watching <b>${esc(M.you.name)}</b> vs <b>${esc(M.opp.name)}</b>. You see ${esc(M.you.name)}'s screen.</span><span class="spacer"></span><button class="btn" id="stop-watch">${icon("arrowLeft", { size: 15 })} Stop watching</button></div>` : ""}
       <div id="arena" class="duel-arena ${M.spectator ? "spectating" : ""}"></div>
-      ${M.spectator ? "" : html`<div class="react-bar" role="group" aria-label="Send a sticker">${STICKERS.map(([id, text]) => `<button class="sticker-btn st-${id}" data-e="${id}">${text}</button>`).join("")}
+      ${M.spectator ? "" : html`<div class="react-bar" role="group" aria-label="Send a sticker">${[...STICKERS, ...ownedStickers()].map(([id, text]) => `<button class="sticker-btn st-${id}" data-e="${id}">${text}</button>`).join("")}
         <button class="btn ghost" id="chat-toggle" aria-expanded="false">${icon("users", { size: 15 })} Say…</button>
         <span class="spacer"></span><button class="btn ghost" id="forfeit">${icon("flag", { size: 15 })} Leave match</button></div>
       <div class="chat-menu" id="chat-menu" hidden>${CHAT.map((c, i) => `<button class="btn" data-chat="${i}">${esc(c)}</button>`).join("")}</div>`}
@@ -1178,6 +1198,7 @@ export function renderOnline(root, signal, params = []) {
         ${M.spectator ? "" : M.oppLeft ? `<span class="muted">${esc(M.opp.name)} left the room.</span>`
           : `<button class="btn primary" id="rematch" ${M.sentRematch ? "disabled" : ""}>${icon("refresh", { size: 15 })} ${M.sentRematch ? "Waiting for opponent…" : M.oppRematch ? "Accept rematch" : "Rematch"}</button>`}
         ${M.spectator ? "" : `<button class="btn" id="share">${icon("camera", { size: 15 })} Share result</button>`}
+        ${m.replay ? `<button class="btn" id="replay">${icon("clock", { size: 15 })} Replay</button>` : ""}
         ${canFriend && !M.spectator ? `<button class="btn" id="add-friend">${icon("users", { size: 15 })} Add friend</button>` : ""}
         <button class="btn ghost" id="lobby">${icon("arrowLeft", { size: 15 })} Back to lobby</button>
       </div>
@@ -1185,6 +1206,7 @@ export function renderOnline(root, signal, params = []) {
     </div>`;
     updateScores();
     a.querySelector("#rematch")?.addEventListener("click", () => { M.sentRematch = true; send({ t: "rematch" }); drawEnd(); });
+    a.querySelector("#replay")?.addEventListener("click", () => openReplay({ game: M.game, seat: M.seat, names: [M.you.name, M.opp.name], replay: m.replay, scores: m.scores }));
     a.querySelector("#add-friend")?.addEventListener("click", () => {
       addFriend({ code: M.opp.code, name: M.opp.name, icon: M.opp.icon, color: M.opp.color, frame: M.opp.frame, style: M.opp.style, av: M.opp.av });
       toast(`${M.opp.name} added to friends`); drawEnd();

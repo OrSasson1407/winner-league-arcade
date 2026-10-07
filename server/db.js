@@ -42,11 +42,11 @@ async function postgresStore(db, pool) {
         SELECT s, d::jsonb, now() FROM unnest($1::text[], $2::text[]) AS t(s, d)
         ON CONFLICT (sid) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`, [list.map((r) => r.sid), list.map((r) => JSON.stringify(r))]);
     },
-    async loadLeagues() { return (await q("SELECT id, name, owner, members, created FROM leagues")).rows.map((r) => ({ ...r, created: Number(r.created) })); },
+    async loadLeagues() { return (await q("SELECT id, name, owner, members, created, style FROM leagues")).rows.map((r) => ({ ...r, created: Number(r.created), style: parse(r.style) || null })); },
     async saveLeague(L) {
-      await q(`INSERT INTO leagues (id, name, owner, members, created, updated_at) VALUES ($1, $2, $3, $4, $5, now())
-        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, owner = EXCLUDED.owner, members = EXCLUDED.members, updated_at = now()`,
-      [L.id, L.name, L.owner, L.members, L.created]);
+      await q(`INSERT INTO leagues (id, name, owner, members, created, style, updated_at) VALUES ($1, $2, $3, $4, $5, $6::jsonb, now())
+        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, owner = EXCLUDED.owner, members = EXCLUDED.members, style = EXCLUDED.style, updated_at = now()`,
+      [L.id, L.name, L.owner, L.members, L.created, L.style ? JSON.stringify(L.style) : null]);
     },
     async deleteLeague(id) { await q("DELETE FROM leagues WHERE id = $1", [id]); },
     async addFeedback(row) { await q("INSERT INTO feedback (at, kind, message, tech) VALUES ($1, $2, $3, $4)", [row.at, row.kind, row.message, row.tech]); },
@@ -64,14 +64,20 @@ async function postgresStore(db, pool) {
       }
     },
     async addMatch(m) {
-      await q(`INSERT INTO matches (at, game, mode, rated, sid0, sid1, winner, reason, players, scores)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)`,
-      [m.at, m.game, m.mode, m.rated, m.sid0, m.sid1, m.winner, m.reason, JSON.stringify(m.players), JSON.stringify(m.scores ?? null)]);
+      await q(`INSERT INTO matches (at, game, mode, rated, sid0, sid1, winner, reason, players, scores, replay)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb)`,
+      [m.at, m.game, m.mode, m.rated, m.sid0, m.sid1, m.winner, m.reason, JSON.stringify(m.players), JSON.stringify(m.scores ?? null), m.replay ? JSON.stringify(m.replay) : null]);
     },
     async listMatches(sid, limit = 60) {
-      const rows = (await q(`SELECT at, game, mode, rated, sid0, sid1, winner, reason, players, scores FROM matches
+      const rows = (await q(`SELECT id, at, game, mode, rated, sid0, sid1, winner, reason, players, scores, replay IS NOT NULL AS has_replay FROM matches
         WHERE sid0 = $1 OR sid1 = $1 ORDER BY at DESC LIMIT $2`, [sid, limit])).rows;
-      return rows.map((r) => ({ ...r, at: new Date(r.at).toISOString(), players: parse(r.players), scores: parse(r.scores) }));
+      return rows.map((r) => ({ ...r, id: String(r.id), at: new Date(r.at).toISOString(), players: parse(r.players), scores: parse(r.scores) }));
+    },
+    /** One match with its replay (only for one of its two players). */
+    async getMatch(id, sid) {
+      if (!/^\d{1,18}$/.test(String(id))) return null;
+      const r = (await q("SELECT id, at, game, mode, sid0, sid1, winner, reason, players, scores, replay FROM matches WHERE id = $1 AND (sid0 = $2 OR sid1 = $2)", [String(id), sid])).rows[0];
+      return r ? { ...r, id: String(r.id), at: new Date(r.at).toISOString(), players: parse(r.players), scores: parse(r.scores), replay: parse(r.replay) } : null;
     },
     async periodTable(game, since) {
       const rows = (await q(`WITH seat AS (
@@ -154,12 +160,16 @@ function fileStore() {
       if (changed) { fs.mkdirSync(DATA, { recursive: true }); fs.writeFileSync(file("matches.jsonl"), matches.map((m) => JSON.stringify(m)).join("\n") + "\n"); }
     },
     async addMatch(m) {
-      loadMatches().push(m);
+      loadMatches().push(m = { id: String(Date.now()) + String(Math.floor(Math.random() * 1000)).padStart(3, "0"), ...m });
       if (matches.length > 20000) matches.splice(0, matches.length - 20000);
       fs.mkdirSync(DATA, { recursive: true });
       fs.appendFileSync(file("matches.jsonl"), JSON.stringify(m) + "\n");
     },
-    async listMatches(sid, limit = 60) { return loadMatches().filter((m) => m.sid0 === sid || m.sid1 === sid).sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit); },
+    async listMatches(sid, limit = 60) {
+      return loadMatches().filter((m) => m.sid0 === sid || m.sid1 === sid).sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit)
+        .map(({ replay, ...m }) => ({ ...m, has_replay: !!replay }));
+    },
+    async getMatch(id, sid) { return loadMatches().find((m) => m.id === String(id) && (m.sid0 === sid || m.sid1 === sid)) || null; },
     async periodTable(game, since) {
       const t = new Map();
       for (const m of loadMatches()) {

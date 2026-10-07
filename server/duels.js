@@ -28,7 +28,8 @@ const HL_CATS = {
 const HL_ROUNDS = 15, HL_MS = 10000, HL_PAUSE = 2600;
 
 class HLDuel {
-  constructor(room, rnd) { this.room = room; this.rnd = rnd; this.scores = [0, 0]; this.i = -1; }
+  constructor(room, rnd) { this.room = room; this.rnd = rnd; this.scores = [0, 0]; this.i = -1; this.log = []; }
+  replay() { return { rounds: this.log }; }
   start() { this.next(); }
   next() {
     this.i++;
@@ -69,6 +70,7 @@ class HLDuel {
       this.scores[seat] += pts;
       return { c: x.c, ok, pts };
     });
+    this.log.push({ cat: c.cat, a: psKey(c.a), b: psKey(c.b), va, vb, ans: answers.map((x, seat) => ({ ...x, ms: c.answers[seat]?.ms ?? null })) });
     this.room.broadcast({ t: "hl:reveal", i: this.i, answers, scores: this.scores });
     this.room.timer(() => this.next(), HL_PAUSE);
   }
@@ -80,9 +82,10 @@ const CAR_ROUNDS = 10, CAR_MS = 20000, CAR_PAUSE = 3200;
 
 class CareerDuel {
   constructor(room, rnd) {
-    this.room = room; this.rnd = rnd; this.scores = [0, 0]; this.i = -1;
+    this.room = room; this.rnd = rnd; this.scores = [0, 0]; this.i = -1; this.log = [];
     this.targets = shuffle(careerPool().slice(), rnd).slice(0, CAR_ROUNDS);
   }
+  replay() { return { rounds: this.log }; }
   start() { this.next(); }
   next() {
     this.i++;
@@ -113,6 +116,7 @@ class CareerDuel {
     if (!c || c.done) return;
     c.done = true;
     this.room.clearTimers();
+    this.log.push({ target: c.target, options: c.options, picks: c.picks, winner: winnerSeat });
     this.room.broadcast({ t: "car:reveal", i: this.i, answer: c.target, winner: winnerSeat, picks: c.picks, scores: this.scores });
     this.room.timer(() => this.next(), CAR_PAUSE);
   }
@@ -140,6 +144,7 @@ class GuessDuel {
     return { t: "guess:state", seat, max: GUESS_MAX, ms: Math.max(0, GUESS_MS - (Date.now() - this.at)), cols: COLS,
       rows: me.rows, solved: me.solved, opp: { colors: opp.rows.map((r) => r.colors), solved: opp.solved } };
   }
+  replay() { return { target: this.target.player_id, rows: this.p.map((x) => x.rows.map((r) => ({ pid: r.pid, colors: r.colors }))) }; }
   onMessage(seat, m) {
     if (m.t !== "guess:guess" || this.over) return;
     const me = this.p[seat];
@@ -277,6 +282,7 @@ class DraftDuel {
     this.teams[seat].slots[slot] = { ps, value: slotValue(ps, slot) };
     this.used.add(ps.player_id);
     const last = { seat, key: psKey(ps), slot, auto };
+    (this.log ||= []).push({ ...last, round: this.round, spin: { season: this.spin.season, team_id: this.spin.team_id } });
     this.at++;
     if (this.at >= this.order.length) {
       this.round++;
@@ -291,6 +297,7 @@ class DraftDuel {
     const s = this.turn(), at = this.at, round = this.round;
     this.room.timer(() => { if (this.round === round && this.at === at) this.autoPick(s); }, DRAFT_MS + 500);
   }
+  replay() { return { picks: this.log || [] }; }
   /** The draft is done: both sides pick a game plan, then the teams play. */
   end() {
     this.room.clearTimers();
@@ -351,6 +358,7 @@ class ConnDuel {
     return { t: "conn:state", order: this.order, solved: me.solved.map((l) => this.groupInfo(l)), mistakes: me.mistakes, max: CONN_MISTAKES,
       opp: { solved: them.solved.length, mistakes: them.mistakes, done: them.doneMs !== null }, ms: Math.max(0, CONN_MS - (Date.now() - this.at)) };
   }
+  replay() { return { groups: this.groups.map((g) => ({ level: g.level, label: g.label, players: g.players })), tries: this.log || [] }; }
   onMessage(seat, m) {
     if (m.t !== "conn:guess" || this.over || !Array.isArray(m.pids) || m.pids.length !== 4) return;
     const me = this.p[seat];
@@ -363,6 +371,7 @@ class ConnDuel {
     if (me.tried.has(key)) return;
     me.tried.add(key);
     const g = this.groups.find((x) => pids.every((p) => x.players.includes(p)));
+    (this.log ||= []).push({ seat, pids, ok: !!g, level: g ? g.level : null, ms: Date.now() - this.at });
     if (g) {
       me.solved.push(g.level);
       this.room.send(seat, { t: "conn:right", group: this.groupInfo(g.level) });
@@ -413,6 +422,7 @@ class GridDuel {
     return { t: "grid:state", rows: this.board.rows, cols: this.board.cols, cells: me.cells, left: me.left, score: this.score(me),
       opp: { filled: them.cells.map(Boolean), left: them.left, score: this.score(them) }, scores: this.p.map((x) => this.score(x)), ms: Math.max(0, GRID_MS - (Date.now() - this.at)) };
   }
+  replay() { return { rows: this.board.rows, cols: this.board.cols, tries: this.log || [] }; }
   onMessage(seat, m) {
     if (m.t !== "grid:guess" || this.over) return;
     const me = this.p[seat];
@@ -425,6 +435,7 @@ class GridDuel {
     const right = !!(f && r.test(f) && c.test(f));
     if (right) me.cells[cell] = { pid, rarity: rarity(pid, answersFor(r, c)) };
     else me.wrong++;
+    (this.log ||= []).push({ seat, cell, pid, right, rarity: right ? me.cells[cell].rarity : 0, ms: Date.now() - this.at });
     this.room.send(seat, { t: "grid:result", cell, pid, right, rarity: right ? me.cells[cell].rarity : 0, left: me.left, score: this.score(me) });
     if (me.left <= 0 || me.cells.every(Boolean)) me.doneMs = Date.now() - this.at;
     this.room.send(1 - seat, { t: "grid:opp", filled: me.cells.map(Boolean), left: me.left, score: this.score(me), done: me.doneMs !== null });

@@ -10,6 +10,7 @@ import { announce } from "../lib/a11y.js";
 import { shot } from "../lib/shot.js";
 import { challengeFor, challengeRng } from "../lib/challenge.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
+import { hasMode } from "../lib/shop.js";
 
 const CATS = {
   ppg: { label: "Points per game", get: (ps) => ps.stats.ppg, dec: 1 },
@@ -26,7 +27,7 @@ const TIME_LIMIT = 60;
 const TIME_PENALTY = 3; // seconds lost on a wrong answer in time attack
 
 // Classic keeps the original best-score key so earlier records still count.
-const bestKey = (mode, type, pairs) => `hl:best:${mode}${type === "classic" ? "" : ":" + type}${pairs === "same" ? ":same" : ""}`;
+const bestKey = (mode, type, pairs) => `hl:best:${mode}${type === "classic" ? "" : ":" + type}${pairs === "same" || pairs === "close" ? ":" + pairs : ""}`;
 
 export function renderHigherLower(root, signal, params, query) {
   const ch = challengeFor(query, "hl"); // challenge mode: same pairs in the same order for everyone
@@ -43,6 +44,8 @@ export function renderHigherLower(root, signal, params, query) {
   let mode = saved?.mode || prefs.mode;
   let type = saved?.type || prefs.type;
   let pairs = saved?.pairs || prefs.pairs;
+  if (pairs === "close" && !hasMode("hl-close")) pairs = "random";
+  const pairChoices = () => (hasMode("hl-close") ? { ...PAIRS, close: "Close calls" } : PAIRS);
   let state;
   let tick = null;
   signal.addEventListener("abort", () => clearInterval(tick));
@@ -68,9 +71,19 @@ export function renderHigherLower(root, signal, params, query) {
     }
     return [drawOne(cat), drawOne(cat)];
   }
+  /** Close calls: the second number within 15% of the first. */
+  function drawClose(cat, left) {
+    const a = CATS[cat].get(left);
+    for (let i = 0; i < 400; i++) {
+      const ps = drawOne(cat, left), b = CATS[cat].get(ps);
+      if (Math.abs(a - b) <= 0.15 * Math.max(Math.abs(a), Math.abs(b), 1)) return ps;
+    }
+    return drawOne(cat, left);
+  }
   function newPair(prevRight) {
     const cat = nextCat();
     if (pairs === "same") { const [left, right] = drawSame(cat); return { cat, left, right }; }
+    if (pairs === "close") { const left = prevRight && valid(prevRight, cat) ? prevRight : drawOne(cat); return { cat, left, right: drawClose(cat, left) }; }
     const left = prevRight && valid(prevRight, cat) ? prevRight : drawOne(cat);
     return { cat, left, right: drawOne(cat, left) };
   }
@@ -174,7 +187,7 @@ export function renderHigherLower(root, signal, params, query) {
       </div>
       <div class="card pad hl-controls" ${ch ? "hidden" : ""}>
         <div class="field"><label>Game</label>${seg("type", TYPES, type)}</div>
-        <div class="field"><label>Pairs</label>${seg("pairs", PAIRS, pairs)}</div>
+        <div class="field"><label>Pairs</label>${seg("pairs", pairChoices(), pairs)}</div>
         <div class="field"><label>Stat</label>${seg("mode", MODES, mode)}</div>
       </div>
       <div class="row hl-status">${statusBar()}</div>

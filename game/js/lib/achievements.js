@@ -5,6 +5,8 @@ import { ICON_PATHS } from "./icons.js";
 import { sound } from "./fx.js";
 import { XP_FOR_TIER, addXP, logActivity, xpFor } from "./progress.js";
 import { tr } from "../i18n/index.js";
+import { COINS_FOR_TIER, earn, onEvent } from "./wallet.js";
+import { trackMission } from "./missions.js";
 
 export const GAMES = {
   draft: { name: "All-Time Draft", short: "DRAFT", color: "#ff7a1a" },
@@ -180,7 +182,7 @@ function unlock(ids) {
   const when = new Date().toISOString();
   for (const id of fresh) map[id] = when;
   store.set("ach:unlocked", map);
-  for (const id of fresh) { logActivity("ach", { id }); addXP(XP_FOR_TIER[byId.get(id).tier], "achievement"); }
+  for (const id of fresh) { logActivity("ach", { id }); addXP(XP_FOR_TIER[byId.get(id).tier], "achievement"); earn(COINS_FOR_TIER[byId.get(id).tier], "achievement"); }
   fresh.forEach((id, i) => setTimeout(() => showUnlock(byId.get(id)), i * 1600));
   document.dispatchEvent(new CustomEvent("achievements-changed"));
 }
@@ -205,6 +207,8 @@ export function emit(event, data = {}) {
   const e = { ...data };
   const c = updateCounters(event, e);
   addXP(xpFor(event, e), event, { log: event !== "hl:answer" });
+  onEvent(event, e); // Buckets for the shop
+  trackMission(event, e); // weekly missions
   if (LOGGED[event]) logActivity(event, LOGGED[event](e));
   unlock(DEFS.filter((d) => d.on === event && !isUnlocked(d.id) && safe(() => d.test(e, c))).map((d) => d.id));
 }

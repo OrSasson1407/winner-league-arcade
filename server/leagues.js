@@ -19,7 +19,19 @@ function newId() {
     if (!leagues.has(id)) return id;
   }
 }
-const view = (L) => ({ id: L.id, name: L.name, owner: L.owner, members: [...L.members], created: L.created });
+const view = (L) => ({ id: L.id, name: L.name, owner: L.owner, members: [...L.members], created: L.created, style: L.style || null });
+/** The looks a league can wear (the shop's "League colours"). */
+export const LEAGUE_COLORS = ["#e4002b", "#ffc629", "#0a3e8c", "#00843d", "#6d28d9", "#0ea5e9", "#ff7a1a", "#e11d48", "#111111"];
+export const LEAGUE_ICONS = ["trophy", "crown", "flame", "star", "shield", "rocket", "medal", "ball"];
+/** The owner sets the league's colour and icon. */
+export function styleLeague(id, code, style) {
+  const L = leagues.get(cleanLeagueId(id));
+  if (!L || L.owner !== code) return null;
+  L.style = { color: LEAGUE_COLORS.includes(style?.color) ? style.color : null, icon: LEAGUE_ICONS.includes(style?.icon) ? style.icon : null };
+  if (!L.style.color && !L.style.icon) L.style = null;
+  dirty.add(L.id);
+  return view(L);
+}
 
 export function createLeague(name, ownerCode) {
   const L = { id: newId(), name: cleanName(name) || "Friends league", owner: ownerCode, members: new Set([ownerCode]), created: Date.now() };

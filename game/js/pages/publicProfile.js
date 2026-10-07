@@ -7,6 +7,7 @@ import { levelInfo, titleFor } from "../lib/progress.js";
 import { dailyStats, dailyStreak } from "../lib/daily.js";
 import { rankOf } from "../shared/rating.js";
 import { esc, html, store, toast } from "../ui.js";
+import { equipped } from "../lib/wallet.js";
 
 const b64 = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const unb64 = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
@@ -19,7 +20,7 @@ export function profileSnapshot() {
   DEFS.forEach((d, i) => { if (map[d.id]) bits[i >> 3] |= 1 << (i & 7); });
   const rec = store.get("online:rec", null);
   const data = {
-    v: 1, n: me.nickname || "Guest", i: me.icon, c: me.color, f: me.frame, y: me.style, p: me.style === "player" ? me.av : undefined, x: levelInfo().xp, a: b64(bits),
+    v: 1, n: me.nickname || "Guest", i: me.icon, c: me.color, f: me.frame, k: equipped("card")?.split(":")[1], y: me.style, p: me.style === "player" ? me.av : undefined, x: levelInfo().xp, a: b64(bits),
     b: { d: store.get("draft:best", 0), h: store.get("hl:best:mixed", 0), c: store.get("career:best", 0), g: store.get("ach:counters", {}).guessWins || 0 },
     r: rec ? rec.elo : null, w: rec ? Object.values(rec.w).reduce((a, b) => a + b, 0) : 0,
     s: dailyStreak(), t: new Date().toISOString().slice(0, 10),
@@ -50,7 +51,7 @@ export function renderPublicProfile(root, signal, params = []) {
   const isMe = profileSnapshot() === params[0];
   const games = { hl: "Higher or Lower", guess: "Guess the Player", career: "Career Path", draft: "All-Time Draft" };
   root.innerHTML = html`
-    <div class="card pub-hero">
+    <div class="card pub-hero ${/^[a-z]{2,12}$/.test(d.k || "") ? `card-skin-${d.k}` : ""}">
       ${avatarHtml({ icon: d.i, color: d.c, frame: d.f, style: d.y, av: d.p }, 96)}
       <div class="pub-who"><small class="muted">LEVEL ${lv.level} · ${esc(titleFor(lv.level).toUpperCase())}</small>
         <h1>${esc(d.n)}</h1>

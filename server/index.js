@@ -13,7 +13,7 @@ import { WebSocketServer } from "ws";
 import { GAMES, createEngine } from "./duels.js";
 import { BOT_LEVELS, createBot } from "./bot.js";
 import { addWeekly, applyResult, blockName, findByCode, forgetRecord, initRecords, leaderboard, recordBySid, recordFor, recordMsg, saveRecords, secretSource, setProfile, weekId, weekOf } from "./records.js";
-import { MAX_MEMBERS, cleanLeagueId, createLeague, getLeague, initLeagues, joinLeague, leaveAllLeagues, leaveLeague, saveLeagues, syncLeague } from "./leagues.js";
+import { MAX_MEMBERS, cleanLeagueId, createLeague, getLeague, initLeagues, joinLeague, leaveAllLeagues, leaveLeague, saveLeagues, styleLeague, syncLeague } from "./leagues.js";
 import { isOffensive } from "../game/js/shared/moderation.js";
 import { openStore } from "./db.js";
 import { CHAT, RATED_GAMES, cleanCode, friendCode, matchRange, rankOf } from "../game/js/shared/rating.js";
@@ -202,7 +202,7 @@ function createRoom(game, a, b, mode) {
     timer(fn, ms) { const t = setTimeout(() => { this.timers.delete(t); if (!this.over) fn(); }, ms); this.timers.add(t); return t; },
     clearTimers() { this.timers.forEach(clearTimeout); this.timers.clear(); },
     names() { return this.players.map((p) => p.profile.name); },
-    finish(res) { finishRoom(this, res); },
+    finish(res) { finishRoom(this, { ...res, replay: res.replay ?? this.engine?.replay?.() ?? null }); },
     chatFrom(c, i) { const seat = this.players.indexOf(c); if (seat >= 0) send(this.players[1 - seat], { t: "chat", i }); },
     rematchFrom(c) { onMessage(c, { t: "rematch" }); },
   };
@@ -225,7 +225,7 @@ function startMatch(room) {
 const matchMsg = (room, seat, extra = {}) => ({ t: "match", room: room.id, game: room.game, mode: room.mode, rated: room.rated, seat,
   you: publicProfile(room.players[seat], room.game), opp: publicProfile(room.players[1 - seat], room.game), seq: room.seq, ...extra });
 
-function finishRoom(room, { winner, scores, reason, detail = null }) {
+function finishRoom(room, { winner, scores, reason, detail = null, replay = room.engine?.replay?.() ?? null }) {
   if (room.over) return;
   room.over = true;
   room.clearTimers();
@@ -237,7 +237,7 @@ function finishRoom(room, { winner, scores, reason, detail = null }) {
   if (human) addWeekly(room.players.map((p) => p.rec), winner);
   room.players.forEach((p, seat) => {
     send(p, {
-      t: "end", game: room.game, seat, winner, scores, reason, detail, mode: room.mode, rated: room.rated,
+      t: "end", game: room.game, seat, winner, scores, reason, detail, replay, mode: room.mode, rated: room.rated,
       result: winner === null ? "draw" : winner === seat ? "win" : "lose",
       delta: delta[seat], elo: room.rated ? p.rec?.elo[room.game] : null, streak: room.rated ? p.rec?.streak : null,
     });
@@ -245,7 +245,7 @@ function finishRoom(room, { winner, scores, reason, detail = null }) {
   });
   room.spectators.forEach((s) => send(s, { t: "end", game: room.game, seat: 0, spectator: true, winner, scores, reason, detail, mode: room.mode, rated: room.rated,
     result: winner === null ? "draw" : winner === 0 ? "win" : "lose", delta: delta[0], elo: null, streak: null }));
-  saveMatch(room, { winner, scores, reason, detail, delta });
+  saveMatch(room, { winner, scores, reason, detail, delta, replay });
   pushStats();
 }
 
@@ -257,12 +257,12 @@ function scoreText(game, scores, detail, seat) {
   if (game === "guess" && detail?.solved) { const t = (i) => (detail.solved[i] ? `${detail.tries[i]}/8` : "X/8"); return `${t(me)} vs ${t(them)}`; }
   return `${scores[me]}-${scores[them]}`;
 }
-function saveMatch(room, { winner, scores, reason, detail, delta }) {
+function saveMatch(room, { winner, scores, reason, detail, delta, replay }) {
   if (!store || room.players.every((p) => p.isBot)) return;
   const players = room.players.map((p, seat) => ({ ...publicProfile(p, room.game), delta: room.rated ? delta[seat] : null, score: scoreText(room.game, scores, detail, seat) }));
   const m = { at: new Date().toISOString(), game: room.game, mode: room.mode, rated: !!room.rated,
     sid0: room.players[0].isBot ? null : room.players[0].sid, sid1: room.players[1].isBot ? null : room.players[1].sid,
-    winner, reason: reason || "done", players, scores: scores ?? null };
+    winner, reason: reason || "done", players, scores: scores ?? null, replay: replay || null };
   store.addMatch(m).catch((e) => console.error("[db] saving a match failed:", e.message));
 }
 /** A player's recent matches, as their own history list (newest first). */
@@ -270,7 +270,7 @@ async function historyFor(sid) {
   const rows = await store.listMatches(sid, 60);
   return rows.map((m) => {
     const seat = m.sid0 === sid ? 0 : 1, o = m.players[1 - seat] || {};
-    return { at: m.at, game: m.game, mode: m.mode, result: m.winner === null ? "draw" : m.winner === seat ? "win" : "lose",
+    return { id: m.id, replay: !!m.has_replay, at: m.at, game: m.game, mode: m.mode, result: m.winner === null ? "draw" : m.winner === seat ? "win" : "lose",
       opp: { name: o.name, icon: o.icon, color: o.color, frame: o.frame, style: o.style, av: o.av }, oppCode: o.code || null,
       score: m.players[seat]?.score || (m.reason !== "done" ? (m.winner === seat ? "opponent left" : "left") : ""), delta: m.players[seat]?.delta ?? null };
   });
@@ -366,6 +366,11 @@ function onMessage(c, m) {
       c.rec = null;
       return;
     }
+    case "replay": { // one of your matches, round by round
+      store.getMatch(m.id, c.sid).then((r) => send(c, r?.replay ? { t: "replay", id: r.id, game: r.game, seat: r.sid0 === c.sid ? 0 : 1, players: r.players, scores: r.scores, winner: r.winner, replay: r.replay }
+        : { t: "replay", id: m.id, missing: true }), () => send(c, { t: "replay", id: m.id, missing: true }));
+      return;
+    }
     case "history": // the player's matches saved on the server (this device)
       historyFor(c.sid).then((list) => send(c, { t: "history", list }), (e) => { console.error("[db] history failed:", e.message); send(c, { t: "history", list: null }); });
       return;
@@ -452,7 +457,8 @@ function onMessage(c, m) {
     }
     case "react": { // quick reactions between opponents: broadcast-style stickers (and the older emoji)
       const room = c.room;
-      const OK = ["andone", "swish", "defense", "buzzer", "onfire", "airball", "timeout", "gg", "👏", "🔥", "😅", "😮", "💪", "🏀"];
+      const OK = ["andone", "swish", "defense", "buzzer", "onfire", "airball", "timeout", "gg", "👏", "🔥", "😅", "😮", "💪", "🏀",
+        "bang", "splash", "brick", "dagger", "clutch", "lockdown", "mvp", "posterized"]; // the last ones come from the shop
       const now = Date.now();
       if (!room || !OK.includes(m.e) || now - (c.lastReact || 0) < 700) return;
       c.lastReact = now;
@@ -487,6 +493,11 @@ function onMessage(c, m) {
       return send(c, L.error ? { t: "error", code: "league", msg: L.error } : { t: "league", league: L, joined: true });
     }
     case "league:leave": leaveLeague(m.id, friendCode(c.sid)); return send(c, { t: "league:left", id: cleanLeagueId(m.id) });
+    case "league:style": { // the owner's colour and icon (bought in the shop; the shop lives in the browser)
+      const L = styleLeague(m.id, friendCode(c.sid), m.style);
+      if (L) send(c, { t: "league", league: L });
+      return;
+    }
     case "league:sync": { // the browser's copies of its leagues (rebuilds them after a server restart)
       if (!Array.isArray(m.leagues)) return;
       for (const copy of m.leagues.slice(0, 10)) { const L = syncLeague(copy, friendCode(c.sid)); if (L) send(c, { t: "league", league: L }); }

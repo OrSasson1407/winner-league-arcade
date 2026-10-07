@@ -4,11 +4,13 @@ import { icon } from "../lib/icons.js";
 import { DEFS, bannerSvg, totals, unlockedMap } from "../lib/achievements.js";
 import { FRAMES, frameUnlocked, levelInfo } from "../lib/progress.js";
 import { esc, html, store, toast } from "../ui.js";
-import { EXTRAS, HAIRS, HAIR_COLORS, JERSEY_COLORS, SKINS, playerAvatarSvg, randomAv } from "../lib/avatarArt.js";
+import { EXTRAS, HAIRS, HAIR_COLORS, JERSEY_COLORS, PREMIUM_AV, SKINS, playerAvatarSvg, randomAv } from "../lib/avatarArt.js";
 import { clubColors } from "../lib/clubs.js";
 import { getSettings } from "../lib/settings.js";
 import { profileLink } from "./publicProfile.js";
 import { isOffensive } from "../shared/moderation.js";
+import { equipped, owns } from "../lib/wallet.js";
+const cardSkin = () => (equipped("card") ? `card-skin-${equipped("card").split(":")[1]}` : "");
 
 const toHex = (c) => { const x = document.createElement("canvas").getContext("2d"); x.fillStyle = c; return x.fillStyle; };
 
@@ -19,7 +21,10 @@ function builderHtml(me) {
     const v = key === "skin" || key === "hc" ? i : c;
     return `<button role="radio" aria-checked="${cur === v}" class="sw ${cur === v ? "on" : ""}" data-av="${key}" data-v="${v}" style="background:${c}" aria-label="${label} ${i + 1}"></button>`;
   }).join("")}</div>`;
-  const opts = (key, map, cur) => `<div class="av-opts">${Object.entries(map).map(([k, l]) => `<button class="av-opt-txt ${cur === k ? "on" : ""}" data-av="${key}" data-v="${k}" aria-pressed="${cur === k}">
+  const locked = (key, k) => PREMIUM_AV[key]?.includes(k) && !owns(`av:${key}:${k}`); // shop looks, until bought
+  const opts = (key, map, cur) => `<div class="av-opts">${Object.entries(map).map(([k, l]) => locked(key, k)
+    ? `<a class="av-opt-txt locked" href="#/shop/avatar" title="In the shop"><span class="av-mini">${playerAvatarSvg({ ...a, [key]: k }, me.color)}</span>${l} ${icon("lock", { size: 12 })}</a>`
+    : `<button class="av-opt-txt ${cur === k ? "on" : ""}" data-av="${key}" data-v="${k}" aria-pressed="${cur === k}">
     <span class="av-mini">${playerAvatarSvg({ ...a, [key]: k }, me.color)}</span>${l}</button>`).join("")}</div>`;
   return html`<div class="av-builder">
     <div class="field"><label>Skin</label>${sw("skin", SKINS, a.skin, "Skin tone")}</div>
@@ -47,7 +52,7 @@ export function renderMe(root, signal) {
         <p>Your nickname and avatar appear on leaderboards and as your team name in games. Saved on this device only.</p></div></div>
       <div class="setup-grid">
         <div class="card pad setup">
-          <div class="me-preview">${avatarHtml(me, 84)}<div><div class="muted" style="font-size:12px;font-weight:700;letter-spacing:2px">LEVEL ${lv.level} · ${esc(lv.title.toUpperCase())}</div><h2>${me.nickname ? esc(me.nickname) : "Guest"}</h2></div></div>
+          <div class="me-preview ${cardSkin()}">${avatarHtml(me, 84)}<div><div class="muted" style="font-size:12px;font-weight:700;letter-spacing:2px">LEVEL ${lv.level} · ${esc(lv.title.toUpperCase())}</div><h2>${me.nickname ? esc(me.nickname) : "Guest"}</h2></div></div>
           <div class="level-card">
             <div class="row"><b class="led lv-num">${lv.level}</b><div style="flex:1"><b>${esc(lv.title)}</b>
               <div class="progress xp-bar" role="progressbar" aria-valuenow="${lv.into}" aria-valuemax="${lv.need}" aria-label="XP to next level"><i style="width:${lv.pct * 100}%"></i></div>

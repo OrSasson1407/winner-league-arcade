@@ -21,6 +21,8 @@ import { simulateSeasonAsync, warmSeason } from "../lib/background.js";
 import { CHEM_CAP, SIXTH, SLOT_WEIGHT, chemistry, slotValue, teamSummary } from "../shared/draftLogic.js";
 import { openBoxScore, openLiveGame } from "./draft_live.js";
 import { drawTeamCard, shareOrDownload } from "./draft_card.js";
+import { hasMode } from "../lib/shop.js";
+import { tokens, useToken } from "../lib/wallet.js";
 
 const SPINS_PER_TEAM = 2;
 const BUDGET = 75;
@@ -118,6 +120,9 @@ export function renderDraft(root, signal, params, query) {
           <div class="field"><label for="club">Club Legends <span class="muted">(every spin is this club)</span></label>
             <select id="club" class="input"><option value="">Any club</option>${clubs.map((t) => `<option value="${t.team_id}" ${cfg.club === t.team_id ? "selected" : ""}>${esc(t.canonical_name)}</option>`).join("")}</select></div>
           <label class="check"><input type="checkbox" id="israelis" ${cfg.israelis ? "checked" : ""}> <span><b>Israelis only</b><br><small class="muted">Only players with Israeli nationality</small></span></label>
+          ${hasMode("draft-underdogs") ? `<label class="check"><input type="checkbox" id="underdogs" ${cfg.underdogs ? "checked" : ""}> <span><b>Underdogs</b><br><small class="muted">Only players rated 84 or lower</small></span></label>` : ""}
+          ${hasMode("draft-young") ? `<label class="check"><input type="checkbox" id="young" ${cfg.young ? "checked" : ""}> <span><b>Young guns</b><br><small class="muted">Only seasons when the player was 23 or younger</small></span></label>` : ""}
+          ${hasMode("draft-underdogs") && hasMode("draft-young") ? "" : `<a class="muted sh-more" href="#/shop/mode">${icon("coin", { size: 14 })} More draft modes in the shop</a>`}
           <label class="check"><input type="checkbox" id="budget" ${cfg.budget ? "checked" : ""}> <span><b>Salary cap</b><br><small class="muted">${BUDGET} coins for 5 players. Better players cost more.</small></span></label>
           <label class="check"><input type="checkbox" id="sixth" ${cfg.sixth ? "checked" : ""}> <span><b>Sixth man</b><br><small class="muted">A 6th bench pick (any position) that counts 30% of the team score</small></span></label>
           <label class="check"><input type="checkbox" id="blind" ${cfg.blind ? "checked" : ""}> <span><b>Blind mode</b><br><small class="muted">Ratings hidden, stats only</small></span></label>
@@ -156,6 +161,8 @@ export function renderDraft(root, signal, params, query) {
       cfg.era = root.querySelector("#era").value;
       cfg.club = root.querySelector("#club").value;
       cfg.israelis = root.querySelector("#israelis").checked;
+      cfg.underdogs = !!root.querySelector("#underdogs")?.checked;
+      cfg.young = !!root.querySelector("#young")?.checked;
       cfg.budget = root.querySelector("#budget").checked;
       cfg.blind = root.querySelector("#blind").checked;
       cfg.sixth = root.querySelector("#sixth").checked;
@@ -217,6 +224,8 @@ export function renderDraft(root, signal, params, query) {
     for (const ps of H.getPlayersByTeam(teamId, season)) {
       if (!isPlayable(ps, 3)) continue;
       if (cfg.israelis && !isIsraeli(ps.player_id)) continue;
+      if (cfg.underdogs && ps.rating_mock > 84) continue; // shop mode: only players rated 84 or lower
+      if (cfg.young && !(ps.age <= 23)) continue; // shop mode: seasons at 23 or younger
       const cur = best.get(ps.player_id);
       if (!cur || ps.stats.games > cur.stats.games) best.set(ps.player_id, ps);
     }
@@ -317,8 +326,10 @@ export function renderDraft(root, signal, params, query) {
     beginTurn();
   }
 
+  const bonusSpin = (t) => !ch && cfg.mode === "solo" && !t.spins && tokens("respin") > 0;
   function respin() {
     const t = current();
+    if (t && !t.cpu && bonusSpin(t) && useToken("respin")) { t.spins++; toast(`Extra re-spin used · ${tokens("respin")} left`); }
     if (!t || t.cpu || !t.spins) return;
     t.spins--;
     newSpin();
@@ -408,7 +419,7 @@ export function renderDraft(root, signal, params, query) {
             <span class="club-dot" aria-hidden="true"></span>
             <div style="min-width:0"><div class="muted" id="spin-season">${sp.season}</div><div class="reel" id="reel"><div class="reel-strip" id="reel-strip"><div>${esc(sp.team_name)}</div></div></div></div>
             <span class="spacer"></span>
-            ${human ? `<button class="btn" id="respin" ${t.spins ? "" : "disabled"}>${icon("refresh", { size: 16 })} Re-spin (${t.spins}) <kbd>R</kbd></button>` : ""}
+            ${human ? `<button class="btn" id="respin" ${t.spins || bonusSpin(t) ? "" : "disabled"}>${icon("refresh", { size: 16 })} ${!t.spins && bonusSpin(t) ? `Extra re-spin (${tokens("respin")})` : `Re-spin (${t.spins})`} <kbd>R</kbd></button>` : ""}
           </div>
           ${multi ? `<div class="muted spin-note">Shared roster: everyone picks from this spin this round. A re-spin changes it for the players still to pick.</div>` : ""}
           <div class="row view-toggle"><span class="muted" style="font-size:13px">${human ? "Click a card (or press its number) to pick" : ""}</span><span class="spacer"></span>
@@ -491,6 +502,8 @@ export function renderDraft(root, signal, params, query) {
     const f = [ERAS[cfg.era].label];
     if (cfg.club) f.push(teamName(cfg.club) + " legends");
     if (cfg.israelis) f.push("Israelis only");
+    if (cfg.underdogs) f.push("Underdogs");
+    if (cfg.young) f.push("Young guns");
     if (cfg.budget) f.push("Salary cap");
     if (cfg.blind) f.push("Blind");
     return f.join(" · ");

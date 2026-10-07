@@ -13,6 +13,7 @@ import { announce } from "../lib/a11y.js";
 import { shot } from "../lib/shot.js";
 import { markDaily } from "../lib/daily.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
+import { tokens, useToken } from "../lib/wallet.js";
 
 const MAX_GUESSES = 8;
 const STATS_KEY = "guess:stats";
@@ -48,12 +49,15 @@ export function renderGuess(root, signal, params, query) {
     return { id: p.player_id, label: p.name, sub: `${teamName(s.lastTeam)} · ${s.firstSeason === s.lastSeason ? s.firstSeason : s.firstSeason.slice(0, 4) + "–" + s.lastSeason.slice(5)}` };
   });
 
-  const allowed = () => MAX_GUESSES - state.hints.length; // hints use up guesses
-  const tries = () => state.guesses.length + state.hints.length;
+  const free = () => state.free || 0; // hints paid with a free-hint helper from the shop: they cost no guess
+  const allowed = () => MAX_GUESSES - state.hints.length + free(); // hints use up guesses
+  const tries = () => state.guesses.length + state.hints.length - free();
+  const canFree = () => mode === "free" && !ch && tokens("hint") > 0;
 
   function restore(saved) {
     state.guesses = (saved.guesses || []).map((id) => playersById.get(id)).filter(Boolean);
     state.hints = saved.hints || [];
+    state.free = saved.free || 0;
     state.over = !!saved.over; state.won = !!saved.won;
   }
 
@@ -94,7 +98,7 @@ export function renderGuess(root, signal, params, query) {
     else saveFree();
   }
   function saveFree() {
-    store.set(FREE_KEY, { level, target: state.target.player_id, guesses: state.guesses.map((g) => g.player_id), hints: state.hints, over: state.over });
+    store.set(FREE_KEY, { level, target: state.target.player_id, guesses: state.guesses.map((g) => g.player_id), hints: state.hints, free: free(), over: state.over });
   }
 
   function endGame() {
@@ -132,7 +136,8 @@ export function renderGuess(root, signal, params, query) {
 
   function buyHint(id) {
     if (state.over || state.hints.includes(id)) return;
-    if (allowed() - state.guesses.length <= 1) return toast("You need at least one guess left");
+    if (canFree() && useToken("hint")) { state.free = free() + 1; toast(`Free hint used · ${tokens("hint")} left`); }
+    else if (allowed() - state.guesses.length <= 1) return toast("You need at least one guess left");
     state.hints.push(id);
     sound.play("select");
     persist();
@@ -157,7 +162,7 @@ export function renderGuess(root, signal, params, query) {
         const got = state.hints.includes(h.id);
         return got
           ? `<div class="hint got">${icon(h.ic, { size: 16 })}<span>${esc(h.get(state.target))}</span></div>`
-          : `<button class="hint buy" data-hint="${h.id}" ${state.over || left <= 1 ? "disabled" : ""}>${icon(h.ic, { size: 16 })}<span>${h.label}</span><small>−1 guess</small></button>`;
+          : `<button class="hint buy" data-hint="${h.id}" ${state.over || (left <= 1 && !canFree()) ? "disabled" : ""}>${icon(h.ic, { size: 16 })}<span>${h.label}</span><small>${canFree() ? `Free (${tokens("hint")})` : "−1 guess"}</small></button>`;
       }).join("")}</div>
     </div>`;
   }

@@ -15,6 +15,7 @@ import { challengeFor, challengeRng } from "../lib/challenge.js";
 import { decoys, eligible } from "../shared/careerLogic.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
 import { gameKeys, press } from "../lib/shortcuts.js";
+import { tokens, useToken } from "../lib/wallet.js";
 
 const SAVE_KEY = "career:save";
 
@@ -55,7 +56,7 @@ export function renderCareer(root, signal, params, query) {
   function prepare() {
     const target = state.targets[state.round];
     state.options = shuffle([target, ...decoys(target, pool, 3, rnd)], rnd);
-    state.hint = false;
+    state.hint = false; state.freeHint = false;
     state.answered = null;
     render();
   }
@@ -65,7 +66,7 @@ export function renderCareer(root, signal, params, query) {
     const target = state.targets[state.round];
     state.answered = id;
     const right = id === target.player_id;
-    if (right) state.score += state.hint ? 2 : 3;
+    if (right) state.score += state.hint && !state.freeHint ? 2 : 3;
     sound.play(right ? "place" : "bad");
     announce(right ? `Correct! It's ${target.name}. Score ${state.score}.` : `Wrong. It was ${target.name}. Score ${state.score}.`);
     render();
@@ -133,7 +134,7 @@ export function renderCareer(root, signal, params, query) {
               ${target.height_cm ? `<span class="pill">${fmtHeight(target.height_cm)}</span>` : ""}
               ${target.nationality ? `<span class="pill">${esc(target.nationality)}</span>` : ""}
               ${target.birth_date ? `<span class="pill">born ${target.birth_date.slice(0, 4)}</span>` : ""}`
-              : `<button class="btn" id="hint">${icon("bulb", { size: 16 })} Hint (−1 point)</button>`}
+              : `<button class="btn" id="hint">${icon("bulb", { size: 16 })} ${!ch && tokens("hint") > 0 ? `Free hint (${tokens("hint")} left)` : "Hint (−1 point)"}</button>`}
           </div>
           ${state.answered ? html`<div class="answer-card pop">${playerCard(bestSeason(s.records), { size: "sm" })}
             <div style="display:grid;gap:8px"><b style="font-size:18px">${state.answered === correct ? `${icon("check", { size: 18, cls: "ic-good" })} Correct! +` + (state.hint ? 2 : 3) : `${icon("x", { size: 18, cls: "ic-bad" })} It was ` + esc(target.name)}</b>
@@ -142,7 +143,10 @@ export function renderCareer(root, signal, params, query) {
         </div>
       </div>`;
     root.querySelectorAll(".choice").forEach((b) => b.addEventListener("click", () => answer(b.dataset.id), { signal }));
-    root.querySelector("#hint")?.addEventListener("click", () => { state.hint = true; render(); }, { signal });
+    root.querySelector("#hint")?.addEventListener("click", () => {
+      if (!ch && tokens("hint") > 0 && useToken("hint")) { state.freeHint = true; toast(`Free hint used · ${tokens("hint")} left`); }
+      state.hint = true; render();
+    }, { signal });
     root.querySelector("#next")?.addEventListener("click", next, { signal });
     root.querySelector("#new-game")?.addEventListener("click", async () => {
       if (await confirmDialog({ title: "Start a new game?", message: `Your current game (round ${state.round + 1}, score ${state.score}) will be lost.`, ok: "New game" })) start();

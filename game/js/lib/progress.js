@@ -1,6 +1,7 @@
 // Progression: XP + levels (1–50) with titles, avatar frames, and an activity log (for the monthly recap).
 import { store } from "../ui.js";
 import { confetti, sound } from "./fx.js";
+import { coinsForLevel, earn, owns } from "./wallet.js";
 
 export const MAX_LEVEL = 50;
 /** XP needed to go from level n to n+1. */
@@ -39,7 +40,7 @@ export function addXP(amount, reason, { log = true } = {}) {
   if (log) logActivity("xp", { xp: Math.round(amount), r: reason });
   const after = levelInfo(xp);
   document.dispatchEvent(new CustomEvent("xp-changed", { detail: { amount, before, after } }));
-  if (after.level > before.level) levelUp(after);
+  if (after.level > before.level) { levelUp(after); for (let l = before.level + 1; l <= after.level; l++) earn(coinsForLevel(l), "level"); }
 }
 
 /** XP rewards for game events (shared by every game through achievements.emit). */
@@ -98,6 +99,9 @@ export const FRAMES = [
   { id: "rk-plat", name: "Platinum Rank", req: "Reach Platinum rank online", ok: (l, u) => u.ids.has("o_plat") },
   { id: "rk-champ", name: "Champion Rank", req: "Reach Champion rank online", ok: (l, u) => u.ids.has("o_champ") },
   { id: "rk-streak", name: "Hot Streak", req: "Win 10 ranked matches in a row", ok: (l, u) => u.ids.has("o_streak10") },
+  // bought with Buckets in the shop
+  ...[["neon", "Neon"], ["royal", "Royal"], ["ice", "Ice"], ["rainbow", "Rainbow"], ["net", "Net"]]
+    .map(([id, name]) => ({ id, name, req: "In the shop", shop: true, ok: () => owns(`frame:${id}`) })),
 ];
 
 export function frameUnlocked(frame, level, unlockedDefs) {

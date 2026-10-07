@@ -18,6 +18,7 @@ import { openFeedback } from "./lib/feedback.js";
 import { openOnboarding, shouldOnboard } from "./lib/onboarding.js";
 import { initReminders } from "./lib/notify.js";
 import { getLang, startHebrew } from "./i18n/index.js";
+import { coins, equipped } from "./lib/wallet.js";
 
 // Hebrew: the dictionary is in before the first screen draws (the page direction is set in index.html)
 const langReady = getLang() === "he" ? startHebrew().catch((e) => console.error("Hebrew", e)) : Promise.resolve();
@@ -58,6 +59,7 @@ const routes = {
   licenses: lazy(() => import("./pages/legal.js"), "renderLicenses"),
   euroleague: lazy(() => import("./pages/euroleague.js"), "renderEuroleague"),
   matchup: lazy(() => import("./games/matchup.js"), "renderMatchup"),
+  shop: lazy(() => import("./pages/shop.js"), "renderShop"),
 };
 const loaded = new Map(); // key -> render function, once its module is in
 function loadRoute(key) {
@@ -75,7 +77,7 @@ for (const ev of ["pointerover", "focusin", "touchstart"]) document.addEventList
 const GAME_ROUTES = new Set(["draft", "guess", "higher-lower", "career", "connections", "grid", "mycareer", "matchup"]);
 // which top-level section each route belongs to (for nav highlighting)
 const SECTION = { "": "home", games: "games", draft: "games", guess: "games", "higher-lower": "games", career: "games",
-  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me", about: "home", privacy: "home", terms: "home", accessibility: "home", licenses: "home", euroleague: "clubs", matchup: "games" };
+  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me", about: "home", privacy: "home", terms: "home", accessibility: "home", licenses: "home", shop: "me", euroleague: "clubs", matchup: "games" };
 
 const TABS = [["home", "#/", "home", "Home"], ["games", "#/games", "games", "Games"], ["players", "#/players", "players", "Players"], ["online", "#/online", "globe", "Online"],
   ["clubs", "#/clubs", "shield", "Clubs"], ["me", "#/me", "user", "Me"]];
@@ -222,6 +224,23 @@ const helpBtn = document.getElementById("help-btn");
 helpBtn.innerHTML = icon("info", { size: 20 });
 initShortcuts({ openSearch });
 document.getElementById("shortcuts-link")?.addEventListener("click", (e) => { e.preventDefault(); openShortcuts(); });
+
+// Buckets in the header: the balance, and a short "+12" when you earn some
+const coinPill = document.getElementById("coin-pill");
+const drawCoins = () => { coinPill.innerHTML = `<span aria-hidden="true">🏀</span><b>${coins().toLocaleString("en-US")}</b>`; coinPill.setAttribute("aria-label", `Shop: ${coins()} Buckets`); };
+document.addEventListener("wallet-changed", drawCoins);
+document.addEventListener("coins-earned", (e) => {
+  const fly = document.createElement("span");
+  fly.className = "coin-fly"; fly.setAttribute("aria-hidden", "true");
+  fly.textContent = `+${e.detail.amount}`;
+  coinPill.appendChild(fly);
+  setTimeout(() => fly.remove(), 1400);
+});
+drawCoins();
+// the court style bought in the shop, for every live game
+const drawCourt = () => { const c = equipped("court"); if (c) document.documentElement.dataset.court = c.split(":")[1]; else delete document.documentElement.dataset.court; };
+document.addEventListener("wallet-changed", drawCourt);
+drawCourt();
 
 const meBtn = document.getElementById("me-btn");
 const drawMe = () => {

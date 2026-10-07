@@ -184,6 +184,23 @@ function weighted(list, w, rnd) {
 }
 const eff = (p) => 0.9 + 0.1 * p.energy; // tired legs miss more
 const defScore = (def) => def.on.reduce((s, p) => s + p.rating, 0) / def.on.length;
+/** The player guarding the shooter: the same position if there is one on the floor, else the same group, else anyone. */
+function defenderOf(shooter, def) {
+  return def.on.find((q) => q.pos === shooter.pos) || def.on.find((q) => q.fam === shooter.fam) || def.on[0];
+}
+/**
+ * One-on-one: how much the matchup moves the shooter's odds (centered on a league-average defender, at most ±5%).
+ * A better-rated, quicker-handed (steals) defender, a shot-blocker near the rim, fresh legs, and size mismatches.
+ */
+function matchup(shooter, d, { three, rim }) {
+  let m = (shooter.rating - d.rating) * 0.0012 // the better player wins the matchup a bit more often
+    - (d.stl * 36 - 1.36) * 0.012 // active hands
+    - (three ? 0 : (d.blk * 36 - 0.5) * (rim ? 0.03 : 0.012)) // rim protection
+    + (1 - d.energy) * 0.04; // a tired defender
+  if (three && d.fam === "B" && shooter.fam === "G") m += 0.02; // a big switched onto a guard at the arc
+  if (rim && d.fam === "G" && shooter.fam === "B") m += 0.03; // a guard against a big in the paint
+  return clamp(m, -0.05, 0.05);
+}
 
 function possession(off, def, side, ctx) {
   const { rnd, say } = ctx;
@@ -234,10 +251,12 @@ function possession(off, def, side, ctx) {
   // fouled on the shot
   const foulP = three ? 0.03 : shooter.ftRate * (rim ? 0.55 : 0.25);
   const dQ = (defScore(def) - 80) * 0.002; // a better defense lowers the odds
+  const guard = defenderOf(shooter, def);
   const momentum = Math.min(0.03, ctx.run >= 6 ? 0.012 + (ctx.run - 6) * 0.003 : 0);
   let p = (three ? shooter.p3 : shooter.p2 + (rim ? 0.06 : -0.06)) * eff(shooter) - dQ + ctx.homeEdge + momentum
     + (shooter.rating - 80) * 0.002 + (ctx.clutch ? shooter.clutch * 0.02 : 0) + (fast ? 0.12 : 0)
-    + (def.tac.defense === "zone" ? (three ? 0.01 : -0.025) : 0) + off.q - def.q;
+    + (def.tac.defense === "zone" ? (three ? 0.01 : -0.025) : 0) + off.q - def.q
+    + (def.tac.defense === "zone" ? 0.4 : 1) * matchup(shooter, guard, { three, rim }); // a zone guards areas, not players
   p = clamp(p, 0.12, 0.85);
   if (rnd() < foulP) {
     const fouler = weighted(def.on, (q) => (q.fam === "B" ? 1.4 : 1) * q.foulRisk, rnd);
@@ -264,7 +283,7 @@ function possession(off, def, side, ctx) {
     const assisted = rnd() < (three ? 0.86 : fast ? 0.6 : 0.5);
     const passer = assisted ? weighted(mates, (q) => q.ast, rnd) : null;
     if (passer) passer.box.ast++;
-    say({ type: three ? "3" : "2", side, pid: shooter.id, ast: passer?.id, pts, made: true, fast,
+    say({ type: three ? "3" : "2", side, pid: shooter.id, ast: passer?.id, def: guard.id, pts, made: true, fast,
       text: `${shooter.name} ${three ? "hits a three" : fast ? "finishes the fast break" : rim ? (rnd() < 0.3 ? "dunks it" : "scores at the rim") : "hits the jumper"}${passer ? ` (assist ${passer.name})` : ""}`, ...where });
     return { pts, keep: false, dead: true };
   }
@@ -274,7 +293,7 @@ function possession(off, def, side, ctx) {
   const oReb = rnd() < clamp(0.26 * (oPow / Math.max(0.01, dPow)) ** 0.7 - (off.tac.pace === "fast" ? 0.02 : 0), 0.12, 0.42);
   const reb = oReb ? weighted(off.on, (q) => q.reb * (q === shooter ? 0.7 : 1), rnd) : weighted(def.on, (q) => q.reb, rnd);
   reb.box.reb++; if (oReb) reb.box.oreb++; else reb.box.dreb++;
-  say({ type: "miss", side, pid: shooter.id, made: false, blk: blocker?.id, reb: reb.id, oreb: oReb,
+  say({ type: "miss", side, pid: shooter.id, def: guard.id, made: false, blk: blocker?.id, reb: reb.id, oreb: oReb,
     text: `${shooter.name} misses${three ? " from deep" : ""}${blocker ? ` (blocked by ${blocker.name})` : ""}, ${oReb ? `offensive rebound ${reb.name}` : `rebound ${reb.name}`}`, ...where });
   if (!oReb && rnd() < 0.18) def.fastbreak = true;
   return { pts: 0, keep: oReb, dead: false };
