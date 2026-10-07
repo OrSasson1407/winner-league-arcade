@@ -1,7 +1,8 @@
 # Keeps the Render free service awake: it sleeps after ~15 idle minutes, and the next visitor then
-# waits 30-60 seconds for the whole site. A ping every 10 minutes keeps it up; one service running
-# all month uses ~744 of the plan's 750 free hours. (GitHub may delay scheduled runs by a few minutes,
-# and pauses them after 60 days without commits: re-enable from the Actions tab if that happens.)
+# waits 30-60 seconds for the whole site. A ping every 10 minutes keeps it up, except at night
+# (01:00-07:00 Israel time) when it's allowed to sleep: ~18 hours a day, about 560 of the plan's
+# 750 free hours a month. (GitHub may delay scheduled runs by a few minutes, and pauses them after
+# 60 days without commits: re-enable from the Actions tab if that happens.)
 name: Keep the server awake
 on:
   schedule:
@@ -12,5 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - name: Ping /health
-        run: curl --silent --show-error --max-time 90 --retry 2 --retry-delay 10 https://winner-league-arcade.onrender.com/health
+      - name: Ping /health (not at night, Israel time)
+        run: |
+          h=$(TZ=Asia/Jerusalem date +%-H)
+          if [ "$h" -ge 1 ] && [ "$h" -lt 7 ]; then echo "Night in Israel ($h:00): letting the server sleep"; exit 0; fi
+          curl --silent --show-error --max-time 90 --retry 2 --retry-delay 10 https://winner-league-arcade.onrender.com/health
