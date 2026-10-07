@@ -167,5 +167,20 @@ export async function saveRecords() {
 }
 setInterval(saveRecords, 10000).unref();
 
+/** Delete a player's record everywhere (memory and store). */
+export async function forgetRecord(sid) {
+  records.delete(sid);
+  dirty.delete(sid);
+  await store?.deleteRecord(sid);
+}
+/** Admin: hide a reported nickname (the player shows as "Player" until unblocked). Returns the record or null. */
+export function blockName(code, on = true) {
+  const rec = findByCode(code);
+  if (!rec) return null;
+  rec.flags = { ...(rec.flags || {}), nameBlocked: !!on };
+  if (on && rec.profile) rec.profile.name = "Player";
+  dirty.add(rec.sid);
+  return rec;
+}
 /** A known player's record by device id (for tables built from match history). */
 export const recordBySid = (sid) => records.get(sid) ?? null;

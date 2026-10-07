@@ -69,6 +69,9 @@ export function crumbsFor(key, params = []) {
   if (key === "help") return [home, ["Help center", null]];
   if (key === "about") return [home, ["About", null]];
   if (key === "privacy") return [home, ["About", "#/about"], ["Privacy", null]];
+  if (key === "terms") return [home, ["About", "#/about"], ["Terms of use", null]];
+  if (key === "accessibility") return [home, ["About", "#/about"], ["Accessibility", null]];
+  if (key === "licenses") return [home, ["About", "#/about"], ["Licenses", null]];
   if (key === "euroleague") {
     const el = ["EuroLeague", "#/euroleague"];
     if (!params[0]) return [home, ["EuroLeague", null]];

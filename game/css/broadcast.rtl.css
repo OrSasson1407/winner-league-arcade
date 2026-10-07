@@ -468,3 +468,15 @@ dialog.gv-modal { width: min(980px, calc(100vw - 20px)); padding: 16px 18px 20px
 .sk-board.g3 { grid-template-columns: repeat(3, 1fr); max-width: 520px; }
 .sk-board .sk { aspect-ratio: 1.4; }
 .sk-board.g3 .sk { aspect-ratio: 1; }
+
+/* =====================================================================
+   Policy pages (privacy, terms, accessibility, licenses)
+   ===================================================================== */
+.legal { display: grid; gap: 16px; max-width: 860px; }
+.legal h2 { display: flex; gap: 8px; align-items: center; font-size: 20px; margin: 0 0 10px; }
+.legal p, .legal li { line-height: 1.65; }
+.legal .pv-list { padding-inline-start: 20px; display: grid; gap: 8px; }
+.legal .row .btn { margin-top: 4px; }
+.legal-links { margin: 18px 0 0; font-size: 14px; }
+.lb-report { width: 28px; height: 28px; margin-inline-start: 6px; opacity: .55; flex: none; }
+.lb-report:hover, .lb-report:focus-visible { opacity: 1; }

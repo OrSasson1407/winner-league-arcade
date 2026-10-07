@@ -8,6 +8,7 @@ import { EXTRAS, HAIRS, HAIR_COLORS, JERSEY_COLORS, SKINS, playerAvatarSvg, rand
 import { clubColors } from "../lib/clubs.js";
 import { getSettings } from "../lib/settings.js";
 import { profileLink } from "./publicProfile.js";
+import { isOffensive } from "../shared/moderation.js";
 
 const toHex = (c) => { const x = document.createElement("canvas").getContext("2d"); x.fillStyle = c; return x.fillStyle; };
 
@@ -113,7 +114,7 @@ export function renderMe(root, signal) {
       clearTimeout(t);
       t = setTimeout(() => { saveMe({ nickname: e.target.value }); root.querySelector(".me-preview h2").textContent = getMe().nickname || "Guest"; }, 250);
     }, { signal });
-    root.querySelector("#nick").addEventListener("change", () => toast("Nickname saved"), { signal });
+    root.querySelector("#nick").addEventListener("change", (e) => toast(isOffensive(e.target.value) ? "That nickname isn't allowed online: other players will see \"Player\"" : "Nickname saved"), { signal });
     root.querySelector("#av-style").addEventListener("click", (e) => { const b = e.target.closest("[data-style]"); if (b) { saveMe({ style: b.dataset.style }); draw(); } }, { signal });
     const setAv = (patch) => { saveMe({ av: { ...getMe().av, ...patch } }); draw(); };
     root.querySelector(".av-builder")?.addEventListener("click", (e) => {

@@ -86,5 +86,18 @@ assert.equal(hlOnly.find((r) => r.sid === "y").g, 2);
 const ever = await store.periodTable("all", 0);
 assert.equal(ever.find((r) => r.sid === "y").w, 2);
 
+// "Delete my data": the record goes, other players' history keeps the match without the person
+await store.deleteRecord("sid-aaaaaaaa");
+assert.equal((await store.loadRecords()).some((r) => r.sid === "sid-aaaaaaaa"), false);
+await store.anonymizeMatches("x");
+const yHist = await store.listMatches("y", 60);
+const fromX = yHist.find((m) => m.mode === "ranked" && m.game === "hl" && m.winner === 0);
+assert.equal(fromX.sid0, null);
+assert.equal(fromX.players[0].name, "Deleted player");
+assert.equal(fromX.players[0].code, undefined);
+assert.equal(fromX.players[0].delta, 8); // the numbers of the match stay
+assert.equal(fromX.players[1].name, "y"); // the other player is untouched
+assert.equal((await store.listMatches("x", 60)).length, 0);
+
 console.log("db tests passed");
 process.exit(0);

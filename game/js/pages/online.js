@@ -415,7 +415,7 @@ export function renderOnline(root, signal, params = []) {
     const L = leaders?.game === leadersGame && (leaders.period || "all") === leadersPeriod ? leaders : null;
     const timed = leadersPeriod !== "all"; // this week / this month: points from ranked results
     const row = (r) => html`<tr class="${r.me ? "me-row" : ""}"><td class="pos">${r.pos <= 3 ? ["🥇", "🥈", "🥉"][r.pos - 1] : r.pos}</td>
-      <td><span class="lb-name">${avatarHtml({ icon: r.icon, color: r.color, frame: r.frame, style: r.style, av: r.av }, 30)}<span><b>${esc(r.name)}</b><small class="muted">Lv ${r.level}${r.streak >= 3 ? ` · 🔥${r.streak}` : ""}</small></span></span></td>
+      <td><span class="lb-name">${avatarHtml({ icon: r.icon, color: r.color, frame: r.frame, style: r.style, av: r.av }, 30)}<span><b>${esc(r.name)}</b><small class="muted">Lv ${r.level}${r.streak >= 3 ? ` · 🔥${r.streak}` : ""}</small></span>${!r.me && r.code && r.name !== "Player" ? `<button class="icon-btn lb-report" data-report="${esc(r.code)}" data-name="${esc(r.name)}" aria-label="Report the nickname ${esc(r.name)}" title="Report nickname">${icon("flag", { size: 13 })}</button>` : ""}</span></td>
       <td>${rankBadge(r.elo, { small: true })}</td>${timed ? `<td><b>${r.pts}</b></td><td class="muted">${r.w}-${r.d}-${r.l}</td>`
         : `<td><b>${leadersGame === "all" ? r.w : r.elo}</b></td><td class="muted">${r.w}-${r.l}</td>`}</tr>`;
     const since = timed && L?.since ? new Date(L.since).toLocaleDateString(dateLocale(), { day: "numeric", month: "long" }) : "";
@@ -429,6 +429,10 @@ export function renderOnline(root, signal, params = []) {
         : `<p class="muted">${L.error ? "The leaderboard couldn't load. Try again in a moment." : timed ? `No ranked matches ${leadersPeriod === "week" ? "this week" : "this month"} yet${leadersGame === "all" ? "" : " in this game"}. Win one to take the top spot!` : `No ranked matches yet${leadersGame === "all" ? "" : " in this game"}. Win one to take the top spot!`}</p>`}
     </div>`;
     const ask = () => send({ t: "leaders", game: leadersGame, period: leadersPeriod });
+    body.querySelectorAll("[data-report]").forEach((b) => b.addEventListener("click", async () => {
+      const ok = await confirmDialog({ title: "Report this nickname?", message: `"${b.dataset.name}" will be sent for review. Offensive nicknames are replaced with "Player".`, ok: "Report", cancel: "Cancel" });
+      if (ok) { send({ t: "report", code: b.dataset.report }); toast("Thanks: the nickname was reported"); }
+    }, { signal }));
     body.querySelector("#lb-game").addEventListener("click", (e) => {
       const b = e.target.closest("[data-lg]"); if (!b) return;
       leadersGame = b.dataset.lg; ask(); drawLobby();

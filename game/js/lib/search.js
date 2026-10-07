@@ -34,6 +34,9 @@ const PAGES = [
   { label: "EuroLeague", sub: "Seasons, clubs and Israeli clubs in Europe", href: "#/euroleague", ic: "globe", words: "euroleague europe european euro cup final four" },
   { label: "About", sub: "Where the data comes from", href: "#/about", ic: "info", words: "about data source version" },
   { label: "Privacy", sub: "What is stored and where", href: "#/privacy", ic: "lock", words: "privacy data cookies delete" },
+  { label: "Terms of use", sub: "Rules and disclaimers", href: "#/terms", ic: "book", words: "terms conditions rules legal disclaimer תנאי שימוש" },
+  { label: "Accessibility", sub: "Accessibility statement", href: "#/accessibility", ic: "users", words: "accessibility a11y screen reader נגישות" },
+  { label: "Licenses", sub: "Fonts, libraries and data credits", href: "#/licenses", ic: "info", words: "licenses credits open source fonts רישיונות" },
 ];
 
 let index = null;

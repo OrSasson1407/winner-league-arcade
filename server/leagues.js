@@ -51,6 +51,10 @@ export function syncLeague(copy, code) {
   dirty.add(id);
   return view(L);
 }
+/** A player who deleted their data leaves every league. */
+export function leaveAllLeagues(code) {
+  for (const L of leagues.values()) if (L.members.has(code)) leaveLeague(L.id, code);
+}
 export const getLeague = (id) => { const L = leagues.get(cleanLeagueId(id)); return L ? view(L) : null; };
 
 // ---------------------------------------------------------------- persistence

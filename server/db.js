@@ -54,6 +54,15 @@ async function postgresStore(db, pool) {
       return (await q("SELECT at, kind, message, tech FROM feedback ORDER BY id DESC LIMIT $1", [limit])).rows
         .map((r) => ({ ...r, at: new Date(r.at).toISOString() })).reverse();
     },
+    async deleteRecord(sid) { await q("DELETE FROM records WHERE sid = $1", [sid]); },
+    /** A deleted player stays in other players' history only as "Deleted player", with nothing that identifies them. */
+    async anonymizeMatches(sid) {
+      for (const seat of [0, 1]) {
+        await q(`UPDATE matches SET sid${seat} = NULL,
+          players = jsonb_set(players, '{${seat}}', (players->${seat}) - 'code' - 'av' - 'style' || '{"name": "Deleted player", "icon": "user", "color": "#64748b", "frame": "none"}'::jsonb)
+          WHERE sid${seat} = $1`, [sid]);
+      }
+    },
     async addMatch(m) {
       await q(`INSERT INTO matches (at, game, mode, rated, sid0, sid1, winner, reason, players, scores)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)`,
@@ -130,6 +139,19 @@ function fileStore() {
     async addFeedback(row) { fs.mkdirSync(DATA, { recursive: true }); fs.appendFileSync(file("feedback.jsonl"), JSON.stringify(row) + "\n"); },
     async listFeedback(limit = 300) {
       try { return fs.readFileSync(file("feedback.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)).slice(-limit); } catch { return []; }
+    },
+    async deleteRecord(sid) { records ??= new Map(); records.delete(sid); write("records.json", [...records.values()]); },
+    async anonymizeMatches(sid) {
+      const gone = { name: "Deleted player", icon: "user", color: "#64748b", frame: "none" };
+      let changed = false;
+      for (const m of loadMatches()) [0, 1].forEach((seat) => {
+        if (m[`sid${seat}`] !== sid) return;
+        m[`sid${seat}`] = null;
+        const { code, av, style, ...rest } = m.players[seat] || {};
+        m.players[seat] = { ...rest, ...gone };
+        changed = true;
+      });
+      if (changed) { fs.mkdirSync(DATA, { recursive: true }); fs.writeFileSync(file("matches.jsonl"), matches.map((m) => JSON.stringify(m)).join("\n") + "\n"); }
     },
     async addMatch(m) {
       loadMatches().push(m);

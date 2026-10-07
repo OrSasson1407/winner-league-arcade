@@ -12,8 +12,9 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { GAMES, createEngine } from "./duels.js";
 import { BOT_LEVELS, createBot } from "./bot.js";
-import { addWeekly, applyResult, findByCode, initRecords, leaderboard, recordBySid, recordFor, recordMsg, saveRecords, secretSource, setProfile, weekId, weekOf } from "./records.js";
-import { MAX_MEMBERS, cleanLeagueId, createLeague, getLeague, initLeagues, joinLeague, leaveLeague, saveLeagues, syncLeague } from "./leagues.js";
+import { addWeekly, applyResult, blockName, findByCode, forgetRecord, initRecords, leaderboard, recordBySid, recordFor, recordMsg, saveRecords, secretSource, setProfile, weekId, weekOf } from "./records.js";
+import { MAX_MEMBERS, cleanLeagueId, createLeague, getLeague, initLeagues, joinLeague, leaveAllLeagues, leaveLeague, saveLeagues, syncLeague } from "./leagues.js";
+import { isOffensive } from "../game/js/shared/moderation.js";
 import { openStore } from "./db.js";
 import { CHAT, RATED_GAMES, cleanCode, friendCode, matchRange, rankOf } from "../game/js/shared/rating.js";
 import { cleanAv } from "../game/js/lib/avatarArt.js";
@@ -25,7 +26,7 @@ const RECONNECT_GRACE = 45000; // a dropped player keeps their seat this long (p
 
 // ---------------------------------------------------------------- static files
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json",
-  ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".ico": "image/x-icon", ".txt": "text/plain", ".webmanifest": "application/manifest+json" };
+  ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".ico": "image/x-icon", ".txt": "text/plain", ".webmanifest": "application/manifest+json", ".woff2": "font/woff2" };
 const TEXT = new Set([".html", ".js", ".mjs", ".css", ".json", ".svg", ".txt", ".webmanifest"]);
 const ALLOWED = ["game", "src"]; // only the game and its data helpers are public
 const gzCache = new Map(); // file -> { mtime, body }
@@ -70,12 +71,34 @@ function feedback(req, res) {
   });
 }
 
+// ---------------------------------------------------------------- admin: block a reported nickname
+// POST /api/admin/name  {"code": "ABC234", "block": true}  with the header "x-admin-key: <WLA_SECRET>"
+function adminName(req, res) {
+  const json = (code, body) => res.writeHead(code, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end(JSON.stringify(body));
+  if (req.method !== "POST") return json(405, { error: "method" });
+  const key = String(req.headers["x-admin-key"] || "");
+  const secret = process.env.WLA_SECRET || "";
+  if (!secret || key.length !== secret.length || !crypto.timingSafeEqual(Buffer.from(key), Buffer.from(secret))) return json(403, { error: "forbidden" });
+  let body = "";
+  req.on("data", (c) => { body += c; if (body.length > 2000) req.destroy(); });
+  req.on("end", () => {
+    let d;
+    try { d = JSON.parse(body); } catch { return json(400, { error: "bad json" }); }
+    const rec = blockName(cleanCode(d.code), d.block !== false);
+    if (!rec) return json(404, { error: "no player with that code" });
+    const online = onlineByCode(rec.profile?.code); // a connected player sees the change at once
+    if (online) { online.profile.name = rec.profile.name; send(online, recordMsg(rec)); }
+    json(200, { ok: true, code: rec.profile?.code, nameBlocked: rec.flags.nameBlocked });
+  });
+}
+
 const server = http.createServer((req, res) => {
   let url;
   try { url = decodeURIComponent(new URL(req.url, "http://x").pathname); } catch { res.writeHead(400).end(); return; }
   if (url === "/" || url === "/game") { res.writeHead(302, { Location: "/game/" }).end(); return; }
   if (url === "/health") { res.writeHead(200, { "Content-Type": "text/plain" }).end("ok"); return; }
   if (url === "/api/feedback") { feedback(req, res); return; }
+  if (url === "/api/admin/name") { adminName(req, res); return; }
   if (url === "/api/status") { // what the server runs on (nothing secret): for checking a deploy
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" })
       .end(JSON.stringify({ ok: true, storage: store?.kind ?? "starting", secret: secretSource, uptime: Math.round((Date.now() - started) / 1000), online: [...clients.values()].filter((c) => c.ws).length }));
@@ -88,7 +111,8 @@ const server = http.createServer((req, res) => {
     if (!err && st.isDirectory()) { file = path.join(file, "index.html"); st = fs.existsSync(file) ? fs.statSync(file) : null; }
     if (err || !st) { res.writeHead(404).end("Not found"); return; }
     const ext = path.extname(file).toLowerCase();
-    const headers = { "Content-Type": (TYPES[ext] || "application/octet-stream") + (TEXT.has(ext) ? "; charset=utf-8" : ""), "Cache-Control": "no-store, must-revalidate" };
+    const headers = { "Content-Type": (TYPES[ext] || "application/octet-stream") + (TEXT.has(ext) ? "; charset=utf-8" : ""),
+      "Cache-Control": ext === ".woff2" ? "public, max-age=2592000" : "no-store, must-revalidate" }; // fonts never change; everything else is always fresh
     if (TEXT.has(ext) && /\bgzip\b/.test(req.headers["accept-encoding"] || "")) {
       let c = gzCache.get(file);
       if (!c || c.mtime !== st.mtimeMs) { c = { mtime: st.mtimeMs, body: zlib.gzipSync(fs.readFileSync(file), { level: 6 }) }; gzCache.set(file, c); }
@@ -303,10 +327,12 @@ function onMessage(c, m) {
   switch (m.t) {
     case "ping": return send(c, { t: "pong", c: m.c });
     case "profile": {
-      c.profile = { name: clean(m.name, 18) || "Guest", icon: clean(m.icon, 12) || "ball", color: /^#[0-9a-f]{6}$/i.test(m.color) ? m.color : "#ff7a1a",
+      c.rec = recordFor(c.sid, m.rec);
+      // public names: offensive ones, and names the admin blocked after a report, show as "Player"
+      const name = clean(m.name, 18) || "Guest";
+      c.profile = { name: isOffensive(name) || c.rec.flags?.nameBlocked ? "Player" : name, icon: clean(m.icon, 12) || "ball", color: /^#[0-9a-f]{6}$/i.test(m.color) ? m.color : "#ff7a1a",
         frame: clean(m.frame, 16) || "none", level: Math.max(1, Math.min(999, Number(m.level) || 1)),
         style: m.style === "player" ? "player" : "icon", av: m.style === "player" ? cleanAv(m.av) : null };
-      c.rec = recordFor(c.sid, m.rec);
       setProfile(c.rec, c.profile);
       send(c, recordMsg(c.rec));
       return;
@@ -319,6 +345,26 @@ function onMessage(c, m) {
         return;
       }
       return send(c, { ...leaderboard(game, c.sid), period: "all" });
+    }
+    case "report": { // a nickname someone finds offensive: saved for the admin, who can block it
+      const now = Date.now();
+      c.reports = (c.reports || []).filter((t) => now - t < 3600e3);
+      const target = findByCode(cleanCode(m.code));
+      if (!target || c.reports.length >= 5 || target.sid === c.sid) return send(c, { t: "reported", ok: !!target });
+      c.reports.push(now);
+      store.addFeedback({ at: new Date(now).toISOString(), kind: "report", message: `Nickname report: player ${target.profile?.code} "${target.profile?.name}"`, tech: "" })
+        .catch((e) => console.error("[db] saving a report failed:", e.message));
+      return send(c, { t: "reported", ok: true });
+    }
+    case "delete:me": { // "Delete my data": the record, a place in other players' history, league memberships
+      const code = friendCode(c.sid);
+      leaveLobby(c);
+      if (c.room && !c.room.over) forfeit(c.room, seatOf(c), "left");
+      leaveAllLeagues(code);
+      Promise.all([forgetRecord(c.sid), store.anonymizeMatches(c.sid)])
+        .then(() => send(c, { t: "deleted", ok: true }), (e) => { console.error("[db] deleting a player failed:", e.message); send(c, { t: "deleted", ok: false }); });
+      c.rec = null;
+      return;
     }
     case "history": // the player's matches saved on the server (this device)
       historyFor(c.sid).then((list) => send(c, { t: "history", list }), (e) => { console.error("[db] history failed:", e.message); send(c, { t: "history", list: null }); });

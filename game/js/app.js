@@ -52,7 +52,10 @@ const routes = {
   daily: lazy(() => import("./pages/daily.js"), "renderDaily"),
   u: lazy(() => import("./pages/publicProfile.js"), "renderPublicProfile"),
   about: lazy(() => import("./pages/about.js"), "renderAbout"),
-  privacy: lazy(() => import("./pages/about.js"), "renderPrivacy"),
+  privacy: lazy(() => import("./pages/legal.js"), "renderPrivacy"),
+  terms: lazy(() => import("./pages/legal.js"), "renderTerms"),
+  accessibility: lazy(() => import("./pages/legal.js"), "renderAccessibility"),
+  licenses: lazy(() => import("./pages/legal.js"), "renderLicenses"),
   euroleague: lazy(() => import("./pages/euroleague.js"), "renderEuroleague"),
   matchup: lazy(() => import("./games/matchup.js"), "renderMatchup"),
 };
@@ -72,7 +75,7 @@ for (const ev of ["pointerover", "focusin", "touchstart"]) document.addEventList
 const GAME_ROUTES = new Set(["draft", "guess", "higher-lower", "career", "connections", "grid", "mycareer", "matchup"]);
 // which top-level section each route belongs to (for nav highlighting)
 const SECTION = { "": "home", games: "games", draft: "games", guess: "games", "higher-lower": "games", career: "games",
-  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me", about: "home", privacy: "home", euroleague: "clubs", matchup: "games" };
+  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me", about: "home", privacy: "home", terms: "home", accessibility: "home", licenses: "home", euroleague: "clubs", matchup: "games" };
 
 const TABS = [["home", "#/", "home", "Home"], ["games", "#/games", "games", "Games"], ["players", "#/players", "players", "Players"], ["online", "#/online", "globe", "Online"],
   ["clubs", "#/clubs", "shield", "Clubs"], ["me", "#/me", "user", "Me"]];
