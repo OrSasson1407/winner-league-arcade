@@ -2,6 +2,7 @@
 import { playersById, teamName } from "../data.js";
 import { clubColors } from "../lib/clubs.js";
 import { playedEL } from "../euroleague.js";
+import { ntOfWl } from "../national.js";
 import { posFamily } from "../lib/icons.js";
 import { esc, fmt1, initials } from "../ui.js";
 
@@ -40,6 +41,7 @@ export function playerCard(ps, opts = {}) {
     ${isIsraeli(p) ? `<span class="pc-flag" title="Israeli">${IL_FLAG}</span>` : ""}
     ${badge ? `<span class="pc-badge">${badge}</span>` : ""}
     ${playedEL(ps.player_id) ? `<span class="pc-el" title="Also played in the EuroLeague" aria-label="EuroLeague player">EL</span>` : ""}
+    ${ntOfWl(ps.player_id) ? `<span class="pc-el pc-nt ${playedEL(ps.player_id) ? "second" : ""}" title="${esc(ntOfWl(ps.player_id).name)} national team (2025)" aria-label="${esc(ntOfWl(ps.player_id).name)} national team player">${esc(ntOfWl(ps.player_id).code)}</span>` : ""}
     <div class="pc-avatar" aria-hidden="true">${esc(initials(p.name))}</div>
     <div class="pc-name">${esc(p.name)}</div>
     <div class="pc-team"><i class="dot" style="background:${c1}"></i><span>${esc(teamName(ps.team_id))} · ${ps.season}</span></div>

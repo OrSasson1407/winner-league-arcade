@@ -1,5 +1,6 @@
 // Player profile: opened as a modal from anywhere ([data-profile] clicks), or as a page (#/player/<id>).
 import { MOCK_NOTE, elCareer } from "./euroleague.js";
+import { ntOfWl } from "./national.js";
 import { fmtHeight } from "./lib/units.js";
 import { H, db, playersById, teamName } from "./data.js";
 import { bestSeason, playerCard } from "./components/playerCard.js";
@@ -151,8 +152,17 @@ export function profileHtml(pid) {
             <td class="rating">${s ? r.rating_mock : "–"}</td></tr>`;
         }).join("")}</tbody></table></div>
     </div>
+    ${nationalHtml(pid)}
     ${euroleagueHtml(pid)}
   </div>`;
+}
+
+/** National-team player (in FIBA's 2025 roster reports). */
+function nationalHtml(pid) {
+  const nt = ntOfWl(pid);
+  if (!nt) return "";
+  return html`<a class="card pad nt-callout" href="#/nt/${esc(nt.id)}"><span class="nt-flagmark" aria-hidden="true">${icon("flag", { size: 20 })}</span>
+    <span><b>${esc(nt.name)} national team</b><small class="muted">In the 2025 roster · #${nt.rank} in the FIBA world ranking</small></span>${icon("arrowRight", { size: 15, cls: "sr-go" })}</a>`;
 }
 
 /** The player's EuroLeague years (separate competition data), if any. */

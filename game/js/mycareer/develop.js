@@ -164,6 +164,8 @@ export function seasonDevelopment(C, S, { academy = false, loan = false, potenti
     const kind = (S.base ?? 80) >= 88 ? "top" : (S.base ?? 80) >= 82 ? "solid" : "weaker";
     add("level", "Level", level, S.league === "el" ? "A season in the EuroLeague: practising against the best." : euro ? `Practising with a ${kind} roster, plus ${euro} EuroLeague games.` : `Practising with a ${kind} roster.`);
   } else if (academy && loan) { level = 1.05; add("level", "Level", level, "A loan to another academy: more of the ball."); }
+  // a summer with the national team: practising with the country's best
+  if (C.ntBonus && !academy) { level *= 1.04; add("national", "National team", 1.04, "Last summer with the national team: practising with the country's best."); delete C.ntBonus; }
   // 5 the coach: trust and stability
   const coach = academy ? 1 : 0.94 + clamp(C.trust ?? 50, 0, 100) / 100 * 0.12 - 0.03 * (S?.coachChanges || 0);
   if (!academy) add("coach", "Coach", coach, S?.coachChanges ? `Coach trust ${Math.round(C.trust ?? 50)}, coaching changes: ${S.coachChanges}.` : `Coach trust ${Math.round(C.trust ?? 50)}.`);

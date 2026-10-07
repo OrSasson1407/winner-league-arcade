@@ -34,6 +34,8 @@ const PAGES = [
   { label: "Help center", sub: "Rules and explanations", href: "#/help", ic: "info", words: "help rules faq how rating chemistry" },
   { label: "Your profile", sub: "Nickname, avatar, records", href: "#/me", ic: "user", words: "me profile nickname avatar" },
   { label: "Home", sub: "Start page", href: "#/", ic: "home", words: "home start" },
+  { label: "National teams", sub: "FIBA world ranking and 2025 rosters", href: "#/nt", ic: "flag", words: "national team teams fiba world ranking eurobasket israel nationals נבחרת נבחרות ישראל" },
+  { label: "Israel national team", sub: "Roster and the Winner League connection", href: "#/nt/national_israel", ic: "flag", words: "israel national team nationals eurobasket נבחרת ישראל" },
   { label: "EuroLeague", sub: "Seasons, clubs and Israeli clubs in Europe", href: "#/euroleague", ic: "globe", words: "euroleague europe european euro cup final four" },
   { label: "About", sub: "Where the data comes from", href: "#/about", ic: "info", words: "about data source version" },
   { label: "Privacy", sub: "What is stored and where", href: "#/privacy", ic: "lock", words: "privacy data cookies delete" },

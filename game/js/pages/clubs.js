@@ -32,7 +32,7 @@ function drawClubs(root) {
   root.innerHTML = html`
     <div class="game-head"><div><h1>${icon("shield", { size: 30 })} Clubs</h1>
       <p>${clubs.length} clubs have played in the Premier League since 2010-11.</p></div>
-      <a class="btn" href="#/euroleague">${icon("globe", { size: 15 })} EuroLeague clubs</a></div>
+      <div class="row"><a class="btn" href="#/euroleague">${icon("globe", { size: 15 })} EuroLeague clubs</a><a class="btn" href="#/nt">${icon("flag", { size: 15 })} National teams</a></div></div>
     <div class="club-grid">${clubs.map(({ t, d }) => {
       const best = [...d.bestByPlayer.values()].sort((a, b) => b.rating_mock - a.rating_mock)[0];
       const [c1] = clubColors(t.team_id);

@@ -704,3 +704,31 @@ a.friend-row:hover b { color: var(--accent); }
 .mc-move.on { border-color: var(--good, #22c55e); }
 .mc-move .btn { align-self: flex-start; }
 @media (max-width: 520px) { .mc-plan-row { grid-template-columns: 1fr 118px; } .mc-plan-row .progress { grid-column: 1 / -1; grid-row: 2; } }
+
+/* ---- National teams ---- */
+.nt-badge { display: inline-grid; place-items: center; flex: none; border-radius: 50%; font-family: var(--f-display); font-weight: 800; letter-spacing: .02em; color: #fff;
+  background: linear-gradient(-135deg, hsl(var(--h) 62% 42%), hsl(calc(var(--h) + 40) 58% 30%)); box-shadow: inset 0 0 0 2px rgb(255 255 255 / .25); }
+.nt-team { display: inline-flex; align-items: center; gap: 8px; color: inherit; text-decoration: none; }
+.nt-team:hover b, .nt-team:focus-visible b { text-decoration: underline; }
+.nt-table tr.nt-isr td { background: rgb(37 99 235 / .12); }
+.nt-title { display: flex; align-items: center; gap: 12px; }
+.nt-h2 { margin: 22px 0 10px; display: flex; align-items: center; gap: 8px; }
+.nt-list { display: grid; gap: 8px; }
+.nt-list li { display: flex; align-items: center; gap: 10px; }
+.nt-list li > span { display: flex; flex-direction: column; }
+.nt-list li.on { font-weight: 700; }
+.nt-where { display: grid; gap: 6px; }
+.nt-where li { display: grid; grid-template-columns: 54px 1fr 28px; gap: 10px; align-items: center; }
+.nt-facts { margin: 0 0 14px; }
+.nt-isr-card { margin-bottom: 14px; border-inline-start: 4px solid #2563eb; }
+.nt-note { font-size: 12px; margin-top: 14px; }
+.nt-wl { font-size: 10px; padding: 0 5px; vertical-align: 2px; }
+.nt-callout { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; margin-top: 14px; }
+.nt-callout > span:nth-child(2) { display: flex; flex-direction: column; flex: 1; }
+.nt-flagmark { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: rgb(37 99 235 / .18); color: #60a5fa; }
+.pc-nt { background: #1d4ed8; border-color: #fff; }
+.pc-el.pc-nt.second { top: 88px; }
+.pc.sm .pc-el.pc-nt.second { top: 72px; }
+.nt-mates { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.nt-mates span { padding: 3px 9px; border-radius: 99px; background: var(--bg2); font-size: 13px; }
+.nt-title h1 { margin: 0; }

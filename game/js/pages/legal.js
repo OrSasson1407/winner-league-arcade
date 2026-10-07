@@ -208,8 +208,8 @@ export function renderLicenses(root, signal) {
         ["PGlite", L("database tests", "בדיקות מסד הנתונים"), "Apache 2.0 / PostgreSQL", "https://pglite.dev"],
       ].map(row).join("")}</ul>`],
       ["info", L("Data", "נתונים"), L(
-        `<p>Winner League statistics: the official Israeli Basketball Premier League site (bsl.org.il). EuroLeague names, clubs and seasons: EuroLeague records; its statistics in the arcade are placeholder data. Club and competition names are trademarks of their owners.</p>`,
-        `<p>הסטטיסטיקה של ליגת ווינר: האתר הרשמי של ליגת העל בכדורסל (bsl.org.il). שמות, קבוצות ועונות של היורוליג: רשומות היורוליג; הסטטיסטיקה שלו בארקייד היא נתוני דמה. שמות הקבוצות והמסגרות הם סימנים מסחריים של בעליהם.</p>`)],
+        `<p>Winner League statistics: the official Israeli Basketball Premier League site (bsl.org.il). EuroLeague names, clubs and seasons: EuroLeague records; its statistics in the arcade are placeholder data. National teams: the FIBA world ranking (1 September 2026) and FIBA's public roster reports for 2025 (names, positions, heights, birth dates, clubs); no national-team statistics are used. The arcade is not connected to FIBA. Club and competition names are trademarks of their owners.</p>`,
+        `<p>הסטטיסטיקה של ליגת ווינר: האתר הרשמי של ליגת העל בכדורסל (bsl.org.il). שמות, קבוצות ועונות של היורוליג: רשומות היורוליג; הסטטיסטיקה שלו בארקייד היא נתוני דמה. נבחרות: דירוג FIBA העולמי (1 בספטמבר 2026) ודוחות הסגלים הפומביים של FIBA ל-2025 (שמות, עמדות, גבהים, תאריכי לידה וקבוצות); לא נעשה שימוש בסטטיסטיקה של נבחרות. הארקייד אינו קשור ל-FIBA. שמות הקבוצות והמסגרות הם סימנים מסחריים של בעליהם.</p>`)],
     ],
   });
 }

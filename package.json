@@ -9,7 +9,8 @@
     "build:rtl": "node game/tools/build_rtl.mjs",
     "i18n:missing": "node game/tools/extract_ui_strings.mjs --missing",
     "test": "node server/test/db.test.mjs && node server/test/db.pg.test.mjs",
-    "build:fonts": "node game/tools/build_fonts.mjs"
+    "build:fonts": "node game/tools/build_fonts.mjs",
+    "build:national-teams": "node --use-system-ca game/tools/build_national_teams_2025_2027.mjs"
   },
   "engines": {
     "node": ">=20"
@@ -29,6 +30,7 @@
     "@fontsource/saira-condensed": "^5.3.0",
     "acorn": "^8.19.0",
     "axe-core": "^4.13.0",
-    "rtlcss": "^4.3.0"
+    "rtlcss": "^4.3.0",
+    "pdfjs-dist": "^6.4.299"
   }
 }

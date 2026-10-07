@@ -14,6 +14,9 @@ import { announce } from "../lib/a11y.js";
 import { clubColors } from "../lib/clubs.js";
 import { leaders } from "./records.js";
 import * as E from "../mycareer/engine.js";
+import { declineCallup, nationalCallup, playNationalSummer, teammates } from "../mycareer/nationalTeam.js";
+import { loadNational, ntTeam } from "../national.js";
+import { ntBadge } from "./national.js";
 import { maybeEvent, resolveEvent } from "../mycareer/events.js";
 import { badgeMedals, bracket, contractHtml, gauge, radar, scheduleGrid, standings } from "../mycareer/visuals.js";
 import { clubThemeVars } from "../lib/clubTheme.js";
@@ -695,11 +698,57 @@ export async function renderMyCareer(root, signal) {
       ${devReportHtml(dev)}
       <p class="muted">Income after agent fee: ${money(summary.income)}</p>
       <button class="btn primary" id="mc-next">${icon("arrowRight", { size: 15 })} To the off-season</button></div>`;
-    const go = () => { closeModal(d); tab = "train"; draw(); };
+    const go = () => { closeModal(d); tab = "train"; draw(); const call = nationalCallup(C); if (call) afterBack(() => showCallup(call)); };
     d.querySelector(".profile-close").addEventListener("click", go);
     d.querySelector("#mc-next").addEventListener("click", go);
     openModal(d);
     if (C.age >= 40) { toast("At 40, it's time: your career ends."); doRetire(); }
+  }
+
+  // ---------------------------------------------------------------- the national team
+  /** Run fn once the history step of a just-closed window has landed (it would close the next window otherwise). */
+  function afterBack(fn) {
+    let done = false;
+    const run = () => { if (done) return; done = true; removeEventListener("popstate", run); setTimeout(fn, 60); };
+    addEventListener("popstate", run);
+    setTimeout(run, 900);
+  }
+  async function showCallup(call) {
+    const t = ntTeam(call.team);
+    let N = null;
+    try { N = await loadNational(); } catch { /* the teammates list needs the data; the call-up works without it */ }
+    const mates = teammates(C, call, N);
+    const d = modal("National team call-up");
+    d.dataset.locked = "1";
+    d.innerHTML = html`<div class="profile mc-event nt-call"><small class="muted">NATIONAL TEAM · SUMMER ${call.year}</small>
+      <h2 class="nt-title">${ntBadge(t, 44)} ${esc(t.name)} calls you up!</h2>
+      <p><span>The coach wants you for the summer games.</span> <span>Expected role:</span> <b>${roleName(call.role)}</b>. <span>${esc(t.name)} is #${t.rank} in the FIBA world ranking.</span></p>
+      ${mates.names.length ? html`<p class="muted" style="font-size:13px;margin-bottom:4px">${mates.source === "roster" ? "Your teammates (the real 2025 roster):" : mates.source === "league" ? `Your teammates: the best Israeli players in the league in ${esc(mates.season)}.` : "Your teammates: the best Israeli players in the latest league season in the data."}</p>
+        <p class="nt-mates">${mates.names.map((n) => `<span>${esc(n)}</span>`).join("")}</p>` : ""}
+      <p class="muted" style="font-size:12px"><span>Opponents come from the same FIBA zone, with strengths from the 2026 world ranking.</span>${call.year < 2025 ? ` <span>A simulation, not that year's real tournament.</span>` : ""}</p>
+      <div class="mc-choices"><button class="btn primary" data-nt="go">${icon("flag", { size: 15 })} Join the national team</button>
+        <button class="btn" data-nt="no">Rest this summer instead</button></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Joining: popularity, and a development boost next summer, but more minutes on your legs. Saying no costs some popularity.</p></div>`;
+    d.querySelector('[data-nt="go"]').addEventListener("click", () => { const r = playNationalSummer(C, call); save(); sound.play(r.w >= r.l ? "win" : "place"); emit("mc:national", { caps: C.national.caps }); draw(); showNationalResults(r); });
+    d.querySelector('[data-nt="no"]').addEventListener("click", () => { declineCallup(C, call); save(); closeModal(d); toast("You stayed home this summer"); draw(); });
+    openModal(d);
+    d.querySelector('[data-nt="go"]').focus();
+  }
+  function showNationalResults(r) {
+    const t = ntTeam(r.team);
+    const d = modal("National team summer");
+    d.innerHTML = html`<button class="icon-btn profile-close" aria-label="Close">${icon("close", { size: 18 })}</button>
+      <div class="profile mc-review"><small class="muted">NATIONAL TEAM · SUMMER ${r.year}</small>
+      <h2 class="nt-title">${ntBadge(t, 40)} ${esc(t.name)} · ${r.w}-${r.l}</h2>
+      <div class="grid-wrap"><table class="stat-table"><thead><tr><th>Opponent</th><th>Score</th><th>Min</th><th>Pts</th><th>Reb</th><th>Ast</th></tr></thead>
+        <tbody>${r.games.map((g) => { const o = ntTeam(g.opp); return `<tr><td><span class="nt-team">${ntBadge(o, 22)} ${esc(o.name)} <small class="muted">#${o.rank}</small></span></td><td><b class="${g.won ? "good-text" : "bad-text"}">${g.won ? "W" : "L"}</b> ${g.my}-${g.their}</td>${g.line.dnp ? `<td colspan="4" class="muted">Did not play</td>` : `<td>${g.line.min}</td><td>${g.line.pts}</td><td>${g.line.reb}</td><td>${g.line.ast}</td>`}</tr>`; }).join("")}</tbody></table></div>
+      <p class="muted" style="font-size:13px">Career with ${esc(t.name)}: ${C.national.caps} games, ${C.national.pts} points. Next summer's development gets a boost.</p>
+      <button class="btn primary" id="nt-ok">${icon("check", { size: 15 })} Back to the off-season</button></div>`;
+    const close = () => closeModal(d);
+    d.querySelector(".profile-close").addEventListener("click", close);
+    d.querySelector("#nt-ok").addEventListener("click", close);
+    if (!d.open) openModal(d); // the same window as the call-up: it stays open with the results
+    d.querySelector("#nt-ok").focus();
   }
 
   function drawSeason() {
@@ -833,6 +882,9 @@ export async function renderMyCareer(root, signal) {
         <ul class="clean mc-recs">${recs.map(([cat, l, v]) => { const r = recordRank(cat, v); return `<li><span>${l}</span><b>${v.toLocaleString()}</b><span class="${r.rank === 1 ? "good-text" : "muted"}">#${r.rank}${r.rank === 1 ? " · all-time record!" : ` · record ${Math.round(r.top.value).toLocaleString()} (${esc(playersById.get(r.top.pid)?.name || "")})`}</span></li>`; }).join("")}</ul>
         ${bestSeason ? (() => { const r = recordRank("sppg", bestSeason.avg.ppg); return `<p style="font-size:14px">Best scoring season: <b>${bestSeason.avg.ppg} PPG</b> (${bestSeason.season}) · would rank <b>#${r.rank}</b> among real single seasons.</p>`; })() : ""}
       </div>
+      ${C.national?.summers?.length ? (() => { const t = ntTeam(C.national.team); return html`<div class="card pad"><h3><a class="nt-team" href="#/nt/${t.id}">${ntBadge(t, 24)} ${esc(t.name)} national team</a></h3>
+        <p style="margin:0 0 8px"><b>${C.national.caps}</b> games · <b>${C.national.pts}</b> points · ${C.national.reb} rebounds · ${C.national.ast} assists</p>
+        <ul class="clean mc-news">${C.national.summers.slice().reverse().map((s) => `<li>${s.declined ? `<span class="muted">Summer ${s.year}: turned down the call-up</span>` : `<b>Summer ${s.year}</b> <span class="muted">${s.w}-${s.l} · ${roleName(s.role)}</span>`}</li>`).join("")}</ul></div>`; })() : ""}
       <div class="card pad"><h3>${icon("heart")} Injury history</h3>
         ${(C.injuries || []).length ? `<ul class="clean mc-news">${C.injuries.slice().reverse().map((i) => `<li><b>${esc(i.name)}</b> <span class="muted">${i.season || ""} · age ${i.age} · ${i.games} games</span></li>`).join("")}</ul>` : `<p class="muted">Clean bill of health.</p>`}
         <p class="muted" style="font-size:13px;margin:8px 0 0">Career earnings (net, after expenses): ${money(C.money)}</p>
