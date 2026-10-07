@@ -92,8 +92,7 @@ export function logoSvg(size = 40) {
 }
 
 /** Club crest: shield in club colours with the club's initials. */
-// Your own club logos (game/crests/, local only: npm run crests:local). The public site has none and
-// keeps the drawn initials crest below.
+// Club logos where there's a file in game/crests/ (npm run crests:local); other clubs get the drawn shield.
 let LOGOS = {};
 export const crestsReady = import("../../crests/manifest.js").then((m) => { LOGOS = m.crestFiles || {}; }).catch(() => {});
 

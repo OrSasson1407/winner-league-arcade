@@ -1,9 +1,9 @@
-// Your own club logos, for your copy of the arcade only. Put logo files in game/crests/ named by team id
-// (maccabi_tel_aviv.png, hapoel_jerusalem.svg, ...: the list is in game/crests/README.md), then run
+// Club logos. Put logo files in game/crests/ named by team id (maccabi_tel_aviv.webp, hapoel_jerusalem.svg, ...:
+// the list is in game/crests/README.md), then run
 //   npm run crests:local
-// It writes game/crests/manifest.js, and every crest in the arcade on this computer shows your logo.
-// game/crests/ is in .gitignore: the logos never go to GitHub or the public site, which keeps
-// drawing its own initials crests (club logos are trademarks of the clubs).
+// It writes game/crests/manifest.js, and every crest of that club shows the logo. The folder is part of the
+// site: committed and published. Clubs without a logo file keep the drawn initials shield (data/team_crests.js).
+// Logos are the clubs' trademarks: shown only to identify the team, and removed on request (see the terms page).
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,11 +15,11 @@ const EXT = [".svg", ".png", ".webp", ".jpg", ".jpeg"];
 
 // the list of names to use
 const ids = Object.values(teamCrests).sort((a, b) => a.canonical_name.localeCompare(b.canonical_name));
-fs.writeFileSync(path.join(DIR, "README.md"), `# Your club logos (this computer only)
+fs.writeFileSync(path.join(DIR, "README.md"), `# Club logos
 
 Put a logo file here for any club, named by its team id, then run \`npm run crests:local\`.
 Formats: ${EXT.join(", ")}. A square image with a transparent background looks best.
-This folder is not uploaded to GitHub or to the public site.
+This folder is published with the site (GitHub and the live arcade).
 
 | File name (any of the formats) | Club | Competition |
 |---|---|---|
