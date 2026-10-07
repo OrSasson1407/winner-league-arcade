@@ -97,6 +97,8 @@ const server = http.createServer((req, res) => {
   try { url = decodeURIComponent(new URL(req.url, "http://x").pathname); } catch { res.writeHead(400).end(); return; }
   if (url === "/" || url === "/game") { res.writeHead(302, { Location: "/game/" }).end(); return; }
   if (url === "/health") { res.writeHead(200, { "Content-Type": "text/plain" }).end("ok"); return; }
+  // a private site: search engines are asked not to crawl or index any of it
+  if (url === "/robots.txt") { res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", "X-Robots-Tag": "noindex, nofollow" }).end("User-agent: *\nDisallow: /\n"); return; }
   if (url === "/api/feedback") { feedback(req, res); return; }
   if (url === "/api/admin/name") { adminName(req, res); return; }
   if (url === "/api/status") { // what the server runs on (nothing secret): for checking a deploy
@@ -111,7 +113,7 @@ const server = http.createServer((req, res) => {
     if (!err && st.isDirectory()) { file = path.join(file, "index.html"); st = fs.existsSync(file) ? fs.statSync(file) : null; }
     if (err || !st) { res.writeHead(404).end("Not found"); return; }
     const ext = path.extname(file).toLowerCase();
-    const headers = { "Content-Type": (TYPES[ext] || "application/octet-stream") + (TEXT.has(ext) ? "; charset=utf-8" : ""),
+    const headers = { "X-Robots-Tag": "noindex, nofollow", "Content-Type": (TYPES[ext] || "application/octet-stream") + (TEXT.has(ext) ? "; charset=utf-8" : ""),
       "Cache-Control": ext === ".woff2" ? "public, max-age=2592000" : "no-store, must-revalidate" }; // fonts never change; everything else is always fresh
     if (TEXT.has(ext) && /\bgzip\b/.test(req.headers["accept-encoding"] || "")) {
       let c = gzCache.get(file);
