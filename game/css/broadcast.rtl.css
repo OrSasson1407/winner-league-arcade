@@ -631,3 +631,39 @@ a.friend-row:hover b { color: var(--accent); }
 .oc-vs { display: flex; align-items: center; justify-content: center; gap: 18px; margin: 12px 0 16px; flex-wrap: wrap; }
 .oc-side { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; min-width: 140px; }
 @media (prefers-reduced-motion: reduce) { .og-coach.pickable:hover { transform: none; } }
+
+/* ---- How-to-play tour ---- */
+.tour { position: fixed; inset: 0; z-index: 900; }
+.tour-hole { position: fixed; border-radius: 12px; box-shadow: 0 0 0 9999px rgb(3 10 26 / .72); outline: 3px solid var(--accent, #ff7a1a); outline-offset: 2px; pointer-events: none; transition: top .25s, right .25s, width .25s, height .25s; }
+.tour-tip { position: fixed; padding: 14px 16px; z-index: 901; box-shadow: 0 12px 40px rgb(0 0 0 / .4); }
+.tour-tip h3 { margin: 4px 0 6px; }
+.tour-tip p { margin: 0 0 12px; }
+.tour-tip .row { gap: 6px; }
+@media (prefers-reduced-motion: reduce) { .tour-hole { transition: none; } }
+:root[data-motion="reduced"] .tour-hole { transition: none; }
+
+/* ---- Quick game ---- */
+.quick-roll { display: grid; place-items: center; gap: 10px; min-height: 50vh; text-align: center; }
+.quick-dice { color: var(--accent, #ff7a1a); animation: quick-spin .9s cubic-bezier(.2, .8, .3, 1); }
+.quick-reel b { font-family: var(--f-display); font-size: clamp(28px, 6vw, 46px); text-transform: uppercase; letter-spacing: .02em; }
+.quick-reel.done b { animation: quick-pop .35s ease-out; color: var(--accent, #ff7a1a); }
+@keyframes quick-spin { from { transform: rotate(540deg) scale(.6); } to { transform: none; } }
+@keyframes quick-pop { 50% { transform: scale(1.12); } }
+
+/* ---- Smart search ---- */
+.find-box { display: grid; gap: 12px; margin-bottom: 14px; }
+.find-input { display: flex; align-items: center; gap: 10px; }
+.find-input .input { flex: 1; font-size: 17px; }
+.find-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 4px; }
+.find-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px 4px 6px; border-radius: 99px; background: var(--brand-navy, #0b2149); color: #fff; font-size: 13px; font-weight: 600; }
+.find-chip button { display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 50%; background: rgb(255 255 255 / .16); color: inherit; cursor: pointer; }
+.find-chip button:hover, .find-chip button:focus-visible { background: rgb(255 255 255 / .32); }
+.find-ex { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip-btn { border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 99px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+.chip-btn:hover, .chip-btn:focus-visible { border-color: var(--accent, #ff7a1a); }
+.find-crests { white-space: nowrap; }
+.find-crests span { display: inline-block; margin-inline-end: 2px; vertical-align: middle; }
+.tour-btn { margin-inline-start: auto; }
+/* phones: the header keeps quick game, search, settings, Buckets and you; "pause animations" is in Settings */
+@media (max-width: 520px) { #motion-btn { display: none; } }
+@media (max-width: 430px) { #quick-btn { display: none; } } /* phones: quick game is on Home and Games */

@@ -1,7 +1,7 @@
 // Hash router + app chrome (logo, nav, mobile tab bar, settings, pause-animations, profile button).
 import { openProfile } from "./profile.js";
 import { initSocial } from "./online/social.js";
-import { initInstall } from "./lib/install.js";
+import { initInstall, maybeSuggestInstall } from "./lib/install.js";
 import { initA11y, pageChanged } from "./lib/a11y.js";
 import { closeCardView, initCardView } from "./lib/cardView.js";
 import { retroSync } from "./lib/achievements.js";
@@ -17,6 +17,7 @@ import { crumbsFor, renderCrumbs, showError, skeletonHtml, undoToast } from "./l
 import { openFeedback } from "./lib/feedback.js";
 import { openOnboarding, shouldOnboard } from "./lib/onboarding.js";
 import { initReminders } from "./lib/notify.js";
+import { initTour } from "./lib/tutorial.js";
 import { getLang, startHebrew } from "./i18n/index.js";
 import { coins, equipped } from "./lib/wallet.js";
 
@@ -61,6 +62,8 @@ const routes = {
   matchup: lazy(() => import("./games/matchup.js"), "renderMatchup"),
   shop: lazy(() => import("./pages/shop.js"), "renderShop"),
   op: lazy(() => import("./pages/onlineProfile.js"), "renderOnlineProfile"),
+  find: lazy(() => import("./pages/find.js"), "renderFind"),
+  quick: lazy(() => import("./pages/quick.js"), "renderQuick"),
 };
 const loaded = new Map(); // key -> render function, once its module is in
 function loadRoute(key) {
@@ -78,7 +81,7 @@ for (const ev of ["pointerover", "focusin", "touchstart"]) document.addEventList
 const GAME_ROUTES = new Set(["draft", "guess", "higher-lower", "career", "connections", "grid", "mycareer", "matchup"]);
 // which top-level section each route belongs to (for nav highlighting)
 const SECTION = { "": "home", games: "games", draft: "games", guess: "games", "higher-lower": "games", career: "games",
-  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me", about: "home", privacy: "home", terms: "home", accessibility: "home", licenses: "home", shop: "me", op: "online", euroleague: "clubs", matchup: "games" };
+  players: "players", player: "players", clubs: "clubs", club: "clubs", seasons: "seasons", season: "seasons", me: "me", help: "help", achievements: "achievements", compare: "players", recap: "me", challenge: "games", online: "online", today: "home", connections: "games", grid: "games", mycareer: "games", records: "players", daily: "games", u: "me", about: "home", privacy: "home", terms: "home", accessibility: "home", licenses: "home", shop: "me", op: "online", find: "players", quick: "games", euroleague: "clubs", matchup: "games" };
 
 const TABS = [["home", "#/", "home", "Home"], ["games", "#/games", "games", "Games"], ["players", "#/players", "players", "Players"], ["online", "#/online", "globe", "Online"],
   ["clubs", "#/clubs", "shield", "Clubs"], ["me", "#/me", "user", "Me"]];
@@ -182,6 +185,7 @@ async function renderRoute() {
     if (!render) problemScreen(view, { title: "Page not found", message: "This link doesn't match any page in the arcade." });
     else render(view, controller.signal, params.map(decodeURIComponent), query);
     pageChanged(view);
+    initTour(key, view);
   } catch (err) {
     console.error(err);
     problemScreen(view, { title: "Something went wrong", message: "This page hit an unexpected error. Trying again usually fixes it.", detail: String(err?.stack || err), key });
@@ -221,6 +225,10 @@ document.getElementById("settings-btn").innerHTML = icon("settings", { size: 20 
 const searchBtn = document.getElementById("search-btn");
 searchBtn.innerHTML = icon("search", { size: 20 });
 searchBtn.addEventListener("click", openSearch);
+window.__wlaRoutes = Object.values(routes); // for the installed app's offline warm-up
+document.addEventListener("game-played", () => maybeSuggestInstall(store.keys().filter((k) => k.startsWith("plays:")).reduce((a, k) => a + store.get(k, 0), 0)));
+const quickBtn = document.getElementById("quick-btn");
+quickBtn.innerHTML = icon("dice", { size: 20 });
 const helpBtn = document.getElementById("help-btn");
 helpBtn.innerHTML = icon("info", { size: 20 });
 initShortcuts({ openSearch });

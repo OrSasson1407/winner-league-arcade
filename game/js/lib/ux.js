@@ -70,6 +70,8 @@ export function crumbsFor(key, params = []) {
   if (key === "about") return [home, ["About", null]];
   if (key === "privacy") return [home, ["About", "#/about"], ["Privacy", null]];
   if (key === "shop") return [home, ["Shop", null]];
+  if (key === "find") return [home, ["Players", "#/players"], ["Smart search", null]];
+  if (key === "quick") return [home, ["Games", "#/games"], ["Quick game", null]];
   if (key === "op") return [home, ["Online", "#/online"], ["Player", null]];
   if (key === "terms") return [home, ["About", "#/about"], ["Terms of use", null]];
   if (key === "accessibility") return [home, ["About", "#/about"], ["Accessibility", null]];

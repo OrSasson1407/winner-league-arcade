@@ -25,6 +25,8 @@ export function applySettings(s = getSettings()) {
   const high = s.contrast === "high" || (s.contrast === "system" && matchMedia("(prefers-contrast: more)").matches);
   if (high) r.dataset.contrast = "high"; else delete r.dataset.contrast;
   applyClubTheme(high ? "" : s.club, theme); // high contrast uses its own fixed palette
+  // the browser bar / installed app's title bar follows the theme
+  requestAnimationFrame(() => document.querySelector('meta[name="theme-color"]')?.setAttribute("content", getComputedStyle(document.body).backgroundColor || "#061532"));
 }
 
 function save(patch) {

@@ -106,6 +106,7 @@ export function countUp(el, to, decimals = 0, ms = 650) {
 /** Counts plays per game for the home-page stats strip. */
 export function track(game) {
   store.set(`plays:${game}`, store.get(`plays:${game}`, 0) + 1);
+  document.dispatchEvent(new CustomEvent("game-played"));
 }
 
 /** Re-runs a CSS animation class on an element. */

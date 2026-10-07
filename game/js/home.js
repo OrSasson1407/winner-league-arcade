@@ -73,7 +73,7 @@ export function gameTilesHtml() {
 }
 
 export function renderGames(root) {
-  root.innerHTML = html`<div class="game-head"><div><h1>${icon("games", { size: 30 })} Games</h1><p>Seven games built on 17 seasons of real league data.</p></div></div>${gameTilesHtml()}
+  root.innerHTML = html`<div class="game-head"><div><h1>${icon("games", { size: 30 })} Games</h1><p>Seven games built on 17 seasons of real league data.</p></div><a class="btn primary" href="#/quick">${icon("dice", { size: 15 })} Quick game</a></div>${gameTilesHtml()}
     <a class="card pad ch-banner og-promo" href="#/online">${icon("globe", { size: 22 })}<span><b>Online 1v1</b> · play any of these games against a random opponent or a friend with an invite code.</span><span class="spacer"></span><span class="btn primary">Play online</span></a>`;
 }
 
@@ -118,6 +118,7 @@ export function renderHome(root, signal) {
         <div class="search guess-input">${icon("search", { size: 18, cls: "search-ic" })}<input id="search" class="input" placeholder="Search any player…" autocomplete="off" aria-label="Search players"></div>
         <div class="row hero-actions">
           ${last && GAMES[last] ? `<a class="btn jump" href="${GAMES[last].href}">${icon("play", { size: 14 })} Jump back into ${GAMES[last].title}</a>` : ""}
+          <a class="btn jump" href="#/quick">${icon("dice", { size: 14 })} Quick game</a>
           <a class="btn jump" href="#/online">${icon("globe", { size: 14 })} Play online 1v1</a>
           <a class="btn jump" href="#/challenge">${icon("users", { size: 14 })} Challenge a friend</a>
           ${new Date().getDate() <= 7 ? `<a class="btn jump" href="#/recap">${icon("calendar", { size: 14 })} Your monthly recap</a>` : ""}

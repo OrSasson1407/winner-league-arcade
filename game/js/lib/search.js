@@ -5,6 +5,7 @@ import { EL_SEASONS, EL_INDEX, elLoaded, elTeamName, loadEuroleague } from "../e
 import { crestSvg, icon } from "./icons.js";
 import { closeModal, closeSilently, openModal } from "./modal.js";
 import { openProfile } from "../profile.js";
+import { looksSmart } from "./smartSearch.js";
 
 const norm = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
@@ -13,6 +14,8 @@ const PAGES = [
   { label: "Guess the Player", sub: "Game", href: "#/guess", ic: "search", words: "guess wordle mystery" },
   { label: "Higher or Lower", sub: "Game", href: "#/higher-lower", ic: "chart", words: "higher lower streak" },
   { label: "Career Path", sub: "Game", href: "#/career", ic: "arrowRight", words: "career path quiz journey" },
+  { label: "Quick game", sub: "A random game, right away", href: "#/quick", ic: "dice", words: "quick random play now surprise lucky משחק מהיר אקראי" },
+  { label: "Smart search", sub: "Ask about players in plain words", href: "#/find", ic: "filter", words: "smart search find filter query ask taller born position nationality חיפוש חכם" },
   { label: "Players", sub: "Browse all players", href: "#/players", ic: "players", words: "players browse filter" },
   { label: "Clubs", sub: "Browse all clubs", href: "#/clubs", ic: "shield", words: "clubs teams" },
   { label: "Seasons", sub: "Browse all seasons", href: "#/seasons", ic: "calendar", words: "seasons years leaders" },
@@ -108,6 +111,8 @@ function results(q) {
     }
   }
   groups.push({ title: "Pages", items: pick(ix.pages, 4) });
+  // a question rather than a name ("israeli centers born after 1995"): offer the smart search first
+  if (lg !== "el" && looksSmart(q)) groups.unshift({ title: "Smart search", items: [{ type: "page", label: `Players: “${q.trim()}”`, sub: "Search by height, position, club, season, nationality…", href: `#/find/${encodeURIComponent(q.trim())}`, ic: "filter" }] });
   return groups.filter((g) => g.items.length || g.loading);
 }
 

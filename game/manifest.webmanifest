@@ -1,16 +1,28 @@
 {
+  "id": "./",
   "name": "Winner League Arcade",
   "short_name": "WL Arcade",
   "description": "Games built on 17 seasons of the Israeli Basketball Premier League: draft, guess, higher or lower, career path, and online 1v1.",
+  "lang": "en",
   "start_url": "./#/",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
   "background_color": "#061532",
   "theme_color": "#061532",
+  "categories": ["games", "sports", "entertainment"],
+  "launch_handler": { "client_mode": "focus-existing" },
+  "prefer_related_applications": false,
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Quick game", "short_name": "Quick game", "description": "A random game, right away", "url": "./#/quick", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Daily challenges", "short_name": "Daily", "description": "Today's puzzles", "url": "./#/daily", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Online 1v1", "short_name": "Online", "description": "Play a real opponent", "url": "./#/online", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Smart player search", "short_name": "Search", "description": "Ask about players in plain words", "url": "./#/find", "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }] }
   ]
 }

@@ -8,7 +8,7 @@ export const SHORTCUTS = [
     [["Ctrl", "K"], "Search players, clubs, seasons and pages"], [["/"], "Search"],
     [["?"], "Show keyboard shortcuts"], [["Esc"], "Close a window"],
     [["G", "H"], "Go to Home"], [["G", "G"], "Go to Games"], [["G", "P"], "Go to Players"],
-    [["G", "C"], "Go to Clubs"], [["G", "S"], "Go to Seasons"], [["G", "M"], "Go to your profile"], [["G", "A"], "Go to Achievements"], [["G", "V"], "Compare players"], [["G", "R"], "Monthly recap"], [["G", "F"], "Challenge a friend"], [["G", "O"], "Online 1v1"], [["G", "Y"], "Daily challenges"], [["G", "T"], "Today in the league"], [["G", "E"], "All-time records"], [["G", "?"], "Go to Help"]] },
+    [["G", "C"], "Go to Clubs"], [["G", "S"], "Go to Seasons"], [["G", "M"], "Go to your profile"], [["G", "A"], "Go to Achievements"], [["G", "V"], "Compare players"], [["G", "R"], "Monthly recap"], [["G", "F"], "Challenge a friend"], [["G", "O"], "Online 1v1"], [["G", "Y"], "Daily challenges"], [["G", "T"], "Today in the league"], [["G", "E"], "All-time records"], [["G", "Q"], "Quick game"], [["G", "X"], "Smart player search"], [["G", "?"], "Go to Help"]] },
   { group: "All-Time Draft", items: [
     [["1–9"], "Pick a player from the roster"], [["1–6"], "Then place them: PG, SG, SF, PF, C, 6th"],
     [["↑", "↓"], "Move through the roster"], [["Enter"], "Pick the highlighted player"],
@@ -90,7 +90,7 @@ export function initShortcuts({ openSearch }) {
     if (e.key === "/") { e.preventDefault(); openSearch(); return; }
     const k = e.key.toLowerCase();
     if (Date.now() - gPending < 1200) {
-      const to = { h: "#/", g: "#/games", p: "#/players", c: "#/clubs", s: "#/seasons", m: "#/me", a: "#/achievements", v: "#/compare", r: "#/recap", f: "#/challenge", o: "#/online", y: "#/daily", t: "#/today", e: "#/records", "?": "#/help", "/": "#/help" }[k];
+      const to = { h: "#/", g: "#/games", p: "#/players", c: "#/clubs", s: "#/seasons", m: "#/me", a: "#/achievements", v: "#/compare", r: "#/recap", f: "#/challenge", o: "#/online", y: "#/daily", t: "#/today", e: "#/records", q: "#/quick", x: "#/find", "?": "#/help", "/": "#/help" }[k];
       gPending = 0;
       e.stopImmediatePropagation(); // the key after "g" is never also a game key
       if (to) { e.preventDefault(); location.hash = to; }

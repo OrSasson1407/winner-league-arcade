@@ -62,7 +62,8 @@ export function renderPlayers(root, signal, params = [], query = {}) {
 
   root.innerHTML = html`
     <div class="game-head"><div><h1>${icon("players", { size: 30 })} Players</h1>
-      <p>Every Winner League player since 2010-11, and EuroLeague players since 2000-01. Click a card for the full career.</p></div></div>
+      <p>Every Winner League player since 2010-11, and EuroLeague players since 2000-01. Click a card for the full career.</p></div>
+      <a class="btn" href="#/find">${icon("filter", { size: 15 })} Smart search</a></div>
     <div class="row" style="margin-bottom:12px"><div class="seg" id="f-lg" role="radiogroup" aria-label="Competition">${LEAGUES.map(([v, l]) => `<button role="radio" aria-checked="${f.lg === v}" data-v="${v}" class="${f.lg === v ? "on" : ""}">${l}</button>`).join("")}</div>
       <span class="muted" id="lg-note" style="font-size:13px;flex:1;min-width:220px"></span></div>
     <div class="card pad filters" role="search">

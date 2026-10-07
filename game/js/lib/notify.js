@@ -20,6 +20,8 @@ async function writeState() {
     const c = await caches.open("wla-meta");
     const st = { on: reminderStatus() === "on", date: localDate(), done: Object.keys(todayStatus()).length, total: DAILY_COUNT, streak: dailyStreak(), hour: REMIND_HOUR };
     await c.put(STATE_URL, new Response(JSON.stringify(st), { headers: { "Content-Type": "application/json" } }));
+    // installed app with reminders on: the icon shows how many daily challenges are left today
+    if (navigator.setAppBadge) { if (st.on && st.done < st.total) navigator.setAppBadge(st.total - st.done).catch(() => {}); else navigator.clearAppBadge?.().catch(() => {}); }
   } catch { /* cache unavailable */ }
 }
 
