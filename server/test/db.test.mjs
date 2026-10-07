@@ -1,6 +1,7 @@
 // Storage tests against a real Postgres (PGlite, in-process): migrations, records, leagues, feedback.
 //   npm test
 import assert from "node:assert/strict";
+import { readdirSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { openStore } from "../db.js";
 import { applyResult, initRecords, recordFor, saveRecords, setProfile } from "../records.js";
@@ -14,9 +15,10 @@ assert.equal(store.kind, "postgres");
 
 // migrations run once
 const applied = (await pg.query("SELECT name FROM schema_migrations")).rows.map((r) => r.name);
-assert.deepEqual(applied, ["001_init.sql"]);
+const files = readdirSync(new URL("../migrations", import.meta.url)).filter((f) => f.endsWith(".sql")).sort();
+assert.deepEqual(applied.sort(), files);
 await openStore({ client: pg }); // reopening applies nothing new
-assert.equal((await pg.query("SELECT count(*)::int AS n FROM schema_migrations")).rows[0].n, 1);
+assert.equal((await pg.query("SELECT count(*)::int AS n FROM schema_migrations")).rows[0].n, files.length);
 
 // records: play a rated match, save, read back
 assert.equal(await initRecords(store), 0);
@@ -58,6 +60,31 @@ assert.deepEqual(fb.map((f) => f.message), ["It broke", "More games"]);
 setProfile(b, { name: "בוב \"The Bot\" O'Neil", icon: "ball", color: "#000", frame: "none", level: 1 });
 await saveRecords();
 assert.equal((await store.loadRecords()).find((r) => r.sid === "sid-bbbbbbbb").profile.name, "בוב \"The Bot\" O'Neil");
+
+// match history and period tables
+const at = (daysAgo) => new Date(Date.now() - daysAgo * 864e5).toISOString();
+const P = (code, name) => ({ code, name, icon: "ball", color: "#fff", frame: "none" });
+const match = (sid0, sid1, winner, daysAgo, mode = "ranked", game = "hl") => ({ at: at(daysAgo), game, mode, rated: mode === "ranked", sid0, sid1, winner, reason: "done",
+  players: [{ ...P("AAAAAA", sid0), delta: 8, score: "9-7" }, { ...P("BBBBBB", sid1), delta: -8, score: "7-9" }], scores: [9, 7] });
+await store.addMatch(match("x", "y", 0, 0));          // x wins today
+await store.addMatch(match("x", "y", null, 0));       // a draw today
+await store.addMatch(match("y", "z", 0, 0, "ranked", "guess"));
+await store.addMatch(match("x", "y", 1, 40));         // y won 40 days ago: outside this week and month
+await store.addMatch(match("x", null, 0, 0, "bot"));  // bot games are history, not tables
+const hx = await store.listMatches("x", 60);
+assert.equal(hx.length, 4);
+assert.equal(hx[0].mode, "bot"); // newest first
+assert.deepEqual(hx[1].players.map((p) => p.score), ["9-7", "7-9"]);
+const week = await store.periodTable("all", Date.now() - 2 * 864e5);
+const row = (sid) => week.find((r) => r.sid === sid);
+assert.deepEqual([row("x").pts, row("x").w, row("x").d, row("x").l], [4, 1, 1, 0]);
+assert.deepEqual([row("y").pts, row("y").g], [4, 3]); // a draw (1) and a win over z (3), from 3 games
+assert.equal(week[0].sid, "x"); // same points: more wins first… both have 1; fewer games wins the tie
+assert.equal(row("z").pts, 0);
+const hlOnly = await store.periodTable("hl", Date.now() - 2 * 864e5);
+assert.equal(hlOnly.find((r) => r.sid === "y").g, 2);
+const ever = await store.periodTable("all", 0);
+assert.equal(ever.find((r) => r.sid === "y").w, 2);
 
 console.log("db tests passed");
 process.exit(0);

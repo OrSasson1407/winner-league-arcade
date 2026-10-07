@@ -166,3 +166,6 @@ export async function saveRecords() {
   return saving;
 }
 setInterval(saveRecords, 10000).unref();
+
+/** A known player's record by device id (for tables built from match history). */
+export const recordBySid = (sid) => records.get(sid) ?? null;

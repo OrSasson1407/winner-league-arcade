@@ -45,10 +45,10 @@ export function headToHead(code) {
   for (const h of getHistory()) if (h.oppCode === code) r[h.result === "win" ? "w" : h.result === "lose" ? "l" : "d"]++;
   return r;
 }
-/** Most-played opponents with their head-to-head record. */
-export function rivals(limit = 5) {
+/** Most-played opponents with their head-to-head record (from a history list; this device's by default). */
+export function rivals(limit = 5, list = getHistory()) {
   const map = new Map();
-  for (const h of getHistory()) {
+  for (const h of list) {
     if (!h.oppCode) continue;
     const r = map.get(h.oppCode) || { code: h.oppCode, opp: h.opp, w: 0, l: 0, d: 0, n: 0 };
     r[h.result === "win" ? "w" : h.result === "lose" ? "l" : "d"]++; r.n++;

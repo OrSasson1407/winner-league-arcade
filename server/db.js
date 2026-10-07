@@ -1,4 +1,4 @@
-// Storage for the server's own data: online records, friend leagues and feedback.
+// Storage for the server's own data: online records, friend leagues, match history and feedback.
 //   DATABASE_URL set (e.g. a Neon / Supabase Postgres URL) -> Postgres; the tables are created and
 //   upgraded by the files in server/migrations, in name order, each once.
 //   Not set (local play)                                    -> JSON files in server/data, as before.
@@ -54,8 +54,36 @@ async function postgresStore(db, pool) {
       return (await q("SELECT at, kind, message, tech FROM feedback ORDER BY id DESC LIMIT $1", [limit])).rows
         .map((r) => ({ ...r, at: new Date(r.at).toISOString() })).reverse();
     },
+    async addMatch(m) {
+      await q(`INSERT INTO matches (at, game, mode, rated, sid0, sid1, winner, reason, players, scores)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb)`,
+      [m.at, m.game, m.mode, m.rated, m.sid0, m.sid1, m.winner, m.reason, JSON.stringify(m.players), JSON.stringify(m.scores ?? null)]);
+    },
+    async listMatches(sid, limit = 60) {
+      const rows = (await q(`SELECT at, game, mode, rated, sid0, sid1, winner, reason, players, scores FROM matches
+        WHERE sid0 = $1 OR sid1 = $1 ORDER BY at DESC LIMIT $2`, [sid, limit])).rows;
+      return rows.map((r) => ({ ...r, at: new Date(r.at).toISOString(), players: parse(r.players), scores: parse(r.scores) }));
+    },
+    async periodTable(game, since) {
+      const rows = (await q(`WITH seat AS (
+          SELECT sid0 AS sid, CASE WHEN winner IS NULL THEN 'd' WHEN winner = 0 THEN 'w' ELSE 'l' END AS r FROM matches
+            WHERE mode = 'ranked' AND at >= $1 AND ($2 = 'all' OR game = $2)
+          UNION ALL
+          SELECT sid1, CASE WHEN winner IS NULL THEN 'd' WHEN winner = 1 THEN 'w' ELSE 'l' END FROM matches
+            WHERE mode = 'ranked' AND at >= $1 AND ($2 = 'all' OR game = $2))
+        SELECT sid, count(*) FILTER (WHERE r = 'w')::int AS w, count(*) FILTER (WHERE r = 'd')::int AS d,
+               count(*) FILTER (WHERE r = 'l')::int AS l, count(*)::int AS g
+        FROM seat WHERE sid IS NOT NULL GROUP BY sid`, [new Date(since).toISOString(), game])).rows;
+      return rankTable(rows);
+    },
     async close() { await pool?.end(); },
   };
+}
+const parse = (v) => (typeof v === "string" ? JSON.parse(v) : v);
+
+/** Points table for a period: win 3, draw 1; ties go to more wins, then fewer games. */
+export function rankTable(rows) {
+  return rows.map((r) => ({ ...r, pts: r.w * 3 + r.d })).sort((a, b) => b.pts - a.pts || b.w - a.w || a.g - b.g);
 }
 
 /** Apply the migration files that haven't run yet, each in its own transaction. */
@@ -86,6 +114,12 @@ function fileStore() {
   const read = (n, fallback) => { try { return JSON.parse(fs.readFileSync(file(n), "utf8")); } catch { return fallback; } };
   const write = (n, value) => { fs.mkdirSync(DATA, { recursive: true }); fs.writeFileSync(file(n), JSON.stringify(value)); };
   let records = null, leagues = null; // the files hold everything, so writes rewrite the file
+  let matches = null; // match history: appended to a file, kept in memory (the newest 20,000)
+  const loadMatches = () => {
+    if (matches) return matches;
+    try { matches = fs.readFileSync(file("matches.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)).slice(-20000); } catch { matches = []; }
+    return matches;
+  };
   return {
     kind: "files",
     async loadRecords() { records = new Map(read("records.json", []).filter((r) => r?.sid).map((r) => [r.sid, r])); return [...records.values()]; },
@@ -96,6 +130,26 @@ function fileStore() {
     async addFeedback(row) { fs.mkdirSync(DATA, { recursive: true }); fs.appendFileSync(file("feedback.jsonl"), JSON.stringify(row) + "\n"); },
     async listFeedback(limit = 300) {
       try { return fs.readFileSync(file("feedback.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)).slice(-limit); } catch { return []; }
+    },
+    async addMatch(m) {
+      loadMatches().push(m);
+      if (matches.length > 20000) matches.splice(0, matches.length - 20000);
+      fs.mkdirSync(DATA, { recursive: true });
+      fs.appendFileSync(file("matches.jsonl"), JSON.stringify(m) + "\n");
+    },
+    async listMatches(sid, limit = 60) { return loadMatches().filter((m) => m.sid0 === sid || m.sid1 === sid).sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit); },
+    async periodTable(game, since) {
+      const t = new Map();
+      for (const m of loadMatches()) {
+        if (m.mode !== "ranked" || Date.parse(m.at) < since || (game !== "all" && m.game !== game)) continue;
+        [m.sid0, m.sid1].forEach((sid, seat) => {
+          if (!sid) return;
+          const r = t.get(sid) || { sid, w: 0, d: 0, l: 0, g: 0 };
+          r[m.winner === null ? "d" : m.winner === seat ? "w" : "l"]++; r.g++;
+          t.set(sid, r);
+        });
+      }
+      return rankTable([...t.values()]);
     },
     async close() {},
   };

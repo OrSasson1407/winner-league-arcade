@@ -12,10 +12,10 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { GAMES, createEngine } from "./duels.js";
 import { BOT_LEVELS, createBot } from "./bot.js";
-import { addWeekly, applyResult, findByCode, initRecords, leaderboard, recordFor, recordMsg, saveRecords, secretSource, setProfile, weekId, weekOf } from "./records.js";
+import { addWeekly, applyResult, findByCode, initRecords, leaderboard, recordBySid, recordFor, recordMsg, saveRecords, secretSource, setProfile, weekId, weekOf } from "./records.js";
 import { MAX_MEMBERS, cleanLeagueId, createLeague, getLeague, initLeagues, joinLeague, leaveLeague, saveLeagues, syncLeague } from "./leagues.js";
 import { openStore } from "./db.js";
-import { CHAT, cleanCode, friendCode, matchRange } from "../game/js/shared/rating.js";
+import { CHAT, RATED_GAMES, cleanCode, friendCode, matchRange, rankOf } from "../game/js/shared/rating.js";
 import { cleanAv } from "../game/js/lib/avatarArt.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -221,7 +221,54 @@ function finishRoom(room, { winner, scores, reason, detail = null }) {
   });
   room.spectators.forEach((s) => send(s, { t: "end", game: room.game, seat: 0, spectator: true, winner, scores, reason, detail, mode: room.mode, rated: room.rated,
     result: winner === null ? "draw" : winner === 0 ? "win" : "lose", delta: delta[0], elo: null, streak: null }));
+  saveMatch(room, { winner, scores, reason, detail, delta });
   pushStats();
+}
+
+// ---------------------------------------------------------------- match history
+/** The score as each player sees it ("12-9", or "3/8 vs X/8" in Guess the Player). */
+function scoreText(game, scores, detail, seat) {
+  if (!scores) return "";
+  const me = seat, them = 1 - seat;
+  if (game === "guess" && detail?.solved) { const t = (i) => (detail.solved[i] ? `${detail.tries[i]}/8` : "X/8"); return `${t(me)} vs ${t(them)}`; }
+  return `${scores[me]}-${scores[them]}`;
+}
+function saveMatch(room, { winner, scores, reason, detail, delta }) {
+  if (!store || room.players.every((p) => p.isBot)) return;
+  const players = room.players.map((p, seat) => ({ ...publicProfile(p, room.game), delta: room.rated ? delta[seat] : null, score: scoreText(room.game, scores, detail, seat) }));
+  const m = { at: new Date().toISOString(), game: room.game, mode: room.mode, rated: !!room.rated,
+    sid0: room.players[0].isBot ? null : room.players[0].sid, sid1: room.players[1].isBot ? null : room.players[1].sid,
+    winner, reason: reason || "done", players, scores: scores ?? null };
+  store.addMatch(m).catch((e) => console.error("[db] saving a match failed:", e.message));
+}
+/** A player's recent matches, as their own history list (newest first). */
+async function historyFor(sid) {
+  const rows = await store.listMatches(sid, 60);
+  return rows.map((m) => {
+    const seat = m.sid0 === sid ? 0 : 1, o = m.players[1 - seat] || {};
+    return { at: m.at, game: m.game, mode: m.mode, result: m.winner === null ? "draw" : m.winner === seat ? "win" : "lose",
+      opp: { name: o.name, icon: o.icon, color: o.color, frame: o.frame, style: o.style, av: o.av }, oppCode: o.code || null,
+      score: m.players[seat]?.score || (m.reason !== "done" ? (m.winner === seat ? "opponent left" : "left") : ""), delta: m.players[seat]?.delta ?? null };
+  });
+}
+
+// ---------------------------------------------------------------- leaderboards by period
+const periodStart = (period, d = new Date()) => {
+  if (period === "month") return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+  const day = (d.getUTCDay() + 6) % 7; // Monday = 0
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day);
+};
+/** This week's / this month's ranked results: win 3, draw 1. */
+async function periodBoard(game, period, meSid) {
+  const table = (await store.periodTable(game, periodStart(period))).filter((r) => recordBySid(r.sid)?.profile);
+  const view = (r, i) => {
+    const rec = recordBySid(r.sid), p = rec.profile;
+    const elo = game === "all" ? Math.max(...RATED_GAMES.map((g) => rec.elo[g])) : rec.elo[game];
+    return { pos: i + 1, name: p.name, icon: p.icon, color: p.color, frame: p.frame, level: p.level, style: p.style, av: p.av, code: p.code,
+      elo, rank: rankOf(elo).id, pts: r.pts, w: r.w, d: r.d, l: r.l, g: r.g, streak: rec.streak, me: r.sid === meSid };
+  };
+  const myIdx = table.findIndex((r) => r.sid === meSid);
+  return { t: "leaders", game, period, rows: table.slice(0, 25).map(view), me: myIdx >= 25 ? view(table[myIdx], myIdx) : null, total: table.length, since: periodStart(period) };
 }
 
 function forfeit(room, loserSeat, reason) {
@@ -265,7 +312,17 @@ function onMessage(c, m) {
       return;
     }
     case "stats": return send(c, stats());
-    case "leaders": return send(c, leaderboard(GAMES.includes(m.game) ? m.game : "all", c.sid));
+    case "leaders": {
+      const game = GAMES.includes(m.game) ? m.game : "all";
+      if (m.period === "week" || m.period === "month") {
+        periodBoard(game, m.period, c.sid).then((b) => send(c, b), (e) => { console.error("[db] leaderboard failed:", e.message); send(c, { t: "leaders", game, period: m.period, rows: [], me: null, total: 0, error: true }); });
+        return;
+      }
+      return send(c, { ...leaderboard(game, c.sid), period: "all" });
+    }
+    case "history": // the player's matches saved on the server (this device)
+      historyFor(c.sid).then((list) => send(c, { t: "history", list }), (e) => { console.error("[db] history failed:", e.message); send(c, { t: "history", list: null }); });
+      return;
     case "queue": {
       if (!GAMES.includes(m.game) || c.room) return;
       leaveLobby(c); unwatch(c);

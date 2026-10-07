@@ -28,6 +28,7 @@ import { criterionById, facts } from "../shared/leagueFacts.js";
 import { crestSvg } from "../lib/icons.js";
 import { bindGamePlan, gamePlanHtml, readGamePlan } from "../lib/gamePlan.js";
 import { arrowGrid, gameKeys, press } from "../lib/shortcuts.js";
+import { dateLocale } from "../i18n/index.js";
 
 export const ONLINE_GAMES = {
   hl: { name: "Higher or Lower", ic: "chart", short: "Speed duel",
@@ -83,7 +84,8 @@ export function renderOnline(root, signal, params = []) {
   let tick = null;
   let tab = ["play", "friends", "leagues", "leaders", "history"].includes(store.get("online:tab")) ? store.get("online:tab") : "play";
   let league = null, leagueTables = {}, gridItems = null;
-  let friendsInfo = null, leaders = null, leadersGame = "all", stopCount = null;
+  let friendsInfo = null, leaders = null, leadersGame = "all", leadersPeriod = store.get("online:lbPeriod", "all"), stopCount = null;
+  let serverHistory = null; // this device's matches as saved on the server (null until asked)
   const joinCode = params[0] === "join" && params[1] ? String(params[1]).toUpperCase().replace(/[^A-Z0-9]/g, "") : null;
   const leagueLink = params[0] === "league" && params[1] ? String(params[1]).toUpperCase().replace(/[^A-Z0-9]/g, "") : null;
   if (leagueLink) { tab = "leagues"; league = leagueLink; }
@@ -126,6 +128,7 @@ export function renderOnline(root, signal, params = []) {
       case "record": if (phase === "lobby" && tab === "play") drawLobby(); return;
       case "friends": friendsInfo = m.list; refreshFriends(m.list); if (phase === "lobby" && tab === "friends") drawLobby(); return;
       case "leaders": leaders = m; if (phase === "lobby" && tab === "leaders") drawLobby(); return;
+      case "history": serverHistory = m.list || []; if (phase === "lobby" && tab === "history") drawLobby(); return;
       case "whois": {
         if (!m.found) { const el = root.querySelector("#fr-msg"); if (el) el.textContent = "No player with that code. They need to open the arcade online once."; return; }
         addFriend(m); friendsInfo = null; toast(`${m.name} added to friends`);
@@ -409,29 +412,40 @@ export function renderOnline(root, signal, params = []) {
 
   // ---------------- leaderboard
   function drawLeaders(body) {
-    const L = leaders?.game === leadersGame ? leaders : null;
+    const L = leaders?.game === leadersGame && (leaders.period || "all") === leadersPeriod ? leaders : null;
+    const timed = leadersPeriod !== "all"; // this week / this month: points from ranked results
     const row = (r) => html`<tr class="${r.me ? "me-row" : ""}"><td class="pos">${r.pos <= 3 ? ["🥇", "🥈", "🥉"][r.pos - 1] : r.pos}</td>
       <td><span class="lb-name">${avatarHtml({ icon: r.icon, color: r.color, frame: r.frame, style: r.style, av: r.av }, 30)}<span><b>${esc(r.name)}</b><small class="muted">Lv ${r.level}${r.streak >= 3 ? ` · 🔥${r.streak}` : ""}</small></span></span></td>
-      <td>${rankBadge(r.elo, { small: true })}</td><td><b>${leadersGame === "all" ? r.w : r.elo}</b></td><td class="muted">${r.w}-${r.l}</td></tr>`;
+      <td>${rankBadge(r.elo, { small: true })}</td>${timed ? `<td><b>${r.pts}</b></td><td class="muted">${r.w}-${r.d}-${r.l}</td>`
+        : `<td><b>${leadersGame === "all" ? r.w : r.elo}</b></td><td class="muted">${r.w}-${r.l}</td>`}</tr>`;
+    const since = timed && L?.since ? new Date(L.since).toLocaleDateString(dateLocale(), { day: "numeric", month: "long" }) : "";
     body.innerHTML = html`<div class="card pad">
-      <div class="row" style="margin-bottom:10px"><h3 style="margin:0">${icon("trophy")} Leaderboard</h3><span class="spacer"></span>
+      <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:8px"><h3 style="margin:0">${icon("trophy")} Leaderboard</h3><span class="spacer"></span>
+        <div class="seg sm" id="lb-period" role="radiogroup" aria-label="Period">${[["all", "All time"], ["month", "This month"], ["week", "This week"]].map(([k, l]) => `<button role="radio" aria-checked="${k === leadersPeriod}" class="${k === leadersPeriod ? "on" : ""}" data-lp="${k}">${l}</button>`).join("")}</div>
         <div class="seg sm" id="lb-game">${[["all", "All games"], ...Object.entries(ONLINE_GAMES).map(([k, g]) => [k, g.name])].map(([k, l]) => `<button class="${k === leadersGame ? "on" : ""}" data-lg="${k}">${l}</button>`).join("")}</div></div>
-      ${!L ? `<div aria-busy="true"><span class="sr-only">Loading…</span>${skeletonRows(8)}</div>` : L.rows.length ? html`<div class="grid-wrap"><table class="stat-table lb-table"><thead><tr><th>#</th><th>Player</th><th>Rank</th><th>${leadersGame === "all" ? "Wins" : "Rating"}</th><th>W-L</th></tr></thead>
+      ${!L ? `<div aria-busy="true"><span class="sr-only">Loading…</span>${skeletonRows(8)}</div>` : L.rows.length ? html`<div class="grid-wrap"><table class="stat-table lb-table"><thead><tr><th>#</th><th>Player</th><th>Rank</th><th>${timed ? "Pts" : leadersGame === "all" ? "Wins" : "Rating"}</th><th>${timed ? "W-D-L" : "W-L"}</th></tr></thead>
         <tbody>${L.rows.map(row).join("")}${L.me ? `<tr class="gap"><td colspan="5">⋯</td></tr>${row(L.me)}` : ""}</tbody></table></div>
-        <p class="muted" style="font-size:12px;margin:8px 0 0">Ranked matches only. ${L.total} ranked player${L.total === 1 ? "" : "s"}. The board refills as players come back online after a server restart.</p>`
-        : `<p class="muted">No ranked matches yet${leadersGame === "all" ? "" : " in this game"}. Win one to take the top spot!</p>`}
+        <p class="muted" style="font-size:12px;margin:8px 0 0">${timed ? `Ranked matches since ${since}: win 3, draw 1. ${L.total} player${L.total === 1 ? "" : "s"}.` : `Ranked matches only. ${L.total} ranked player${L.total === 1 ? "" : "s"}.`}</p>`
+        : `<p class="muted">${L.error ? "The leaderboard couldn't load. Try again in a moment." : timed ? `No ranked matches ${leadersPeriod === "week" ? "this week" : "this month"} yet${leadersGame === "all" ? "" : " in this game"}. Win one to take the top spot!` : `No ranked matches yet${leadersGame === "all" ? "" : " in this game"}. Win one to take the top spot!`}</p>`}
     </div>`;
+    const ask = () => send({ t: "leaders", game: leadersGame, period: leadersPeriod });
     body.querySelector("#lb-game").addEventListener("click", (e) => {
       const b = e.target.closest("[data-lg]"); if (!b) return;
-      leadersGame = b.dataset.lg; send({ t: "leaders", game: leadersGame }); drawLobby();
+      leadersGame = b.dataset.lg; ask(); drawLobby();
     }, { signal });
-    if (!L) send({ t: "leaders", game: leadersGame });
+    body.querySelector("#lb-period").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-lp]"); if (!b) return;
+      leadersPeriod = b.dataset.lp; store.set("online:lbPeriod", leadersPeriod); ask(); drawLobby();
+    }, { signal });
+    if (!L) ask();
   }
 
   // ---------------- history
   function drawHistory(body, s) {
-    const list = getHistory();
-    const top = rivals();
+    // the server's copy (kept in the database) when it has one, else what this browser saved
+    if (serverHistory === null && s === "online") { serverHistory = undefined; send({ t: "history" }); }
+    const list = serverHistory?.length ? serverHistory : getHistory();
+    const top = rivals(5, list);
     const modeChip = (m) => `<span class="mode-chip ${m}">${m === "ranked" ? "Ranked" : m === "bot" ? "Bot" : "Friendly"}</span>`;
     body.innerHTML = html`<div class="online-grid">
       <div class="card pad" style="min-width:0">
@@ -1063,6 +1077,7 @@ export function renderOnline(root, signal, params = []) {
     addRecord(M.game, m.result);
     M.comeback = m.result === "win" && m.reason === "done" && (M.maxBehind > 0 || (M.game === "guess" && M.oppSolvedFirst));
     const sc = scoreLine(m);
+    serverHistory = null; // the server has a new match: fetch the list again next time
     addHistory({ game: M.game, mode: M.mode, result: m.result, opp: { name: M.opp.name, icon: M.opp.icon, color: M.opp.color, frame: M.opp.frame, style: M.opp.style, av: M.opp.av },
       oppCode: M.opp.code, score: sc.text, delta: m.rated ? m.delta : null });
     const rec = myRecord();
