@@ -1,6 +1,7 @@
 // The arcade's own icon set: basketball-themed line icons (24px grid, 2px rounded strokes, currentColor),
 // plus the arcade logo and club crests.
 import { clubColors } from "./clubs.js";
+import { teamCrest } from "../../data/team_crests.js";
 
 const P = {
   bug: '<rect x="7" y="7" width="10" height="13" rx="5"/><path d="M12 7v13M9 4.5 10.5 7M15 4.5 13.5 7M3.5 11H7M17 11h3.5M4 17l3-1.5M20 17l-3-1.5"/>',
@@ -98,6 +99,9 @@ export const crestsReady = import("../../crests/manifest.js").then((m) => { LOGO
 
 export function crestSvg(teamId, name, size = 44) {
   if (LOGOS[teamId]) return `<img class="crest crest-logo" src="${LOGOS[teamId]}" width="${size}" height="${size}" alt="" aria-hidden="true" decoding="async">`;
+  // the club's shield from data/team_crests.js (initials in club colours: npm run build:team-crests)
+  const shield = teamCrest(teamId);
+  if (shield) return shield.svg.replace(/ role="img" aria-label="[^"]*"/, "").replace("<svg ", `<svg class="crest" width="${size}" height="${size}" aria-hidden="true" focusable="false" `);
   const [c1, c2] = clubColors(teamId);
   const words = (name || teamId).replace(/[^A-Za-z' ]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !/^(bc|the)$/i.test(w));
   const ini = (words.length >= 2 ? words[0][0] + words[words.length - 1][0] : (words[0] || "?").slice(0, 2)).toUpperCase();
