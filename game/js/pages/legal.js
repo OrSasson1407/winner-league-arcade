@@ -206,6 +206,7 @@ export function renderLicenses(root, signal) {
         ["RTLCSS", L("right-to-left stylesheets", "גיליונות סגנון מימין לשמאל"), "MIT", "https://rtlcss.com"],
         ["Acorn", L("reading the code for translation", "קריאת הקוד לתרגום"), "MIT", "https://github.com/acornjs/acorn"],
         ["PGlite", L("database tests", "בדיקות מסד הנתונים"), "Apache 2.0 / PostgreSQL", "https://pglite.dev"],
+        ["flag-icons", L("national flags", "דגלי המדינות"), "MIT", "https://github.com/lipis/flag-icons"],
       ].map(row).join("")}</ul>`],
       ["info", L("Data", "נתונים"), L(
         `<p>Winner League statistics: the official Israeli Basketball Premier League site (bsl.org.il). EuroLeague names, clubs and seasons: EuroLeague records; its statistics in the arcade are placeholder data. National teams: the FIBA world ranking (1 September 2026) and FIBA's public roster reports for 2025 (names, positions, heights, birth dates, clubs); no national-team statistics are used. The arcade is not connected to FIBA. Club and competition names are trademarks of their owners.</p>`,

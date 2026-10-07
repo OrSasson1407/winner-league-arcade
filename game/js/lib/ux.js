@@ -70,6 +70,7 @@ export function crumbsFor(key, params = []) {
   if (key === "about") return [home, ["About", null]];
   if (key === "privacy") return [home, ["About", "#/about"], ["Privacy", null]];
   if (key === "shop") return [home, ["Shop", null]];
+  if (key === "nt" && params[0] === "player") return [home, ["National teams", "#/nt"], ["Player", null]];
   if (key === "nt") return params[0] ? [home, ["National teams", "#/nt"], [params[0].replace(/^national_/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()), null]] : [home, ["National teams", null]];
   if (key === "find") return [home, ["Players", "#/players"], ["Smart search", null]];
   if (key === "quick") return [home, ["Games", "#/games"], ["Quick game", null]];

@@ -12,24 +12,25 @@ const ageOf = (p) => (p?.birth_date ? Math.floor((Date.parse(NT_RANKING_DATE) - 
 const rankDate = new Date(NT_RANKING_DATE).toLocaleDateString(dateLocale(), { day: "numeric", month: "long", year: "numeric" });
 const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
-/** A national team's mark: its FIBA code on a simple badge (not an official logo or flag). */
+/** A national team's flag (flag-icons, MIT), with its FIBA code as the text alternative and fallback. */
 export function ntBadge(t, size = 36) {
-  let h = 0; for (const ch of t.code) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  return `<span class="nt-badge" data-no-tr style="--h:${h};width:${size}px;height:${size}px;font-size:${Math.round(size * 0.32)}px" aria-hidden="true">${esc(t.code)}</span>`;
+  const h = Math.round(size * 0.75), w = size;
+  if (t.iso) return `<span class="nt-flag" data-no-tr style="width:${w}px;height:${h}px" title="${esc(t.name)}"><img src="flags/${t.iso}.svg" alt="" width="${w}" height="${h}" loading="lazy" decoding="async"></span>`;
+  let hue = 0; for (const ch of t.code) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+  return `<span class="nt-badge" data-no-tr style="--h:${hue};width:${size}px;height:${size}px;font-size:${Math.round(size * 0.32)}px" aria-hidden="true">${esc(t.code)}</span>`;
 }
-const playerCell = (N, row) => {
-  const wl = wlOfNt(row.p.player_id), name = N.name(row.p.player_id);
-  return wl ? nameLink(wl, name) : esc(name);
-};
+const playerCell = (N, row) => `<a href="#/nt/player/${encodeURIComponent(row.p.player_id)}">${esc(N.name(row.p.player_id))}</a>`;
+const POS_NAMES = { PG: "Point guard", SG: "Shooting guard", SF: "Small forward", PF: "Power forward", C: "Center", G: "Guard", F: "Forward" };
 
 export function renderNational(root, signal, params = []) {
   // the heading is there from the start (the page title comes from it); the rosters arrive after
-  const pre = params[0] && ntTeam(params[0]);
+  const pre = params[0] && params[0] !== "player" && ntTeam(params[0]);
   root.innerHTML = `<div class="game-head"><div><h1>${esc(pre ? pre.name : "National teams")}</h1></div></div><div class="card pad"><p class="muted">Loading the national-team rosters…</p></div>`;
   root.setAttribute("aria-busy", "true");
   loadNational().then((N) => {
     if (signal.aborted) return;
     root.removeAttribute("aria-busy");
+    if (params[0] === "player") return drawPlayer(root, N, params[1]);
     const t = params[0] && ntTeam(params[0]);
     if (params[0] && !t) { root.innerHTML = `<div class="card pad empty-state"><b>National team not found</b><a class="btn" href="#/nt">All national teams</a></div>`; return; }
     t ? drawTeam(root, signal, N, t) : drawIndex(root, signal, N);
@@ -61,6 +62,8 @@ function drawIndex(root, signal, N) {
       <div class="row" style="flex-wrap:wrap;gap:10px;margin-bottom:10px">
         <div class="seg sm" id="nt-zone" role="radiogroup" aria-label="Zone">${[["all", "All"], ...Object.entries(ZONES)].map(([k, l]) => `<button role="radio" data-z="${k}">${l}</button>`).join("")}</div>
         <input class="input" id="nt-q" type="search" placeholder="Find a country…" aria-label="Find a country" style="max-width:220px">
+        <span class="spacer"></span>
+        <div class="nt-psearch"><input class="input" id="nt-p" type="search" placeholder="Find a national-team player…" aria-label="Find a national-team player" autocomplete="off"><ul class="clean nt-presults" id="nt-pres" hidden></ul></div>
       </div>
       <div class="grid-wrap"><table class="stat-table nt-table"><thead><tr><th>Rank</th><th>National team</th><th>Zone</th><th>Players</th><th>Avg height</th><th title="Players who play in Israel now or played in the Winner League">Winner League link</th></tr></thead><tbody id="nt-rows"></tbody></table></div>
     </div>
@@ -75,7 +78,44 @@ function drawIndex(root, signal, N) {
     <p class="muted nt-note">${esc(NT_NOTE)}</p>`;
   root.querySelector("#nt-zone").addEventListener("click", (e) => { const b = e.target.closest("[data-z]"); if (b) { zone = b.dataset.z; store.set("nt:zone", zone); draw(); } }, { signal });
   root.querySelector("#nt-q").addEventListener("input", (e) => { q = e.target.value.trim().toLowerCase(); draw(); }, { signal });
+  const pres = root.querySelector("#nt-pres");
+  root.querySelector("#nt-p").addEventListener("input", (e) => {
+    const found = e.target.value.trim().length >= 2 ? N.search(e.target.value) : [];
+    pres.hidden = !found.length && e.target.value.trim().length < 2;
+    pres.innerHTML = found.length ? found.map((p) => { const tm = ntTeam(N.rowsOf(p.player_id)[0]?.team_id); return `<li><a href="#/nt/player/${encodeURIComponent(p.player_id)}">${tm ? ntBadge(tm, 22) : ""}<span><b>${esc(N.name(p.player_id))}</b><small class="muted">${tm ? esc(tm.name) : ""}${p.primary_position ? ` · ${esc(p.primary_position)}` : ""}</small></span></a></li>`; }).join("")
+      : `<li class="muted">No player found.</li>`;
+  }, { signal });
   draw();
+}
+
+// ---------------------------------------------------------------- one national-team player
+function drawPlayer(root, N, pid) {
+  const p = N.players.get(pid);
+  if (!p) { root.innerHTML = `<div class="card pad empty-state"><b>Player not found</b><a class="btn" href="#/nt">All national teams</a></div>`; return; }
+  const rows = N.rowsOf(pid), t = ntTeam(rows[0]?.team_id), wl = wlOfNt(pid), club = splitClub(p.current_club);
+  const pos = rows[0]?.position || p.primary_position;
+  const cs = wl ? careerSummary(wl) : null;
+  const mates = t ? N.roster(t.id).filter((r) => r.p.player_id !== pid) : [];
+  const age = ageOf(p);
+  root.innerHTML = html`<div class="game-head"><div><a class="back" href="${t ? `#/nt/${t.id}` : "#/nt"}">← ${t ? esc(t.name) : "National teams"}</a>
+      <div class="nt-title">${t ? ntBadge(t, 52) : ""}<h1>${esc(N.name(pid))}</h1></div>
+      <p>${t ? `<a href="#/nt/${t.id}">${esc(t.name)}</a> · <span>#${t.rank} in the FIBA world ranking</span>` : ""}</p></div></div>
+    <div class="facts nt-facts">
+      <div class="fact"><small>Position</small><b>${esc(POS_NAMES[pos] || pos || "–")}</b></div>
+      <div class="fact"><small>Height</small><b>${p.height_cm ? fmtHeight(p.height_cm) : "–"}</b></div>
+      <div class="fact"><small>Born</small><b>${p.birth_date ? new Date(p.birth_date).toLocaleDateString(dateLocale(), { day: "numeric", month: "short", year: "numeric" }) : "–"}</b></div>
+      <div class="fact"><small>Age</small><b>${age ?? (p.age ?? "–")}</b></div>
+      <div class="fact"><small>Club</small><b>${esc(club.club || "–")}${club.country ? ` <small class="muted">${esc(club.country)}</small>` : ""}</b></div>
+      <div class="fact"><small>Nationality</small><b>${esc((p.nationalities || [p.nationality]).filter(Boolean).join(" / ") || "–")}</b></div>
+    </div>
+    ${wl ? html`<div class="card pad nt-isr-card"><h2 style="margin-top:0">${icon("shield")} In the Winner League</h2>
+      <p style="margin:0 0 10px"><span>${cs.seasonsPlayed === 1 ? "1 season" : `${cs.seasonsPlayed} seasons`}</span> · <span>${cs.totalGames} games</span> · <span>${cs.teams.map((x) => esc(teamName(x))).join(", ")}</span></p>
+      <button class="btn primary" data-profile="${wl}">${icon("user", { size: 15 })} Winner League profile</button></div>` : ""}
+    <div class="card pad"><h2 style="margin-top:0">${icon("calendar")} 2025 with ${t ? esc(t.name) : "the national team"}</h2>
+      <div class="grid-wrap"><table class="stat-table"><thead><tr><th>Competition</th><th>#</th><th>Position</th></tr></thead>
+        <tbody>${rows.map((r) => `<tr><td>${esc(r.competition)}</td><td>${r.jersey_number ?? "–"}</td><td>${esc(r.position || "–")}</td></tr>`).join("")}</tbody></table></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">${esc(NT_NOTE)}</p></div>
+    ${mates.length ? html`<div class="card pad"><h3>${icon("users")} Teammates</h3><div class="nt-mates">${mates.map((r) => `<a href="#/nt/player/${encodeURIComponent(r.p.player_id)}">${esc(N.name(r.p.player_id))}</a>`).join("")}</div></div>` : ""}`;
 }
 
 // ---------------------------------------------------------------- one national team
@@ -111,7 +151,7 @@ function drawTeam(root, signal, N, t) {
       <p class="muted" style="font-size:13px;margin-top:0">${comps.map(esc).join(" · ")}</p>
       <div class="grid-wrap"><table class="stat-table nt-roster"><thead><tr><th>#</th><th>Player</th><th>Pos</th><th>Height</th><th>Age</th><th>Club</th></tr></thead>
         <tbody>${roster.map((r) => { const c = splitClub(r.p.current_club);
-          return `<tr><td>${r.jersey ?? ""}</td><td>${playerCell(N, r)}${wlOfNt(r.p.player_id) ? ` <span class="pill nt-wl" title="Has Winner League seasons">WL</span>` : ""}</td><td>${esc(r.pos || "–")}</td><td>${r.p.height_cm ? fmtHeight(r.p.height_cm) : "–"}</td><td>${ageOf(r.p) ?? "–"}</td>
+          return `<tr><td>${r.jersey ?? ""}</td><td>${playerCell(N, r)}${wlOfNt(r.p.player_id) ? ` <button class="pill nt-wl" data-profile="${wlOfNt(r.p.player_id)}" title="Has Winner League seasons: open the league profile">WL</button>` : ""}</td><td>${esc(r.pos || "–")}</td><td>${r.p.height_cm ? fmtHeight(r.p.height_cm) : "–"}</td><td>${ageOf(r.p) ?? "–"}</td>
             <td>${esc(c.club || "–")}${c.country ? ` <small class="muted">${esc(c.country)}</small>` : ""}</td></tr>`; }).join("")}</tbody></table></div>
     </div>
     <div class="mc-grid">

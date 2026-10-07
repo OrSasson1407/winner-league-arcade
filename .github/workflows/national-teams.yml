@@ -1,0 +1,50 @@
+# Refreshes the national-team data from FIBA's public roster reports once a month (and on demand from the
+# Actions tab), then opens a pull request: nothing reaches the site until you review and merge it.
+# Needs (once): Settings > Actions > General > Workflow permissions > "Allow GitHub Actions to create and approve pull requests".
+# The FIBA ranking itself is a list inside game/tools/build_national_teams_2025_2027.mjs: update it by hand when FIBA
+# publishes a new ranking.
+name: Update national-team data
+on:
+  schedule:
+    - cron: "0 6 1 * *" # the 1st of every month, 06:00 UTC
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Rebuild the national-team data from FIBA's reports
+        run: npm run build:national-teams
+      - name: Rebuild the index (links to Winner League players) and the flags
+        run: node game/tools/prepare_national.mjs && npm run build:flags
+      - name: Sanity check
+        run: |
+          node --input-type=module -e '
+            const { nationalTeamsDatabase: N } = await import("./game/data/national_teams_db.js");
+            const { nationalIndex: I } = await import("./game/data/national_index.js");
+            console.log(`${N.teams.length} teams, ${N.players.length} players, ${N.player_seasons.length} roster rows, ${I.links.length} league links`);
+            if (N.teams.length < 60 || N.players.length < 500 || I.links.length < 20) { console.error("The new data looks too small: not opening a pull request."); process.exit(1); }'
+      - name: Check the app still works
+        run: npm test
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: data/national-teams
+          delete-branch: true
+          title: "Update national-team data"
+          commit-message: "Update national-team data from FIBA's roster reports"
+          body: |
+            Automatic monthly refresh of `game/data/national_teams_db.js`, the index and the flags.
+            Review the numbers in the workflow log ("Sanity check"), then merge to publish.
+          add-paths: |
+            game/data/national_teams_db.js
+            game/data/national_index.js
+            game/flags/**

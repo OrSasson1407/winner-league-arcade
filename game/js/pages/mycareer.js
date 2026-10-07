@@ -722,7 +722,9 @@ export async function renderMyCareer(root, signal) {
     d.dataset.locked = "1";
     d.innerHTML = html`<div class="profile mc-event nt-call"><small class="muted">NATIONAL TEAM · SUMMER ${call.year}</small>
       <h2 class="nt-title">${ntBadge(t, 44)} ${esc(t.name)} calls you up!</h2>
+      <p class="nt-event"><b>${esc(call.event.name)}</b></p>
       <p><span>The coach wants you for the summer games.</span> <span>Expected role:</span> <b>${roleName(call.role)}</b>. <span>${esc(t.name)} is #${t.rank} in the FIBA world ranking.</span></p>
+      ${call.newCaptain ? `<p class="mc-dev-flag good">${icon("star", { size: 16 })} <span>The coach is giving you the captain's armband.</span></p>` : call.captain ? `<p class="muted"><span>You'll lead the team as captain.</span></p>` : ""}
       ${mates.names.length ? html`<p class="muted" style="font-size:13px;margin-bottom:4px">${mates.source === "roster" ? "Your teammates (the real 2025 roster):" : mates.source === "league" ? `Your teammates: the best Israeli players in the league in ${esc(mates.season)}.` : "Your teammates: the best Israeli players in the latest league season in the data."}</p>
         <p class="nt-mates">${mates.names.map((n) => `<span>${esc(n)}</span>`).join("")}</p>` : ""}
       <p class="muted" style="font-size:12px"><span>Opponents come from the same FIBA zone, with strengths from the 2026 world ranking.</span>${call.year < 2025 ? ` <span>A simulation, not that year's real tournament.</span>` : ""}</p>
@@ -740,9 +742,11 @@ export async function renderMyCareer(root, signal) {
     d.innerHTML = html`<button class="icon-btn profile-close" aria-label="Close">${icon("close", { size: 18 })}</button>
       <div class="profile mc-review"><small class="muted">NATIONAL TEAM · SUMMER ${r.year}</small>
       <h2 class="nt-title">${ntBadge(t, 40)} ${esc(t.name)} · ${r.w}-${r.l}</h2>
-      <div class="grid-wrap"><table class="stat-table"><thead><tr><th>Opponent</th><th>Score</th><th>Min</th><th>Pts</th><th>Reb</th><th>Ast</th></tr></thead>
-        <tbody>${r.games.map((g) => { const o = ntTeam(g.opp); return `<tr><td><span class="nt-team">${ntBadge(o, 22)} ${esc(o.name)} <small class="muted">#${o.rank}</small></span></td><td><b class="${g.won ? "good-text" : "bad-text"}">${g.won ? "W" : "L"}</b> ${g.my}-${g.their}</td>${g.line.dnp ? `<td colspan="4" class="muted">Did not play</td>` : `<td>${g.line.min}</td><td>${g.line.pts}</td><td>${g.line.reb}</td><td>${g.line.ast}</td>`}</tr>`; }).join("")}</tbody></table></div>
-      <p class="muted" style="font-size:13px">Career with ${esc(t.name)}: ${C.national.caps} games, ${C.national.pts} points. Next summer's development gets a boost.</p>
+      <p class="nt-event"><b>${esc(r.event || "")}</b>${r.finish ? ` · <span class="${/Gold/.test(r.finish) ? "nt-gold" : /Silver/.test(r.finish) ? "nt-silver" : /Bronze/.test(r.finish) ? "nt-bronze" : ""}">${/medal/.test(r.finish) ? "🏅 " : ""}${esc(r.finish)}</span>` : ""}${r.captain ? ` · <span>Captain</span>` : ""}</p>
+      <div class="grid-wrap"><table class="stat-table"><thead><tr><th>Stage</th><th>Opponent</th><th>Score</th><th>Min</th><th>Pts</th><th>Reb</th><th>Ast</th></tr></thead>
+        <tbody>${r.games.map((g) => { const o = ntTeam(g.opp); return `<tr><td><small>${esc(g.stage || "")}</small></td><td><span class="nt-team">${ntBadge(o, 22)} ${esc(o.name)} <small class="muted">#${o.rank}</small></span></td><td><b class="${g.won ? "good-text" : "bad-text"}">${g.won ? "W" : "L"}</b> ${g.my}-${g.their}</td>${g.line.dnp ? `<td colspan="4" class="muted">Did not play</td>` : `<td>${g.line.min}</td><td>${g.line.pts}</td><td>${g.line.reb}</td><td>${g.line.ast}</td>`}</tr>`; }).join("")}</tbody></table></div>
+      <p class="muted" style="font-size:13px"><span>Career with ${esc(t.name)}: ${C.national.caps} games, ${C.national.pts} points.</span> <span>Next summer's development gets a boost.</span></p>
+      <p class="muted" style="font-size:12px">Results are a simulation: opponents' strengths come from the 2026 FIBA world ranking.</p>
       <button class="btn primary" id="nt-ok">${icon("check", { size: 15 })} Back to the off-season</button></div>`;
     const close = () => closeModal(d);
     d.querySelector(".profile-close").addEventListener("click", close);
@@ -884,7 +888,13 @@ export async function renderMyCareer(root, signal) {
       </div>
       ${C.national?.summers?.length ? (() => { const t = ntTeam(C.national.team); return html`<div class="card pad"><h3><a class="nt-team" href="#/nt/${t.id}">${ntBadge(t, 24)} ${esc(t.name)} national team</a></h3>
         <p style="margin:0 0 8px"><b>${C.national.caps}</b> games · <b>${C.national.pts}</b> points · ${C.national.reb} rebounds · ${C.national.ast} assists</p>
-        <ul class="clean mc-news">${C.national.summers.slice().reverse().map((s) => `<li>${s.declined ? `<span class="muted">Summer ${s.year}: turned down the call-up</span>` : `<b>Summer ${s.year}</b> <span class="muted">${s.w}-${s.l} · ${roleName(s.role)}</span>`}</li>`).join("")}</ul></div>`; })() : ""}
+        ${C.national.medals?.length || C.national.captain || C.national.best ? html`<div class="nt-honours">
+          ${(C.national.medals || []).map((m) => `<span class="pill nt-${m.medal.toLowerCase()}">🏅 <span>${esc(m.medal)}</span> · ${esc(m.event)}</span>`).join("")}
+          ${C.national.captain ? `<span class="pill">${icon("star", { size: 12 })} <span>Captain since ${C.national.captain}</span></span>` : ""}
+          ${(C.national.milestones || []).map((m) => `<span class="pill"><span>${m} caps</span></span>`).join("")}
+        </div>
+        ${C.national.best ? `<p class="muted" style="font-size:13px;margin:6px 0"><span>Best game: ${C.national.best.pts} points against ${esc(ntTeam(C.national.best.opp)?.name || "")}</span> <span>(${esc(C.national.best.event)})</span></p>` : ""}` : ""}
+        <ul class="clean mc-news">${C.national.summers.slice().reverse().map((s) => `<li>${s.declined ? `<span class="muted">Summer ${s.year}: turned down the call-up</span>` : `<b>${esc(s.event || `Summer ${s.year}`)}</b> <span class="muted">${s.w}-${s.l}${s.finish ? ` · ${esc(s.finish)}` : ""} · ${roleName(s.role)}${s.captain ? " · captain" : ""}</span>`}</li>`).join("")}</ul></div>`; })() : ""}
       <div class="card pad"><h3>${icon("heart")} Injury history</h3>
         ${(C.injuries || []).length ? `<ul class="clean mc-news">${C.injuries.slice().reverse().map((i) => `<li><b>${esc(i.name)}</b> <span class="muted">${i.season || ""} · age ${i.age} · ${i.games} games</span></li>`).join("")}</ul>` : `<p class="muted">Clean bill of health.</p>`}
         <p class="muted" style="font-size:13px;margin:8px 0 0">Career earnings (net, after expenses): ${money(C.money)}</p>
