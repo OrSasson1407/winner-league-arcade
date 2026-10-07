@@ -687,3 +687,20 @@ a.friend-row:hover b { color: var(--accent); }
 .mc-dev-flag.good { background: rgb(34 197 94 / .14); color: var(--good, #22c55e); }
 .mc-dev-flag.bad { background: rgb(239 68 68 / .14); color: var(--bad, #ef4444); }
 #mc-staff .mc-pick small + small { margin-top: 4px; }
+
+/* ---- My Career: training plan and signature moves ---- */
+.mc-presets { flex-wrap: wrap; margin-bottom: 8px; }
+.mc-plan { display: grid; gap: 6px; }
+.mc-plan-row { display: grid; grid-template-columns: minmax(150px, 1.3fr) 1fr 118px; gap: 10px; align-items: center; }
+.mc-plan-row > .mc-plan-v, .mc-plan-step { justify-self: center; }
+.mc-plan-row > span:first-child { display: flex; flex-direction: column; font-size: 13px; }
+.mc-plan-row.rest .progress i { background: var(--good, #22c55e); }
+.mc-plan-step { display: inline-flex; align-items: center; gap: 4px; }
+.mc-plan-step .btn.sm { min-width: 30px; padding: 4px 8px; }
+.mc-plan-v { min-width: 38px; text-align: center; font-family: var(--f-display); }
+.mc-moves { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.mc-move { display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2, rgb(255 255 255 / .03)); font-size: 13px; }
+.mc-move.ready { border-color: var(--accent, #ff7a1a); }
+.mc-move.on { border-color: var(--good, #22c55e); }
+.mc-move .btn { align-self: flex-start; }
+@media (max-width: 520px) { .mc-plan-row { grid-template-columns: 1fr 118px; } .mc-plan-row .progress { grid-column: 1 / -1; grid-row: 2; } }

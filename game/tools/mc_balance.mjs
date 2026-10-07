@@ -36,6 +36,12 @@ function career(i) {
     }
     if (E.SUMMER_CAMPS) E.summerCamp(C, Object.keys(E.SUMMER_CAMPS)[i % 4]);
     if (style === "good" && C.staff) for (const id of ["nutrition", "strength", "skills"]) if (!C.staff[id] && C.money >= E.STAFF[id].cost) C.staff[id] = true;
+    if (style === "good" && E.PLAN_PRESETS) {
+      C.plan = { ...E.PLAN_PRESETS[{ PG: "guard", SG: "shooter", SF: "balanced", PF: "big", C: "big" }[pos]].plan };
+      const camp = { PG: "playmaking", SG: "shooting", SF: "performance", PF: "bigs", C: "bigs" }[pos];
+      if (C.money >= E.ELITE_CAMPS[camp].cost * 2) E.eliteCamp(C, camp);
+      for (const id of Object.keys(E.MOVES)) E.learnMove(C, id);
+    }
     E.startSeason(C); C.phase = "season";
     let g = 0;
     while (C.cur.phase === "regular" && g++ < 80) {

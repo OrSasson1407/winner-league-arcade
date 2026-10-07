@@ -6,8 +6,9 @@ import { H, PLAYED_SEASONS, db, isPlayable, playersById, seededRng, teamName } f
 import { realTeamStrength } from "../games/draft_sim.js";
 import { elPlayerName, elReady, elRoster, elSeasonFor, elTeams, inElSeason } from "./europe.js";
 import { profile, profileFromSeason, simulateGame } from "../shared/gameSim.js";
-import { ensureDev, findMentor, gameTrainingPoints, newSeasonLog, seasonDevelopment, staffCost, trackGame, trainLimit } from "./develop.js";
-export { STAFF, TRAITS, bodyCap, ceilingOf, ensureDev, lifestyle, scoutRange, staffCost, trainLimit, workLabel } from "./develop.js";
+import { applyBody, bodyEffects, ensureDev, findMentor, gameTrainingPoints, moveEffects, newSeasonLog, planInjury, seasonDevelopment, staffCost, trackGame, trainLimit } from "./develop.js";
+export { BODY_PLANS, ELITE_CAMPS, MOVES, MOVE_COST, PLAN_AREAS, PLAN_MAX, PLAN_PRESETS, STAFF, TRAITS, bodyCap, bodyEffects, ceilingOf, eliteAllowed, eliteCamp, ensureDev, idealWeight,
+  learnMove, lifestyle, moveStatus, planInjury, planOf, planWear, scoutRange, staffCost, stepPlan, trainLimit, workLabel } from "./develop.js";
 
 // ---------------------------------------------------------------- player model
 export const ATTRS = {
@@ -60,6 +61,7 @@ export function effective(C) {
   if (h > 205) a.thr = clamp(a.thr - (h - 205) / 3, 20, 99);
   if (h < 190) a.pas = clamp(a.pas + (190 - h) / 4, 20, 99);
   if (h < 188) a.fin = clamp(a.fin - (188 - h) / 4, 20, 99);
+  if (C.weight != null) { const b = bodyEffects(C); for (const k of Object.keys(b)) a[k] = clamp(a[k] + b[k], 20, 99); } // the kilos you carry
   return a;
 }
 export function overall(C, pos = C.pos) {
@@ -285,18 +287,18 @@ function playScore(home, away, rnd, neutral = false) {
 
 /** Your player for the game engine: per-36 numbers from your attributes and badges (the same formulas as the season lines). */
 function meSnapshot(C, role, big, rnd) {
-  const a = effective(C);
+  const a = effective(C), mv = moveEffects(C);
   const offense = (a.sht + a.thr + a.fin) / 3 + (C.arch === "scorer" ? 4 : 0);
   const chem = (C.chem?.[C.cur?.team] || 0) / 100;
   const [lo, hi] = MIN_BY_ROLE[role];
   return {
     pos: C.pos, mpg: 36, rating: Math.round(bestOverall(C) + chem * 3),
     ppg: Math.max(3, 5 + (offense - 45) * 0.39 + badgeLv(C, "bucket") * 0.8 + badgeLv(C, "midrange") * 0.6 + badgeLv(C, "sniper") * 0.6),
-    rpg: Math.max(0.5, 2.5 + (a.reb - 35) * 0.17 + badgeLv(C, "glass") * 0.7), apg: Math.max(0.3, 0.8 + (a.pas - 40) * 0.12 + badgeLv(C, "general") * 0.5),
-    spg: Math.max(0.1, 0.4 + (a.def + a.ath - 80) * 0.012 + badgeLv(C, "lockdown") * 0.3), bpg: Math.max(0.05, 0.15 + (a.def - 50) * 0.018 + (C.height - 196) * 0.05 + badgeLv(C, "highflyer") * 0.25),
-    s3: clamp(0.12 + (a.thr - 50) / 120, 0.02, 0.55), p3: clamp(0.22 + (a.thr - 40) * 0.0032 + badgeLv(C, "sniper") * 0.015, 0.15, 0.48),
-    p2: clamp(0.4 + ((a.fin * 0.6 + a.sht * 0.4) - 50) * 0.0035, 0.32, 0.68), ft: clamp(0.55 + a.sht * 0.0035, 0.45, 0.92) * 100,
-    clutch: big || badgeLv(C, "clutch") ? badgeLv(C, "clutch") + (big ? 0.5 : 0) : 0, foulRisk: 1 + (a.def >= 75 ? 0.15 : 0) + (FAM[C.pos] === "B" ? 0.2 : 0) - (a.iq - 60) * 0.008,
+    rpg: Math.max(0.5, 2.5 + (a.reb - 35) * 0.17 + badgeLv(C, "glass") * 0.7 + mv.rpg), apg: Math.max(0.3, 0.8 + (a.pas - 40) * 0.12 + badgeLv(C, "general") * 0.5) * mv.apg,
+    spg: Math.max(0.1, 0.4 + (a.def + a.ath - 80) * 0.012 + badgeLv(C, "lockdown") * 0.3 + mv.spg), bpg: Math.max(0.05, 0.15 + (a.def - 50) * 0.018 + (C.height - 196) * 0.05 + badgeLv(C, "highflyer") * 0.25 + mv.bpg),
+    s3: clamp((0.12 + (a.thr - 50) / 120) * mv.s3, 0.02, 0.58), p3: clamp(0.22 + (a.thr - 40) * 0.0032 + badgeLv(C, "sniper") * 0.015 + mv.p3, 0.15, 0.5),
+    p2: clamp(0.4 + ((a.fin * 0.6 + a.sht * 0.4) - 50) * 0.0035 + mv.p2, 0.32, 0.7), ft: clamp(0.55 + a.sht * 0.0035, 0.45, 0.92) * 100,
+    clutch: big || badgeLv(C, "clutch") || mv.clutch ? badgeLv(C, "clutch") + (big ? 0.5 : 0) + mv.clutch : 0, moves: mv.names, foulRisk: 1 + (a.def >= 75 ? 0.15 : 0) + (FAM[C.pos] === "B" ? 0.2 : 0) - (a.iq - 60) * 0.008,
     energy: C.fatigue > 0 ? 0.85 : 1, target: Math.round(lo + rnd() * (hi - lo)),
   };
 }
@@ -324,19 +326,19 @@ export function simFor(C, S, g, events = true) {
   return simulateGame(h, a, { rnd: seededRng("mc-g-" + g.seed), neutral: !!g.neutral, events });
 }
 /** Play one of your games through the game engine: your line comes from the game itself. */
-export function playGame(C, S, oppId, home, rnd, { neutral = false, big = false, label = "", teams = S.teams, eu = false } = {}) {
+export function playGame(C, S, oppId, home, rnd, { neutral = false, big = false, label = "", teams = S.teams, eu = false, rest = false } = {}) {
   const role = C.cur.role;
   const meT = teams.find((t) => t.id === C.cur.team), opp = teams.find((t) => t.id === oppId);
   // a bench player sometimes doesn't get off the bench
   const dnp = !C.injury && role === "bench" && rnd() < 0.25 + Math.max(0, (35 - C.trust) / 100);
   const g = { opp: oppId, home, neutral, label, seed: Math.floor(rnd() * 1e9), sim: 1, st: [meT.strength, opp.strength - badgeLv(C, "lockdown") * 0.2],
-    me: C.injury || dnp ? null : meSnapshot(C, role, big, rnd), ...(eu ? { eu: true } : {}) };
+    me: C.injury || dnp || rest ? null : meSnapshot(C, role, big, rnd), ...(eu ? { eu: true } : {}) };
   if (g.me && C.fatigue > 0) C.fatigue--;
   const r = simFor(C, S, g, false);
   const mySide = home ? 0 : 1;
   const my = r.score[mySide], their = r.score[1 - mySide];
   const b = r.box[mySide].find((l) => l.id === ME);
-  const line = !g.me ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pf: 0, tov: 0, dnp: true, ...(C.injury ? { injured: true } : {}) }
+  const line = !g.me ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pf: 0, tov: 0, dnp: true, ...(C.injury ? { injured: true } : rest ? { rested: true } : {}) }
     : b.min === 0 ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pf: 0, tov: 0, dnp: true }
     : { min: b.min, pts: b.pts, reb: b.reb, ast: b.ast, stl: b.stl, blk: b.blk, fgm: b.fgm, fga: b.fga, tpm: b.tpm, tpa: b.tpa, ftm: b.ftm, fta: b.fta, pf: Math.min(5, b.pf), tov: b.tov, pm: b.pm, fouledOut: b.pf >= 5 };
   return { ...g, my, their, won: my > their, line, q: [r.quarters[mySide], r.quarters[1 - mySide]], ot: r.ot };
@@ -391,6 +393,7 @@ function roundRobin(ids, rnd) {
 /** Start a pro season with your current club. */
 export function startSeason(C) {
   ensureDev(C);
+  applyBody(C);
   const label = seasonLabel(C.debut, C.seasonNo);
   const rnd = seededRng(`mc-${C.seedBase}-${label}`);
   const team = C.loan?.team || C.contract.team;
@@ -485,15 +488,17 @@ function euroFinalFour(C, rnd, out) {
 
 const CUP_AT = (n) => [Math.floor(n * 0.3), Math.floor(n * 0.55), Math.floor(n * 0.8)];
 
-/** Advance one round of the regular season. Returns what happened (your game, cup game, all-star…). */
-export function playRound(C) {
+/** Can you sit out your next league game? (starters and rotation players, healthy, regular season) */
+export const canRest = (C) => !!C.cur && C.cur.phase === "regular" && !C.injury && C.cur.role !== "bench";
+/** Advance one round of the regular season. Returns what happened (your game, cup game, all-star…). rest: you sit this one out. */
+export function playRound(C, { rest = false } = {}) {
   const S = C.cur;
   const rnd = seededRng(`mc-${C.seedBase}-${S.label}-r${S.round}`);
   const rounds = S.schedule;
   const out = { games: [] };
   for (const [h, a] of rounds[S.round]) {
     if (h === S.team || a === S.team) {
-      const g = playGame(C, S, h === S.team ? a : h, h === S.team, rnd, { label: `Round ${S.round + 1}` });
+      const g = playGame(C, S, h === S.team ? a : h, h === S.team, rnd, { label: `Round ${S.round + 1}`, rest: rest && canRest(C) });
       S.games.push({ ...g, round: S.round });
       out.games.push(g);
       record(S, h, a, g.home ? g.my : g.their, g.home ? g.their : g.my);
@@ -564,6 +569,11 @@ function afterGame(C, g) {
     trackGame(C, l, { injured: true });
     return;
   }
+  if (l.rested) { // load management: fresher legs, but the coach and the fans notice
+    const n = (C.cur.rests = (C.cur.rests || 0) + 1);
+    C.trust = clamp(C.trust - 1.5 * n, 0, 100); C.pop = clamp(C.pop - 0.3, 0, 100); C.fresh = 3;
+    trackGame(C, l); return;
+  }
   if (l.dnp) { C.trust = clamp(C.trust - 0.5, 0, 100); trackGame(C, l); return; }
   C.chem[C.cur.team] = clamp((C.chem[C.cur.team] || 0) + (l.min / 36) * 1.1, 0, 100);
   const gs = gameScore(l);
@@ -585,7 +595,9 @@ function afterGame(C, g) {
   if (dd >= 3 && !m.td) m.td = C.cur.label;
   if (C.totals.pts >= 1000 && !m.k1) m.k1 = C.cur.label;
   // injuries: more likely with heavy minutes, age, a recent rushed comeback; less with Iron man
-  let risk = (0.017 + (C.injuryRisk || 0) + Math.max(0, C.age - 30) * 0.003 - badgeLv(C, "ironman") * 0.006 + (l.min > 34 ? 0.01 : 0)) * (C.staff?.nutrition ? 0.8 : 1);
+  const heavy = (C.weight ?? 0) - Math.round(23.3 * (C.height / 100) ** 2) > 6 && C.age >= 30;
+  let risk = (0.017 + (C.injuryRisk || 0) + Math.max(0, C.age - 30) * 0.003 - badgeLv(C, "ironman") * 0.006 + (l.min > 34 ? 0.01 : 0)) * (C.staff?.nutrition ? 0.8 : 1) * planInjury(C) * (heavy ? 1.1 : 1);
+  if (C.fresh > 0) { risk *= 0.6; C.fresh--; } // rested legs
   if (C.reinjury) { risk *= 3; if (--C.reinjury.games <= 0) C.reinjury = null; }
   C.injuryRisk = 0;
   if (Math.random() < risk) injure(C, C.reinjury && Math.random() < 0.5 ? C.reinjury.name : null);

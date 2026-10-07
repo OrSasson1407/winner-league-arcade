@@ -42,7 +42,7 @@ export function profile(p) {
   const fgAll = clamp((p.fg ?? 44) / 100, 0.3, 0.68);
   const p2 = p.p2 ?? clamp((fgAll - s3 * p3) / (1 - s3), 0.38, 0.66);
   return {
-    id: p.id, name: p.name, pos: p.pos, fam, rating: p.rating ?? 75, mpg, me: !!p.me, clutch: p.clutch || 0, foulRisk: p.foulRisk ?? 1, energy0: p.energy ?? 1,
+    id: p.id, name: p.name, pos: p.pos, fam, rating: p.rating ?? 75, mpg, me: !!p.me, clutch: p.clutch || 0, foulRisk: p.foulRisk ?? 1, energy0: p.energy ?? 1, moves: p.moves || null,
     use: Math.max(0.04, (p.ppg || 1) / mpg), reb: Math.max(0.02, (p.rpg || 0.5) / mpg), ast: Math.max(0.01, (p.apg || 0.2) / mpg),
     stl: Math.max(0.004, (p.spg || 0.1) / mpg), blk: Math.max(0.002, (p.bpg || 0.05) / mpg),
     s3, p3, p2, ft: clamp((p.ft ?? 70) / 100, 0.45, 0.93), ftRate: { G: 0.24, W: 0.27, B: 0.34 }[fam], rim: { G: 0.38, W: 0.5, B: 0.72 }[fam],
@@ -217,7 +217,7 @@ function possession(off, def, side, ctx) {
       const thief = weighted(def.on, (p) => p.stl, rnd);
       thief.box.stl++;
       def.fastbreak = rnd() < 0.6;
-      say({ type: "tov", side, pid: loser.id, by: thief.id, text: `${thief.name} steals it from ${loser.name}` });
+      say({ type: "tov", side, pid: loser.id, by: thief.id, text: thief.moves?.steal && thief.box.stl % 2 ? `${thief.name} picks ${loser.name}'s pocket` : `${thief.name} steals it from ${loser.name}` });
     } else say({ type: "tov", side, pid: loser.id, text: `Turnover by ${loser.name}` });
     return { pts: 0, keep: false, dead: !stolen };
   }
@@ -283,8 +283,13 @@ function possession(off, def, side, ctx) {
     const assisted = rnd() < (three ? 0.86 : fast ? 0.6 : 0.5);
     const passer = assisted ? weighted(mates, (q) => q.ast, rnd) : null;
     if (passer) passer.box.ast++;
-    say({ type: three ? "3" : "2", side, pid: shooter.id, ast: passer?.id, def: guard.id, pts, made: true, fast,
-      text: `${shooter.name} ${three ? "hits a three" : fast ? "finishes the fast break" : rim ? (rnd() < 0.3 ? "dunks it" : "scores at the rim") : "hits the jumper"}${passer ? ` (assist ${passer.name})` : ""}`, ...where });
+    // a signature move (your created player): named in every other make, without touching the dice
+    const mv = shooter.moves && shooter.box.fgm % 2 ? (three ? shooter.moves.three : !fast && rim ? shooter.moves.rim : !three && !rim ? shooter.moves.mid : null) : null;
+    const MOVE_TEXT = { stepback: "hits a step-back three", eurostep: "euro-steps in for the layup", postup: "scores with a post hook", floater: "drops in a floater", fadeaway: "hits the fadeaway" };
+    const dunk = !three && !fast && rim ? rnd() < 0.3 : false; // rolled as always, so games without moves play out exactly as before
+    const how = mv ? MOVE_TEXT[mv] : three ? "hits a three" : fast ? "finishes the fast break" : rim ? (dunk ? "dunks it" : "scores at the rim") : "hits the jumper";
+    say({ type: three ? "3" : "2", side, pid: shooter.id, ast: passer?.id, def: guard.id, pts, made: true, fast, move: mv || undefined,
+      text: `${shooter.name} ${how}${passer ? (passer.moves?.pass && passer.box.ast % 3 === 0 ? ` (no-look assist ${passer.name})` : ` (assist ${passer.name})`) : ""}`, ...where });
     return { pts, keep: false, dead: true };
   }
   if (blocker) blocker.box.blk++;
@@ -294,7 +299,7 @@ function possession(off, def, side, ctx) {
   const reb = oReb ? weighted(off.on, (q) => q.reb * (q === shooter ? 0.7 : 1), rnd) : weighted(def.on, (q) => q.reb, rnd);
   reb.box.reb++; if (oReb) reb.box.oreb++; else reb.box.dreb++;
   say({ type: "miss", side, pid: shooter.id, def: guard.id, made: false, blk: blocker?.id, reb: reb.id, oreb: oReb,
-    text: `${shooter.name} misses${three ? " from deep" : ""}${blocker ? ` (blocked by ${blocker.name})` : ""}, ${oReb ? `offensive rebound ${reb.name}` : `rebound ${reb.name}`}`, ...where });
+    text: `${shooter.name} misses${three ? " from deep" : ""}${blocker ? (blocker.moves?.block && blocker.box.blk % 2 ? ` (chase-down block by ${blocker.name})` : ` (blocked by ${blocker.name})`) : ""}, ${oReb ? `offensive rebound ${reb.name}` : `rebound ${reb.name}`}`, ...where });
   if (!oReb && rnd() < 0.18) def.fastbreak = true;
   return { pts: 0, keep: oReb, dead: false };
 }

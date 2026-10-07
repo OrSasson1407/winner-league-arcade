@@ -192,7 +192,7 @@ export async function renderMyCareer(root, signal) {
       <svg class="hub-court" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><circle cx="200" cy="100" r="34"/><path d="M200 0v200M0 40h70v120H0M400 40h-70v120h70M70 70a30 30 0 0 1 0 60M330 70a30 30 0 0 0 0 60"/></svg>
       <div class="hub-main">
         <div class="hub-face">${face(104)}</div>
-        <div class="hub-id"><small>${esc(C.pos)}/${esc(C.pos2)} · ${fmtHeight(C.height)} · age ${C.age}${C.label ? ` · ${C.label}${S?.simulated ? " (simulated)" : ""}` : ""}</small>
+        <div class="hub-id"><small>${esc(C.pos)}/${esc(C.pos2)} · ${fmtHeight(C.height)}${C.weight ? ` · ${Math.round(C.weight)} kg` : ""} · age ${C.age}${C.label ? ` · ${C.label}${S?.simulated ? " (simulated)" : ""}` : ""}</small>
           <h2 class="mc-name">${esc(C.name)}</h2>
           <span class="mc-club">${crestSvg(team, teamName(team), 24)} ${esc(teamName(team))}${C.loan ? " (on loan)" : C.phase === "academy" ? " academy" : ""}${S ? ` · ${roleName(S.role)}` : ""} <span class="pill mc-nat">${C.nat === "Israel" ? "Israeli" : "Foreign player"}</span></span></div>
         <div class="hub-ovr"><small>OVERALL</small><b class="led">${ov}</b></div>
@@ -300,8 +300,41 @@ export async function renderMyCareer(root, signal) {
         return `<div class="mc-attr"><span>${l}</span><div class="progress mc-pot" title="Potential ${pot}"><s style="inset-inline-start:${lo}%;width:${Math.max(1, hi - lo)}%"></s><i style="width:${v}%"></i></div><b>${Math.floor(v)}<small class="muted mc-potv">/${pot}</small></b>
           <button class="btn" data-train="${k}" ${C.tp < cost || capped ? "disabled" : ""} aria-label="Train ${l} (${cost} TP), potential ${pot}">+1 <small>${capped ? "max" : `${cost} TP`}</small></button></div>`;
       }).join("")}</div>
+      ${compact ? "" : planHtml()}
       ${compact ? "" : html`<h3 style="margin-top:14px">${icon("medal")} Badges</h3>${badgeMedals(C, { fresh: freshBadge, cost: E.badgeCost })}`}
+      ${compact ? "" : movesHtml()}
     </div>`;
+  }
+  /** The practice week: four areas and rest, in steps of 5%. */
+  function planHtml() {
+    const P = E.planOf(C);
+    const inj = Math.round((E.planInjury(C) - 1) * 100), wear = Math.round((E.planWear(C) - 1) * 100);
+    return html`<h3 style="margin-top:14px">${icon("calendar")} Training plan</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 8px">How your practice week is split. More time on an area makes its skills grow faster over the summer; rest protects your body.</p>
+      <div class="seg sm mc-presets" id="mc-presets" role="group" aria-label="Plan presets">${Object.entries(E.PLAN_PRESETS).map(([k, pr]) => `<button data-preset="${k}" class="${JSON.stringify(pr.plan) === JSON.stringify(P) ? "on" : ""}">${pr.name}</button>`).join("")}</div>
+      <div class="mc-plan">${Object.entries(E.PLAN_AREAS).map(([k, a]) => html`<div class="mc-plan-row ${k === "rest" ? "rest" : ""}">
+        <span><b>${a.name}</b>${a.attrs.length ? `<small class="muted">${a.attrs.map((x) => `<span>${E.ATTRS[x]}</span>`).join(" · ")}</small>` : `<small class="muted">Takes whatever is left</small>`}</span>
+        <div class="progress"><i style="width:${(P[k] / E.PLAN_MAX) * 100}%"></i></div>
+        ${k === "rest" ? `<b class="mc-plan-v">${P[k]}%</b>` : `<span class="mc-plan-step"><button class="btn sm" data-plan="${k}" data-d="-1" ${P[k] <= 0 || P.rest >= E.PLAN_MAX ? "disabled" : ""} aria-label="Less ${a.name}">−</button><b class="mc-plan-v">${P[k]}%</b><button class="btn sm" data-plan="${k}" data-d="1" ${P[k] >= E.PLAN_MAX || P.rest <= 0 ? "disabled" : ""} aria-label="More ${a.name}">+</button></span>`}
+      </div>`).join("")}</div>
+      <p class="muted" style="font-size:12px;margin:6px 0 0"><span>Injury risk ${inj > 0 ? "+" : inj < 0 ? "−" : "±"}${Math.abs(inj)}%</span> · <span>Wear on your legs ${wear > 0 ? "+" : wear < 0 ? "−" : "±"}${Math.abs(wear)}%</span></p>`;
+  }
+  /** Signature moves: earned on the court, learned with training points. */
+  function movesHtml() {
+    return html`<h3 style="margin-top:14px">${icon("star")} Signature moves</h3>
+      <p class="muted" style="font-size:13px;margin:0 0 8px">Unlocked by what you do on the court and your skills. Each one changes your game a little, and the commentators call it by name.</p>
+      <div class="mc-moves">${Object.entries(E.MOVES).map(([id, m]) => {
+        const st = E.moveStatus(C, id);
+        return `<div class="mc-move ${st.learned ? "on" : st.ok ? "ready" : ""}"><b>${st.learned ? icon("check", { size: 14 }) : ""} ${esc(m.name)}</b><small class="muted">${esc(m.desc)}</small>
+          ${st.learned ? `<small class="good-text">Learned</small>` : st.ok ? `<button class="btn sm primary" data-move="${id}" ${C.tp < E.MOVE_COST ? "disabled" : ""}>Learn · ${E.MOVE_COST} TP</button>` : `<small class="muted">${st.missing.map((x) => `<span>${esc(x)}</span>`).join(" · ")}</small>`}</div>`;
+      }).join("")}</div>`;
+  }
+  /** What the summer's body plan will do (shown before the season starts). */
+  function bodyLine() {
+    const kg = E.BODY_PLANS[C.bodyPlan || "keep"].kg, next = { ...C, weight: (C.weight ?? E.idealWeight(C)) + kg };
+    const b = E.bodyEffects(next), f = (v) => `${v >= 0 ? "+" : "−"}${Math.abs(Math.round(v * 10) / 10)}`;
+    const d = Math.round(next.weight - E.idealWeight(C));
+    return d === 0 ? "At your usual weight: no effect." : `At ${d > 0 ? "+" : "−"}${Math.abs(d)} kg: rebounding ${f(b.reb)}, finishing ${f(b.fin)}, athleticism ${f(b.ath)}.${d > 6 ? " <span>Heavy after 30: a few more injuries.</span>" : ""}`;
   }
   /** What the scouts and the staff know about you: development type, work ethic, the miles on your legs. */
   function talentHtml() {
@@ -345,7 +378,18 @@ export async function renderMyCareer(root, signal) {
     openModal(d);
   }
   function bindTrain(redraw) {
+    const keep = (sel) => { const y = scrollY; redraw(); scrollTo(0, y); if (sel) root.querySelector(sel)?.focus(); };
     root.querySelectorAll("[data-train]").forEach((b) => b.addEventListener("click", () => { if (E.train(C, b.dataset.train)) { save(); sound.play("tick"); const y = scrollY; redraw(); scrollTo(0, y); } }, { signal }));
+    root.querySelectorAll("[data-plan]").forEach((b) => b.addEventListener("click", () => {
+      if (E.stepPlan(C, b.dataset.plan, Number(b.dataset.d))) { save(); sound.play("tick"); keep(`[data-plan="${b.dataset.plan}"][data-d="${b.dataset.d}"]`); }
+    }, { signal }));
+    root.querySelector("#mc-presets")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-preset]"); if (!b) return;
+      C.plan = { ...E.PLAN_PRESETS[b.dataset.preset].plan }; save(); sound.play("tick"); keep(`[data-preset="${b.dataset.preset}"]`);
+    }, { signal });
+    root.querySelectorAll("[data-move]").forEach((b) => b.addEventListener("click", () => {
+      if (E.learnMove(C, b.dataset.move)) { save(); sound.play("win"); toast(`New move: ${E.MOVES[b.dataset.move].name}`); emit("mc:move", { id: b.dataset.move }); keep(); }
+    }, { signal }));
     root.querySelectorAll("[data-badge]").forEach((b) => b.addEventListener("click", () => {
       if (E.buyBadge(C, b.dataset.badge)) { save(); sound.play("win"); toast(`Badge unlocked: ${E.BADGES[b.dataset.badge].name}`); emit("mc:badge", { id: b.dataset.badge }); freshBadge = b.dataset.badge; const y = scrollY; redraw(); scrollTo(0, y); freshBadge = null; }
     }, { signal }));
@@ -421,6 +465,13 @@ export async function renderMyCareer(root, signal) {
           ${C.injury ? `<p class="bad-text">${icon("heart", { size: 15 })} Still recovering from a ${esc(C.injury.name.toLowerCase())}: about ${C.injury.games} more games.</p>` : ""}
           ${C.lastDev ? `<button class="btn ghost" id="mc-devrep">${icon("chart", { size: 15 })} Last summer's development report</button>` : ""}
           <div class="field"><label>Summer camp ${view?.camp ? `<span class="muted">(done)</span>` : ""}</label><div class="mc-cards two" id="mc-camp">${Object.entries(E.SUMMER_CAMPS).map(([k, c]) => `<button class="mc-pick" data-v="${k}" ${view?.camp ? "disabled" : ""}><b>${c.name}</b><small>${c.attrs.map((a) => `<span>${E.ATTRS[a]}</span>`).join(" & ")} <span>+1 to +3, up to your potential</span></small>${C.staff?.skills ? `<small>+1 more with your skills coach</small>` : ""}</button>`).join("")}</div></div>
+          ${E.eliteAllowed(C) || C.eliteSeason === C.seasonNo ? html`<div class="field"><label>Elite camp abroad <small class="muted">(once a summer · stretches your ceiling, can teach a move)</small></label>
+            <div class="mc-cards" id="mc-elite">${Object.entries(E.ELITE_CAMPS).map(([k, c]) => { const can = E.eliteAllowed(C) && C.money >= c.cost;
+              return `<button class="mc-pick" data-v="${k}" ${can ? "" : "disabled"}><b>${esc(c.name)}</b><small>${esc(c.desc)}</small><small>${c.attrs.map((a) => `<span>${E.ATTRS[a]}</span>`).join(" & ")} <span>+2 to +4, ceiling +2</span></small><small><span>Move: ${esc(E.MOVES[c.move].name)}</span></small><small><b>${money(c.cost)}</b>${C.eliteSeason === C.seasonNo ? "" : can ? "" : ` · <span>Not enough savings</span>`}</small></button>`; }).join("")}</div>
+            ${C.eliteSeason === C.seasonNo ? `<small class="muted">Done for this summer.</small>` : ""}</div>` : ""}
+          <div class="field"><label>Body this summer <small class="muted">(now ${Math.round(C.weight ?? E.idealWeight(C))} kg · usual for your height ${E.idealWeight(C)} kg)</small></label>
+            <div class="seg sm" id="mc-body" role="radiogroup">${Object.entries(E.BODY_PLANS).map(([k, b]) => `<button role="radio" data-v="${k}" aria-checked="${(C.bodyPlan || "keep") === k}" class="${(C.bodyPlan || "keep") === k ? "on" : ""}">${b.name}${b.kg ? ` (${b.kg > 0 ? "+" : "−"}${Math.abs(b.kg)} kg)` : ""}</button>`).join("")}</div>
+            <small class="muted">${bodyLine()}</small></div>
           <div class="field"><label>Your staff <small class="muted">(paid from your savings, ${money(C.money)} now, at the end of each season)</small></label>
             <div class="mc-cards" id="mc-staff">${Object.entries(E.STAFF).map(([k, st]) => { const on = !!C.staff?.[k], can = on || C.money >= st.cost;
               return `<button class="mc-pick ${on ? "on" : ""}" data-v="${k}" aria-pressed="${on}" ${can ? "" : "disabled"}><b>${icon(k === "nutrition" ? "heart" : k === "strength" ? "bolt" : "whistle", { size: 15 })} ${st.name}</b><small>${st.desc}</small><small><b>${money(st.cost)}</b> a season</small>${on ? `<small>Hired (tap to let go)</small>` : can ? "" : `<small>Not enough savings</small>`}</button>`; }).join("")}</div></div>
@@ -449,6 +500,18 @@ export async function renderMyCareer(root, signal) {
       root.querySelector(`#mc-staff [data-v="${b.dataset.v}"]`)?.focus();
     }, { signal });
     root.querySelector("#mc-devrep")?.addEventListener("click", () => showDevReport(C.lastDev), { signal });
+    root.querySelector("#mc-elite")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-v]"); if (!b || b.disabled) return;
+      const r = E.eliteCamp(C, b.dataset.v); if (!r) return;
+      save(); sound.play("win");
+      toast([...Object.entries(r.gains).map(([k, v]) => `${E.ATTRS[k]} +${v}`), r.move ? `New move: ${E.MOVES[r.move].name}` : null].filter(Boolean).join(" · "));
+      const y = scrollY; drawOffseason(); scrollTo(0, y);
+    }, { signal });
+    root.querySelector("#mc-body")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-v]"); if (!b) return;
+      C.bodyPlan = b.dataset.v; save(); sound.play("tick");
+      const y = scrollY; drawOffseason(); scrollTo(0, y); root.querySelector(`#mc-body [data-v="${b.dataset.v}"]`)?.focus();
+    }, { signal });
     root.querySelector("#mc-loan-go")?.addEventListener("click", () => {
       const t = root.querySelector("#mc-loan").value;
       C.loan = { team: t, season: nextLabel }; save(); emit("mc:loan", {});
@@ -490,7 +553,7 @@ export async function renderMyCareer(root, signal) {
       </div>
       <div class="mc-led-q">${g.q[0].map((_, i) => `<span>${i < 4 ? `Q${i + 1}` : `OT${i - 3 > 1 ? i - 3 : ""}`} <b>${g.q[0][i]}-${g.q[1][i]}</b></span>`).join("")}</div>
       ${momentumHtml(withTimeline(g), teamName(me), teamName(opp))}
-      <div class="mc-line">${L.injured ? "Out injured" : L.dnp ? "Did not play (coach's decision)" : `<b>${esc(C.name)}</b> ${L.min} min · <b>${L.pts} pts</b> · ${L.reb} reb · ${L.ast} ast · ${L.stl} stl · ${L.blk} blk · ${L.fgm}/${L.fga} FG · ${L.tpm}/${L.tpa} 3P${L.tov != null ? ` · ${L.tov} TO` : ""} · ${L.pf ?? 0} PF${L.pm != null ? ` · ${L.pm > 0 ? "+" : ""}${L.pm}` : ""}${L.fouledOut ? " · <b>fouled out</b>" : ""}`}</div>
+      <div class="mc-line">${L.injured ? "Out injured" : L.rested ? "Rested (load management)" : L.dnp ? "Did not play (coach's decision)" : `<b>${esc(C.name)}</b> ${L.min} min · <b>${L.pts} pts</b> · ${L.reb} reb · ${L.ast} ast · ${L.stl} stl · ${L.blk} blk · ${L.fgm}/${L.fga} FG · ${L.tpm}/${L.tpa} 3P${L.tov != null ? ` · ${L.tov} TO` : ""} · ${L.pf ?? 0} PF${L.pm != null ? ` · ${L.pm > 0 ? "+" : ""}${L.pm}` : ""}${L.fouledOut ? " · <b>fouled out</b>" : ""}`}</div>
       <button class="btn" id="mc-box">${icon("chart", { size: 15 })} Box score</button>
     </div>`;
   }
@@ -652,7 +715,7 @@ export async function renderMyCareer(root, signal) {
             ${nx && !nx.bye ? html`<small class="muted">${esc(nx.label)}</small>
               <div class="mc-vs">${crestSvg(S.team, teamName(S.team), 40)}<b>${esc(teamName(S.team))}</b><span class="muted">${nx.home === false ? "at" : "vs"}</span><b>${esc(teamName(nx.opp))}</b>${crestSvg(nx.opp, teamName(nx.opp), 40)}</div>` : nx?.bye ? `<p class="muted">${esc(nx.label)}</p>` : ""}
             <div class="row" style="justify-content:center;flex-wrap:wrap">
-              ${S.phase === "regular" ? `<button class="btn primary big-btn" id="mc-play">${icon("play", { size: 16 })} ${nx?.bye ? "Next round" : "Play the game"}</button><button class="btn" id="mc-sim">${icon("skip", { size: 15 })} Simulate to the playoffs</button>` : ""}
+              ${S.phase === "regular" ? `<button class="btn primary big-btn" id="mc-play">${icon("play", { size: 16 })} ${nx?.bye ? "Next round" : "Play the game"}</button>${!nx?.bye && E.canRest(C) ? `<button class="btn" id="mc-rest" title="Sit this game out: fresher legs and fewer injuries for a few games, but the coach notices (more each time)">${icon("pause", { size: 15 })} Rest this game${C.cur.rests ? ` <small>(${C.cur.rests} so far)</small>` : ""}</button>` : ""}<button class="btn" id="mc-sim">${icon("skip", { size: 15 })} Simulate to the playoffs</button>` : ""}
               ${S.phase === "playoffs" && !out ? `<button class="btn primary big-btn" id="mc-po">${icon("play", { size: 16 })} Play playoff game</button>` : ""}
               ${!out && !C.injury ? `<label class="mc-live-tg"><input type="checkbox" id="mc-live" ${liveOn() ? "checked" : ""}> Watch games live</label>` : ""}
               ${S.phase === "playoffs" && out ? `<p class="muted">${S.playoffs.outAt === -1 ? "You missed the playoffs." : "You're out of the playoffs."}</p><button class="btn primary" id="mc-finish">${icon("skip", { size: 15 })} Finish the season</button>` : ""}
@@ -675,6 +738,7 @@ export async function renderMyCareer(root, signal) {
     bindTabs(drawSeason);
     bindTrain(drawSeason);
     root.querySelector("#mc-play")?.addEventListener("click", () => play(() => E.playRound(C), { live: true }), { signal });
+    root.querySelector("#mc-rest")?.addEventListener("click", () => { play(() => E.playRound(C, { rest: true })); toast("You sat this one out: fresher legs for the next few games"); }, { signal });
     root.querySelector("#mc-live")?.addEventListener("change", (e) => store.set("mc:live", e.target.checked), { signal });
     bindMomentum(root.querySelector(".mc-led .mc-momentum"), lastGame, signal);
     root.querySelector("#mc-sim")?.addEventListener("click", () => play(() => { const all = { games: [] }; let guard = 0; while (C.cur.phase === "regular" && guard++ < 60) { const o = E.playRound(C); all.games.push(...o.games); if (o.cup) all.cup = o.cup; if (o.allStar) all.allStar = o.allStar; if (C.injury?.pending) E.treatInjury(C, false); } return all; }), { signal });
