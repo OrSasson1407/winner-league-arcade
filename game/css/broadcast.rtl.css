@@ -748,3 +748,5 @@ button.nt-wl { border: 0; cursor: pointer; font: inherit; font-size: 10px; }
 .nt-bronze { color: #d4945b; font-weight: 700; }
 .nt-honours { display: flex; flex-wrap: wrap; gap: 6px; }
 .pill.nt-gold { border-color: #f5c542; } .pill.nt-silver { border-color: #cbd5e1; } .pill.nt-bronze { border-color: #d4945b; }
+/* your own club logos (local only) */
+img.crest-logo { object-fit: contain; display: inline-block; vertical-align: middle; flex: none; }

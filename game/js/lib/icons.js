@@ -91,7 +91,13 @@ export function logoSvg(size = 40) {
 }
 
 /** Club crest: shield in club colours with the club's initials. */
+// Your own club logos (game/crests/, local only: npm run crests:local). The public site has none and
+// keeps the drawn initials crest below.
+let LOGOS = {};
+export const crestsReady = import("../../crests/manifest.js").then((m) => { LOGOS = m.crestFiles || {}; }).catch(() => {});
+
 export function crestSvg(teamId, name, size = 44) {
+  if (LOGOS[teamId]) return `<img class="crest crest-logo" src="${LOGOS[teamId]}" width="${size}" height="${size}" alt="" aria-hidden="true" decoding="async">`;
   const [c1, c2] = clubColors(teamId);
   const words = (name || teamId).replace(/[^A-Za-z' ]/g, " ").split(/\s+/).filter((w) => w.length > 1 && !/^(bc|the)$/i.test(w));
   const ini = (words.length >= 2 ? words[0][0] + words[words.length - 1][0] : (words[0] || "?").slice(0, 2)).toUpperCase();

@@ -9,7 +9,7 @@ import { closeSilently } from "./lib/modal.js";
 import { openSearch } from "./lib/search.js";
 import { initShortcuts, openShortcuts } from "./lib/shortcuts.js";
 import { applySettings, getSettings, initSettingsButton, reducedMotion } from "./lib/settings.js";
-import { icon, logoSvg } from "./lib/icons.js";
+import { icon, logoSvg, crestsReady } from "./lib/icons.js";
 import { avatarHtml, getMe } from "./lib/me.js";
 import { levelInfo } from "./lib/progress.js";
 import { esc, store, storeReady, toast } from "./ui.js";
@@ -305,7 +305,7 @@ initReminders(); // opt-in daily reminder
 // new units: redraw pages that show them (not a game in progress, which would lose its state)
 document.addEventListener("units-changed", () => { const k = keyOf(location.hash); if (!GAME_ROUTES.has(k) || k === "mycareer") renderRoute(); });
 // saved games in IndexedDB are read before the first screen draws
-Promise.allSettled([storeReady, langReady]).then(() => { window.addEventListener("hashchange", route); route(); });
+Promise.allSettled([storeReady, langReady, crestsReady]).then(() => { window.addEventListener("hashchange", route); route(); });
 document.getElementById("fb-link")?.addEventListener("click", (e) => { e.preventDefault(); openFeedback(); });
 // installed app: the splash screen fades once the first page is up
 const splash = document.getElementById("splash");

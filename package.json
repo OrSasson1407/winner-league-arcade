@@ -12,6 +12,7 @@
     "build:fonts": "node game/tools/build_fonts.mjs",
     "build:flags": "node game/tools/build_flags.mjs",
     "build:national-teams": "node --use-system-ca game/tools/build_national_teams_2025_2027.mjs",
+    "crests:local": "node game/tools/build_local_crests.mjs",
     "build:team-crests": "node game/tools/build_team_crests.mjs"
   },
   "engines": {
