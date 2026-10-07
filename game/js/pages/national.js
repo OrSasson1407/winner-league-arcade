@@ -15,7 +15,7 @@ const avg = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : nul
 /** A national team's flag (flag-icons, MIT), with its FIBA code as the text alternative and fallback. */
 export function ntBadge(t, size = 36) {
   const h = Math.round(size * 0.75), w = size;
-  if (t.iso) return `<span class="nt-flag" data-no-tr style="width:${w}px;height:${h}px" title="${esc(t.name)}"><img src="flags/${t.iso}.svg" alt="" width="${w}" height="${h}" loading="lazy" decoding="async"></span>`;
+  if (t.iso) return `<span class="nt-flag" data-no-tr style="width:${w}px;height:${h}px" title="${esc(t.name)}"><img src="flags/${t.iso}.svg" alt="" width="${w}" height="${h}" decoding="async"></span>`;
   let hue = 0; for (const ch of t.code) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
   return `<span class="nt-badge" data-no-tr style="--h:${hue};width:${size}px;height:${size}px;font-size:${Math.round(size * 0.32)}px" aria-hidden="true">${esc(t.code)}</span>`;
 }

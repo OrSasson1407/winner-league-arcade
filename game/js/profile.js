@@ -161,7 +161,7 @@ export function profileHtml(pid) {
 function nationalHtml(pid) {
   const nt = ntOfWl(pid);
   if (!nt) return "";
-  return html`<a class="card pad nt-callout" href="#/nt/${esc(nt.id)}">${nt.iso ? `<span class="nt-flag" style="width:40px;height:30px" aria-hidden="true"><img src="flags/${nt.iso}.svg" alt="" width="40" height="30" loading="lazy"></span>` : `<span class="nt-flagmark" aria-hidden="true">${icon("flag", { size: 20 })}</span>`}
+  return html`<a class="card pad nt-callout" href="#/nt/${esc(nt.id)}">${nt.iso ? `<span class="nt-flag" style="width:40px;height:30px" aria-hidden="true"><img src="flags/${nt.iso}.svg" alt="" width="40" height="30" decoding="async"></span>` : `<span class="nt-flagmark" aria-hidden="true">${icon("flag", { size: 20 })}</span>`}
     <span><b>${esc(nt.name)} national team</b><small class="muted">In the 2025 roster · #${nt.rank} in the FIBA world ranking</small></span>${icon("arrowRight", { size: 15, cls: "sr-go" })}</a>`;
 }
 
