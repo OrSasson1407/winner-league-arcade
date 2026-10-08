@@ -62,12 +62,12 @@ function hoop(T, x, dir) {
  * shot(e): e is an engine event with x, y (2D court units), side, type ("2" | "3" | "miss" | "ft"), mine (your shot).
  */
 export async function court3D(el, { teams, signal }) {
-  const S = await stage(el, { signal, fov: 40, camera: [0, 9.5, 15.5], target: [0, 0, 0.5], drag: false, bloom: 0.1, label: "The game on a 3D court" });
+  const S = await stage(el, { signal, fov: 40, camera: [0, 9.5, 15.5], target: [0, 0, 0.5], drag: false, bloom: 0, label: "The game on a 3D court" });
   if (!S) return null;
   const { T, scene, camera } = S;
   studioLights(T, scene, { warm: "#fff7ea" });
   const [w, h] = [COURT.w / 10, COURT.h / 10];
-  polishedFloor(S, { size: [w, h], map: courtTexture(T, teams[0].c1, teams[1].c1), roughness: 0.3, mirror: 0.2 });
+  polishedFloor(S, { size: [w, h], map: courtTexture(T, teams[0].c1, teams[1].c1), roughness: 0.22, reflect: false }); // glossy wood (the lights shine in it), no mirror
   const apron = new T.Mesh(new T.PlaneGeometry(w + 6, h + 6), new T.MeshStandardMaterial({ color: "#1d2129" }));
   apron.rotation.x = -Math.PI / 2; apron.position.y = -0.01;
   scene.add(apron);

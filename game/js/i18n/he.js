@@ -3968,4 +3968,6 @@ export const HE = {
   "pinstripes": "פסים דקים",
   "Yoke": "כתפיים בצבע שני",
   "yoke": "כתפיים בצבע שני",
+  "the 3D player: body, face, eyes and hairstyles": "השחקן התלת־ממדי: גוף, פנים, עיניים ותסרוקות",
+  "the 3D player's animations": "האנימציות של השחקן התלת־ממדי",
 };

@@ -195,7 +195,8 @@ export function renderLicenses(root, signal) {
         ["Orbitron", L("scoreboards", "לוחות תוצאות"), "SIL Open Font License 1.1", "https://fonts.google.com/specimen/Orbitron"],
         ["Fontsource", L("font packaging", "אריזת הגופנים"), "MIT", "https://fontsource.org"],
         ["three.js", L("3D views in My Career and on the live court", "תצוגות תלת־ממד בקריירה ובמגרש החי"), "MIT", "https://threejs.org"],
-        ["Universal Animation Library (Quaternius)", L("the 3D player model and its animations", "דמות השחקן התלת־ממדית והאנימציות שלה"), "CC0", "https://quaternius.com"],
+        ["Universal Base Characters (Quaternius)", L("the 3D player: body, face, eyes and hairstyles", "השחקן התלת־ממדי: גוף, פנים, עיניים ותסרוקות"), "CC0", "https://quaternius.com"],
+        ["Universal Animation Library (Quaternius)", L("the 3D player's animations", "האנימציות של השחקן התלת־ממדי"), "CC0", "https://quaternius.com"],
       ].map(row).join("")}</ul>`],
       ["globe", L("Server", "שרת"), `<ul class="pv-list">${[
         ["Node.js", L("runtime", "סביבת הרצה"), "MIT", "https://nodejs.org"],

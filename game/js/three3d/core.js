@@ -18,7 +18,19 @@ export function quality() {
   const q = store.get("3d:quality", "auto");
   if (q !== "auto") return q;
   const coarse = matchMedia?.("(pointer: coarse)").matches;
-  return coarse || (navigator.hardwareConcurrency || 4) <= 4 ? "medium" : "high";
+  return coarse || (navigator.hardwareConcurrency || 4) <= 4 || integratedGpu() ? "medium" : "high";
+}
+let gpuGuess = null;
+/** Built-in graphics (Intel, phones): they get medium quality on auto. */
+function integratedGpu() {
+  if (gpuGuess !== null) return gpuGuess;
+  try {
+    const gl = document.createElement("canvas").getContext("webgl");
+    const ext = gl?.getExtension("WEBGL_debug_renderer_info");
+    const name = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : "";
+    gpuGuess = /intel|uhd|iris|mali|adreno|powervr|apple gpu|swiftshader|llvmpipe/i.test(name);
+  } catch { gpuGuess = false; }
+  return gpuGuess;
 }
 export const setQuality = (q) => store.set("3d:quality", q);
 
@@ -45,7 +57,8 @@ export async function stage(container, opts = {}) {
   const Q = quality();
   const shadows = !!opts.shadows && Q !== "low";
   const renderer = new T.WebGLRenderer({ antialias: Q !== "high", alpha: true, powerPreference: Q === "high" ? "high-performance" : "low-power" });
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, Q === "high" ? 2 : Q === "medium" ? 1.5 : 1));
+  let pr = Math.min(devicePixelRatio || 1, Q === "high" ? 2 : Q === "medium" ? 1.25 : 1);
+  renderer.setPixelRatio(pr);
   renderer.outputColorSpace = T.SRGBColorSpace;
   renderer.toneMapping = T.ACESFilmicToneMapping; // film-like colour: bright lights roll off instead of clipping
   renderer.toneMappingExposure = exposure;
@@ -94,9 +107,18 @@ export async function stage(container, opts = {}) {
   const still = reducedMotion();
   let raf = 0, last = 0, t0 = 0, visible = true, alive = true;
   const render = () => (composer ? composer.render() : renderer.render(scene, camera));
+  // adaptive resolution: if frames get slow, render fewer pixels (a sharp picture isn't worth a stutter)
+  let fpsT = 0, fpsN = 0;
+  const adapt = (dtRaw) => {
+    fpsT += dtRaw; fpsN++;
+    if (fpsT < 2) return;
+    const fps = fpsN / fpsT; fpsT = 0; fpsN = 0;
+    if (fps < 28 && pr > 0.75) { pr = Math.max(0.75, pr - 0.25); renderer.setPixelRatio(pr); composer?.setPixelRatio(pr); size(); }
+  };
   const loop = (now) => {
     raf = 0;
     if (!alive) return;
+    if (last) adapt((now - last) / 1000);
     const dt = last ? Math.min(0.05, (now - last) / 1000) : 0;
     last = now;
     if (!t0) t0 = now;
@@ -218,14 +240,15 @@ export function drawWood(g, w, h, planks = 16, base = [201, 143, 85]) {
  * A polished wooden floor: the boards on top, and on high quality a real mirror under them (the players
  * show in the floor, softly). size: [w, d] in metres; map: the floor's texture (boards, or a court).
  */
-export function polishedFloor(S, { size = [8, 8], map, roughness = 0.32, mirror = 0.22 } = {}) {
+export function polishedFloor(S, { size = [8, 8], map, roughness = 0.32, mirror = 0.22, reflect = true } = {}) {
   const { T, A, Q, scene } = S;
   const g = new T.Group();
-  const top = new T.Mesh(new T.PlaneGeometry(...size), new T.MeshStandardMaterial({ map, roughness, metalness: 0, transparent: Q === "high", opacity: Q === "high" ? 1 - mirror : 1 }));
+  const real = Q === "high" && reflect; // a real mirror renders the scene twice: not on a crowded court
+  const top = new T.Mesh(new T.PlaneGeometry(...size), new T.MeshStandardMaterial({ map, roughness, metalness: 0, transparent: real, opacity: real ? 1 - mirror : 1 }));
   top.rotation.x = -Math.PI / 2;
   top.receiveShadow = true;
   g.add(top);
-  if (Q === "high") {
+  if (real) {
     const m = new A.Reflector(new T.PlaneGeometry(...size), { textureWidth: 1024, textureHeight: 1024, color: 0x888888 });
     m.rotation.x = -Math.PI / 2;
     m.position.y = -0.002;
