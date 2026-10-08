@@ -143,9 +143,11 @@ export async function court3D(el, { teams, signal }) {
     const [X, Z] = toWorld(e.x, e.y);
     shooter.userData.target.set(X, 0, Z);
     shooter.position.set(X, 0, Z);
-    shooter.userData.shootUntil = performance.now() + 700;
+    shooter.userData.shootUntil = performance.now() + 1100;
+    shooter.userData.ft = e.type === "ft"; // free throws: a set shot, feet on the floor
     const hx = (e.side === 0 ? rx : lx);
-    flight = { from: new T.Vector3(X, 2.3, Z), to: new T.Vector3(hx, RIM_H + 0.05, 0), t: 0, dur: 0.75 + Math.hypot(hx - X, Z) * 0.03, made: e.type !== "miss" };
+    const release = shooter.userData.rp ? 0.45 : 0; // the ball leaves the hands at the top of the motion-captured shot
+    flight = { from: new T.Vector3(X, 2.3, Z), to: new T.Vector3(hx, RIM_H + 0.05, 0), t: -release / (0.75 + Math.hypot(hx - X, Z) * 0.03), dur: 0.75 + Math.hypot(hx - X, Z) * 0.03, made: e.type !== "miss" };
   }
   formation(0);
   players.forEach((p) => p.position.copy(p.userData.target));
@@ -156,14 +158,15 @@ export async function court3D(el, { teams, signal }) {
       const d = p.userData.target.clone().sub(p.position); d.y = 0;
       const dist = d.length();
       if (dist > 0.05) { p.position.addScaledVector(d, Math.min(1, dt * 3)); p.rotation.y = Math.atan2(d.x, d.z) + (facing < 0 ? Math.PI : 0); }
-      const mode = p.userData.shootUntil > performance.now() ? "shoot" : dist > 0.6 ? "sprint" : dist > 0.25 ? "run" : "idle";
+      const handler = !flight && p === players[offense * 5]; // the point guard brings the ball up, dribbling
+      const mode = p.userData.shootUntil > performance.now() ? (p.userData.ft ? "shoot-set" : "shoot") : handler ? (dist > 0.25 ? "dribble-run" : "dribble") : dist > 0.6 ? "sprint" : dist > 0.25 ? "run" : "idle";
       const rp = p.userData.rp;
       if (rp) { if (mode !== p.userData.mode) { p.userData.mode = mode; rp.setMode(mode); } rp.update(dt, t + p.id * 0.37); }
-      else pose(p, t + p.id * 0.37, mode === "sprint" ? "run" : mode);
+      else pose(p, t + p.id * 0.37, mode === "sprint" || mode === "dribble-run" ? "run" : mode === "shoot-set" ? "shoot" : mode);
     }
     if (flight) {
       flight.t += dt / flight.dur;
-      const k = Math.min(1, flight.t);
+      const k = Math.max(0, Math.min(1, flight.t));
       ball.position.lerpVectors(flight.from, flight.to, k);
       ball.position.y += Math.sin(k * Math.PI) * 2.2; // the arc
       if (k >= 1) { // through the net, or off the rim
@@ -172,7 +175,9 @@ export async function court3D(el, { teams, signal }) {
       }
     } else {
       const holder = players[offense * 5]; // the point guard brings it up
-      ball.position.lerp(holder.position.clone().add(new T.Vector3(0.3, 0.5 + Math.abs(Math.sin(t * 6)) * 0.6, 0.2)), Math.min(1, dt * 5));
+      const at = holder.userData.rp?.ballAt?.(new T.Vector3());
+      if (at) ball.position.lerp(at, Math.min(1, dt * 20)); // in his dribbling hand (motion capture)
+      else ball.position.lerp(holder.position.clone().add(new T.Vector3(0.3, 0.5 + Math.abs(Math.sin(t * 6)) * 0.6, 0.2)), Math.min(1, dt * 5));
     }
     // follow the play: the half where the ball is, so the basket stays in the picture
     const goal = flight ? flight.to.x * 0.62 : (offense === 0 ? rx : lx) * 0.62;

@@ -7,3 +7,6 @@ game/crests/_review/
 
 # raw NBA build sources: pages saved from other sites and another project's keys (never publish)
 game/data/_nba_build/
+
+# motion capture sources for the 3D player (CMU, downloaded by hand; see game/tools/mocap/README.md)
+game/tools/mocap/*.bvh

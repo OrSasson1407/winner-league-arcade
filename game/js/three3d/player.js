@@ -278,12 +278,13 @@ export async function makeRealPlayer(T, opts = {}) {
   const mixer = new T.AnimationMixer(model);
   const actions = {};
   let current = null;
-  const play = (name, fade = 0.25, { once = false } = {}) => {
+  const play = (name, fade = 0.25, { once = false, from = 0 } = {}) => {
     const clip = clips[name];
     if (!clip) return;
     const a = (actions[name] ||= mixer.clipAction(clip));
     if (current === a && !once) return;
     a.reset();
+    a.time = from;
     a.setLoop(once ? T.LoopOnce : T.LoopRepeat, Infinity);
     a.clampWhenFinished = once;
     a.enabled = true;
@@ -305,18 +306,29 @@ export async function makeRealPlayer(T, opts = {}) {
     .map(([n, k]) => [bones[n], 1 + k * (mu - 0.3) * 1.6]).filter(([b]) => b)
     .map(([b, f]) => [b, f, b.scale.clone()]); // the rest scale: set absolutely each frame (clips may not touch scale)
   const q = new T.Quaternion(), ax = new T.Vector3(1, 0, 0), az = new T.Vector3(0, 0, 1);
+  // motion-captured dribbling (CMU): the ball goes with whichever hand dribbles (the one that moves up and down most)
+  const mocap = !!clips.Dribble_Loop, handL = bones.hand_l, hands = [{ b: hand, lo: Infinity, hi: -Infinity }, { b: handL, lo: Infinity, hi: -Infinity }];
+  const tmp2 = new T.Vector3(), dpos = new T.Vector3(); // dpos: where the dribbled ball is (the player's own space)
+  const dribbling = () => mocap && (mode === "dribble" || mode === "dribble-run");
   /** Per frame: the clips, then the hand-made parts on top (dribbling, the shooting arms). */
   const update = (dt, t) => {
     mixer.update(dt);
     for (const [b, f, s0] of bulk) b.scale.set(s0.x * f, s0.y, s0.z * f); // across the bone, not along it
-    if (mode === "dribble" && ball) {
+    if (dribbling()) {
+      root.updateMatrixWorld(true);
+      for (const h of hands) { h.b.getWorldPosition(tmp2); root.worldToLocal(tmp2); h.y = tmp2.y; h.p = h.p || new T.Vector3(); h.p.copy(tmp2); h.lo = Math.min(h.lo, h.y); h.hi = Math.max(h.hi, h.y); }
+      const d = hands[0].hi - hands[0].lo >= hands[1].hi - hands[1].lo ? hands[0] : hands[1];
+      const k = d.hi > d.lo ? (d.y - d.lo) / (d.hi - d.lo) : 0; // 0: hand at its lowest (it has the ball), 1: at its highest (the ball is on the floor)
+      dpos.set(d.p.x, Math.max(0.12, d.p.y - 0.1 + (0.12 - (d.p.y - 0.1)) * k), d.p.z + front * 0.06);
+      ball?.position.copy(dpos);
+    } else if (mode === "dribble" && ball) {
       const k = Math.abs(Math.sin(t * 4.4)); // 1: in the hand, 0: on the floor
       q.setFromAxisAngle(az, -(1 - k) * 0.5); forearmR.quaternion.multiply(q);
       root.updateMatrixWorld(true);
       hand.getWorldPosition(tmp);
       root.worldToLocal(tmp);
       ball.position.set(tmp.x + 0.02, 0.12 + (tmp.y - 0.12) * k, tmp.z + front * 0.12);
-    } else if (mode === "shoot") {
+    } else if ((mode === "shoot" || mode === "shoot-set") && !clips.Shot_Jump) {
       for (const [u, f, sd] of [[upperR, forearmR, 1], [upperL, forearmL, -1]]) { q.setFromAxisAngle(ax, -2.2); u.quaternion.multiply(q); q.setFromAxisAngle(az, sd * 0.8); f.quaternion.multiply(q); }
     } else if (ball) {
       hand.getWorldPosition(tmp); root.worldToLocal(tmp);
@@ -325,13 +337,18 @@ export async function makeRealPlayer(T, opts = {}) {
   };
   const setMode = (m) => {
     mode = m;
-    if (m === "run") play("Jog_Fwd_Loop", 0.2);
+    if (m === "dribble" && mocap) play("Dribble_Loop", 0.25);
+    else if (m === "dribble-run" && mocap) play("Dribble_Walk", 0.2);
+    else if (m === "run") play("Jog_Fwd_Loop", 0.2);
     else if (m === "sprint") play("Sprint_Loop", 0.2);
     else if (m === "cheer") play("Dance_Loop", 0.3);
-    else if (m === "shoot") play("Jump_Start", 0.1, { once: true });
+    else if (m === "shoot-set" && clips.Shot_Set) play("Shot_Set", 0.15, { once: true, from: 0.5 });
+    else if (m === "shoot" || m === "shoot-set") { if (clips.Shot_Jump) play("Shot_Jump", 0.12, { once: true, from: 0.55 }); else play("Jump_Start", 0.1, { once: true }); } // from the gather: the release comes about half a second in
     else play("Idle_Loop", 0.3);
   };
-  return { root, mixer, play, update, setMode, ball, hand, hasModel: true, facing: front, setExpression: () => {} };
+  /** The dribbled ball's place in the world (when dribbling with the motion-captured moves), or null. */
+  const ballAt = (out) => (dribbling() ? root.localToWorld(out.copy(dpos)) : null);
+  return { root, mixer, play, update, setMode, ballAt, ball, hand, hasModel: true, facing: front, setExpression: () => {} };
 }
 
 /** Hair colour going grey with age (0: none, 1: fully grey). */

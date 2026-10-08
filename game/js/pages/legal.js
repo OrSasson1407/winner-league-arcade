@@ -197,6 +197,7 @@ export function renderLicenses(root, signal) {
         ["three.js", L("3D views in My Career and on the live court", "תצוגות תלת־ממד בקריירה ובמגרש החי"), "MIT", "https://threejs.org"],
         ["Universal Base Characters (Quaternius)", L("the 3D player: body, face, eyes and hairstyles", "השחקן התלת־ממדי: גוף, פנים, עיניים ותסרוקות"), "CC0", "https://quaternius.com"],
         ["Universal Animation Library (Quaternius)", L("the 3D player's animations", "האנימציות של השחקן התלת־ממדי"), "CC0", "https://quaternius.com"],
+        ["CMU Graphics Lab Motion Capture Database", L("the 3D player's dribbling and shots (mocap.cs.cmu.edu, created with funding from NSF EIA-0196217; BVH conversion by Bruce Hahne)", "הכדרור והזריקות של השחקן התלת־ממדי (mocap.cs.cmu.edu, נוצר במימון NSF EIA-0196217; המרה ל־BVH: ברוס האנה)"), L("free to use, not to resell", "חופשי לשימוש, לא למכירה חוזרת"), "http://mocap.cs.cmu.edu"],
       ].map(row).join("")}</ul>`],
       ["globe", L("Server", "שרת"), `<ul class="pv-list">${[
         ["Node.js", L("runtime", "סביבת הרצה"), "MIT", "https://nodejs.org"],
