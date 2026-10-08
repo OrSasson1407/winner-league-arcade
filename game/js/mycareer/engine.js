@@ -7,6 +7,7 @@ import { rosterTools } from "../games/draft_sim.js";
 import * as WLD from "../wl.js";
 const { realTeamStrength } = rosterTools(WLD); // My Career is always in the Winner League
 import { elPlayerName, elReady, elRoster, elSeasonFor, elTeams, inElSeason } from "./europe.js";
+import { isNbaTeam, nbaField, nbaPlayer, nbaReady, nbaRoster, nbaSeasonFor, nbaTeams } from "./nba.js";
 import { profile, profileFromSeason, simulateGame } from "../shared/gameSim.js";
 import { applyBody, bodyEffects, ensureDev, findMentor, gameTrainingPoints, moveEffects, newSeasonLog, planInjury, seasonDevelopment, staffCost, trackGame, trainLimit } from "./develop.js";
 export { BODY_PLANS, ELITE_CAMPS, MOVES, MOVE_COST, PLAN_AREAS, PLAN_MAX, PLAN_PRESETS, STAFF, TRAITS, bodyCap, bodyEffects, ceilingOf, eliteAllowed, eliteCamp, ensureDev, idealWeight,
@@ -168,16 +169,23 @@ export function wlStrength(season, tid) {
 }
 /** A club that isn't in the Winner League that season but plays in the EuroLeague: a season abroad. */
 export const isAbroad = (label, tid) => !db.season_teams.some((x) => x.season === dataSeason(label) && x.team_id === tid) && inElSeason(label, tid);
+/** An NBA team: a season in the NBA (needs the NBA data loaded). */
+export const isNba = (label, tid) => nbaReady() && isNbaTeam(tid);
+/** Where a club plays that career season: "wl" (Winner League), "el" (EuroLeague abroad) or "nba". */
+export const leagueOf = (label, tid) => (isNba(label, tid) ? "nba" : isAbroad(label, tid) ? "el" : "wl");
 /** EuroLeague clubs for a career season, strengths on the Winner League scale ([] without the data). */
 export const euroTeams = (label) => (elReady() ? elTeams(label, wlStrength) : []);
 /** Roster used for minutes and box scores: the EuroLeague roster for a club abroad or a EuroLeague game. */
 function rosterFor(label, tid, { europe = false } = {}) {
+  if (isNba(label, tid)) { const r = nbaRoster(label, tid); if (r.length) return r; }
   if (elReady() && (europe || isAbroad(label, tid))) {
     const r = elRoster(label, tid, wlStrength);
     if (r.length) return r;
   }
   return nearestRoster(dataSeason(label), tid);
 }
+/** A club's roster for a career season, from its league's data (the game preview reads it). */
+export const careerRoster = (label, tid) => rosterFor(label, tid);
 /** A club out of the league that season (relegated while you're under contract): its closest real roster. */
 function nearestRoster(season, tid) {
   const own = rosterOf(season, tid);
@@ -195,7 +203,9 @@ function nearestStrength(season, tid) {
   return 80;
 }
 /** A player's name from either competition's data. */
-export const playerName = (pid) => playersById.get(pid)?.name ?? elPlayerName(pid);
+export const playerName = (pid) => playersById.get(pid)?.name ?? nbaPlayer(pid)?.name ?? elPlayerName(pid);
+/** A player who is only in the NBA data (no Winner League profile, no EuroLeague page). */
+export const isNbaPlayer = (pid) => !playersById.has(pid) && !!nbaPlayer(pid);
 
 // Position groups and how many starters / rotation players each group gets.
 const FAM = { PG: "G", SG: "G", SF: "W", PF: "B", C: "B" };
@@ -203,8 +213,8 @@ export const FAM_NAMES = { G: "Guards", W: "Wings", B: "Bigs" };
 const SLOTS = { G: [2, 2], W: [1, 2], B: [2, 1] };
 /** Game rule (simplified from the league's foreign-player limits): at most 5 foreign players get real minutes. */
 export const FOREIGN_LIMIT = 5;
-export const isIsraeliPlayer = (pid) => { const p = playersById.get(pid); return p?.nationality === "Israel" || (p?.nationalities || []).includes("Israel"); };
-const posOf = (ps) => ps.position || playersById.get(ps.player_id)?.primary_position || "SF";
+export const isIsraeliPlayer = (pid) => { const p = playersById.get(pid) || nbaPlayer(pid); return p?.nationality === "Israel" || (p?.nationalities || []).includes("Israel"); };
+const posOf = (ps) => ps.position || (playersById.get(ps.player_id) || nbaPlayer(ps.player_id))?.primary_position || "SF";
 
 /** Your score for minutes: overall, coach trust, team chemistry, and the Israeli-player advantage. */
 function minutesScore(C, tid, abroad = false) {
@@ -212,7 +222,7 @@ function minutesScore(C, tid, abroad = false) {
 }
 /** Where you'd stand on a team: competitors at your position group, and the foreign-player slots. */
 export function depthChart(C, label, tid) {
-  const abroad = isAbroad(label, tid);
+  const abroad = isAbroad(label, tid) || isNba(label, tid); // outside the Winner League: no foreign-player limit
   const roster = rosterFor(label, tid).slice(0, 11);
   const score = minutesScore(C, tid, abroad);
   const foreign = C.nat !== "Israel" && !abroad; // the game's foreign-player limit is a Winner League rule
@@ -351,7 +361,7 @@ export function boxScore(C, S, g) {
   if (g.sim) { // played through the game engine: its own box score
     const r = simFor(C, S, g, false);
     const mySide = g.home ? 0 : 1;
-    const map = (l) => ({ ...l, pid: l.id === ME ? null : l.id, el: l.id !== ME && !playersById.has(l.id), me: l.id === ME });
+    const map = (l) => ({ ...l, pid: l.id === ME ? null : l.id, el: l.id !== ME && !playersById.has(l.id) && !isNbaPlayer(l.id), nba: l.id !== ME && isNbaPlayer(l.id), me: l.id === ME });
     const keep = (l) => l.min > 0;
     return { team: r.box[mySide].filter(keep).map(map).sort((a, b) => b.min - a.min), opp: r.box[1 - mySide].filter(keep).map(map).sort((a, b) => b.min - a.min), sim: true };
   }
@@ -399,12 +409,14 @@ export function startSeason(C) {
   const label = seasonLabel(C.debut, C.seasonNo);
   const rnd = seededRng(`mc-${C.seedBase}-${label}`);
   const team = C.loan?.team || C.contract.team;
-  const abroad = isAbroad(label, team);
-  const teams = abroad ? euroTeams(label) : teamsOf(label);
+  const lg = leagueOf(label, team);
+  const abroad = lg !== "wl"; // the EuroLeague or the NBA: no State Cup, no EuroLeague campaign on the side
+  const teams = lg === "nba" ? nbaTeams(label) : abroad ? euroTeams(label) : teamsOf(label);
   if (!teams.some((t) => t.id === team)) { // club not in the league that season: it plays anyway with its last roster strength
     teams.push({ id: team, name: teamName(team), strength: nearestStrength(dataSeason(label), team) });
   }
-  // abroad the season is the EuroLeague: double round-robin (single when the field was bigger than 18)
+  // abroad the season is the EuroLeague: double round-robin (single when the field was bigger than 18);
+  // the NBA's 30 teams: one game against each
   const rr = roundRobin(teams.map((t) => t.id), rnd);
   const schedule = abroad && teams.length > 18 ? rr.slice(0, rr.length / 2) : rr;
   const cupTeams = abroad ? [] : teams.slice().sort(() => rnd() - 0.5).slice(0, 8);
@@ -428,10 +440,10 @@ export function startSeason(C) {
   const base = me.strength;
   me.strength = r1(me.strength + boost);
   C.cur = {
-    label, simulated: (abroad ? elSeasonFor(label) : dataSeason(label)) !== label, team, role: role0, teams, schedule, round: 0, base, boost, coachChanges: coachChange ? 1 : 0,
+    label, simulated: (lg === "nba" ? nbaSeasonFor(label) : abroad ? elSeasonFor(label) : dataSeason(label)) !== label, team, role: role0, teams, schedule, round: 0, base, boost, coachChanges: coachChange ? 1 : 0,
     standings: Object.fromEntries(teams.map((t) => [t.id, { w: 0, l: 0, pf: 0, pa: 0 }])),
     games: [], phase: "regular", cup: abroad ? { teams: [], round: 0, alive: false, results: [], none: true } : { teams: cupTeams.map((t) => t.id), round: 0, alive: true, results: [] },
-    allStar: null, playoffs: null, events: [], startOverall: bestOverall(C), league: abroad ? "el" : "wl",
+    allStar: null, playoffs: null, events: [], startOverall: bestOverall(C), league: lg,
     el: abroad ? null : euroCampaign(label, team, me.strength, rnd),
     dev: { ...newSeasonLog(), mentor: findMentor(C, rosterFor(label, team), bestOverall(C)) },
   };
@@ -680,19 +692,23 @@ export function averages(games) {
     val: r1(played.reduce((a, g) => a + valOf(g.line), 0) / n) };
 }
 /** Real players of the (data) season with 10+ games: the competition for awards. */
-function field(label) {
+function field(label, league = "wl") {
+  if (league === "nba") return nbaField(label);
   return db.player_seasons.filter((r) => r.season === dataSeason(label) && isPlayable(r, 10));
 }
+// how good a season line is: valuation in the Winner League; the NBA data has none, so points + rebounds + assists there
+const fieldScore = (league) => (league === "nba" ? (r) => (r.stats.ppg ?? 0) + (r.stats.rpg ?? 0) + (r.stats.apg ?? 0) : (r) => r.stats.valuation_per_game ?? 0);
+const myScore = (league, avg) => (league === "nba" ? avg.ppg + avg.rpg + avg.apg : avg.val);
 function allStar(C, rnd) {
   const S = C.cur, avg = averages(S.games.filter((g) => !g.cup && !g.eu));
-  const others = field(S.label).map((r) => r.stats.valuation_per_game ?? 0).sort((a, b) => b - a);
-  const rank = others.filter((v) => v > avg.val).length;
-  const picked = avg.gp >= 5 && rank < 20;
+  const others = field(S.label, S.league).map(fieldScore(S.league)).sort((a, b) => b - a);
+  const rank = others.filter((v) => v > myScore(S.league, avg)).length;
+  const picked = avg.gp >= 5 && rank < (S.league === "nba" ? 24 : 20);
   let line = null;
   if (picked) {
     line = statLine(C, "starter", rnd, { big: true });
     line.min = Math.max(18, Math.round(line.min * 0.8));
-    C.trophies.push({ type: "allstar", season: S.label, team: S.team });
+    C.trophies.push({ type: S.league === "nba" ? "nbaallstar" : "allstar", season: S.label, team: S.team });
     C.pop = clamp(C.pop + 6, 0, 100);
   }
   S.allStar = { picked, rank: rank + 1, line };
@@ -706,6 +722,7 @@ function seedPlayoffs(S) {
   return { round: 0, series: [[top[0], top[7]], [top[3], top[4]], [top[1], top[6]], [top[2], top[5]]].map(([a, b]) => ({ a, b, w: [0, 0], games: [] })), champion: null, out: !inIt, outAt: inIt ? null : -1, history: [], seeds: top };
 }
 const PO_NAMES = ["Quarter-finals", "Semi-finals", "Final"];
+const NBA_PO = ["NBA playoffs, first round", "NBA semi-finals", "NBA Finals"];
 /** Play the next playoff game day (every series in the round plays one game). */
 export function playPlayoffDay(C) {
   const S = C.cur, P = S.playoffs;
@@ -718,7 +735,7 @@ export function playPlayoffDay(C) {
     const homeA = s.games.length !== 1; // higher seed hosts games 1 and 3
     if (s.a === S.team || s.b === S.team) {
       const meA = s.a === S.team;
-      const g = playGame(C, S, meA ? s.b : s.a, meA ? homeA : !homeA, rnd, { big: true, neutral: ff, label: ff ? `Final Four ${P.round === 1 ? "semi-final" : "final"}` : `${S.league === "el" ? "EuroLeague playoffs" : PO_NAMES[P.round]}, game ${s.games.length + 1}` });
+      const g = playGame(C, S, meA ? s.b : s.a, meA ? homeA : !homeA, rnd, { big: true, neutral: ff, label: ff ? `Final Four ${P.round === 1 ? "semi-final" : "final"}` : `${S.league === "el" ? "EuroLeague playoffs" : S.league === "nba" ? NBA_PO[P.round] : PO_NAMES[P.round]}, game ${s.games.length + 1}` });
       S.games.push({ ...g, round: S.round, playoff: true });
       afterGame(C, g);
       s.games.push(g);
@@ -737,7 +754,7 @@ export function playPlayoffDay(C) {
     if (!winners.includes(S.team) && !P.out) { P.out = true; P.outAt = P.round; }
     if (P.round === 2) {
       P.champion = winners[0];
-      if (winners[0] === S.team) C.trophies.push({ type: S.league === "el" ? "euroleague" : "title", season: S.label, team: S.team });
+      if (winners[0] === S.team) C.trophies.push({ type: S.league === "el" ? "euroleague" : S.league === "nba" ? "nba" : "title", season: S.label, team: S.team });
       S.phase = "done";
     } else {
       P.round++;
@@ -757,6 +774,7 @@ export function seasonAwards(C) {
   const avg = averages(reg);
   const standing0 = table(S).findIndex((t) => t.id === S.team) + 1;
   if (S.league === "el") return { avg, awards: [], standing: standing0 }; // EuroLeague stats in the data are placeholders
+  if (S.league === "nba") return nbaAwards(C, S, reg, avg, standing0);
   const real = field(S.label);
   const rankBy = (mine, get) => real.filter((r) => (get(r) ?? 0) > mine).length + 1;
   const standing = table(S).findIndex((t) => t.id === S.team) + 1;
@@ -773,6 +791,24 @@ export function seasonAwards(C) {
     if (rankBy(avg.spg + avg.bpg, (r) => (r.stats.spg ?? 0) + (r.stats.bpg ?? 0)) <= 2 && C.attrs.def >= 70) out.push("Defensive Player of the Year");
     if (C.history.filter((h) => h.pro).length === 0 && C.age <= 23 && valRank <= 25) out.push("Rookie of the Year");
     if (prev?.pro && avg.val - prev.avg.val >= 4) out.push("Most Improved Player");
+  }
+  for (const a of out) C.awards.push({ name: a, season: S.label });
+  return { avg, awards: out, standing };
+}
+
+/** NBA awards against the NBA's real players that season (per-game points, rebounds and assists). */
+function nbaAwards(C, S, reg, avg, standing) {
+  const real = field(S.label, "nba");
+  const rankBy = (mine, get) => real.filter((r) => (get(r) ?? 0) > mine).length + 1;
+  const out = [];
+  if (avg.gp >= reg.length * 0.6) {
+    const rank = rankBy(myScore("nba", avg), fieldScore("nba"));
+    if (rank === 1 && standing <= 4) out.push("NBA MVP");
+    if (rank <= 15) out.push("All-NBA Team");
+    if (rankBy(avg.ppg, (r) => r.stats.ppg) === 1) out.push("NBA scoring leader");
+    if (rankBy(avg.rpg, (r) => r.stats.rpg) === 1) out.push("NBA rebounding leader");
+    if (rankBy(avg.apg, (r) => r.stats.apg) === 1) out.push("NBA assists leader");
+    if (!C.history.some((h) => h.league === "nba") && rank <= 40) out.push("NBA All-Rookie Team");
   }
   for (const a of out) C.awards.push({ name: a, season: S.label });
   return { avg, awards: out, standing };
@@ -809,10 +845,14 @@ export function makeOffers(C, { homeGrown = null } = {}) {
   const eligible = (t) => C.nat === "Israel" || depthChart(C, label, t.id).slotOk;
   if (homeGrown) picks.push(teams.find((t) => t.id === homeGrown) || { id: homeGrown, name: teamName(homeGrown), strength: 82 });
   if (C.contract && !homeGrown && teams.some((t) => t.id === C.contract.team)) picks.push(teams.find((t) => t.id === C.contract.team));
+  else if (C.contract && isNba(label, C.contract.team) && depthChart(C, label, C.contract.team).role !== "bench") { // your NBA team wants you back
+    const t = nbaTeams(label).find((x) => x.id === C.contract.team);
+    if (t) picks.push(t);
+  }
   for (const t of pool.sort(() => Math.random() - 0.5)) if (picks.length < n && !picks.some((p) => p.id === t.id) && eligible(t)) picks.push(t);
   if (picks.length < 2) for (const t of teams.slice().reverse()) if (picks.length < 2 && !picks.some((p) => p.id === t.id) && eligible(t)) picks.push(t);
   if (!picks.length) picks.push(teams[teams.length - 1]); // someone always takes a chance on you
-  const budget = (t) => { if (t.abroad) return t.pay; const i = teams.findIndex((x) => x.id === t.id); return i < 3 ? 1.5 : i < teams.length / 2 ? 1.1 : 0.8; };
+  const budget = (t) => { if (t.abroad) return t.pay; if (isNba(label, t.id)) return 7; const i = teams.findIndex((x) => x.id === t.id); return i < 3 ? 1.5 : i < teams.length / 2 ? 1.1 : 0.8; };
   // Europe calls: from overall 76, EuroLeague clubs abroad where you'd actually play
   const euro = euroTeams(label).filter((t) => !t.wl && isAbroad(label, t.id)).sort((a, b) => b.strength - a.strength);
   const wantEuro = ov >= 80 ? 2 : ov >= 76 && Math.random() < 0.5 + (C.agent === "connector" ? 0.25 : 0) ? 1 : 0;
@@ -821,12 +861,23 @@ export function makeOffers(C, { homeGrown = null } = {}) {
       .filter((t) => t.role !== "bench").sort(() => Math.random() - 0.5).slice(0, wantEuro);
     picks.push(...fit);
   }
+  // the NBA calls: from overall 90 (88 after a Summer League invite), teams where you'd actually play; a
+  // training-camp deal from a weak team when you're close. NBA salaries are several times the Winner League's
+  if (nbaReady()) {
+    const ready = ov >= 90 || (ov >= 88 && C.nbaWatch);
+    if (ready) {
+      const nba = nbaTeams(label).map((t) => ({ ...t, dc: depthChart(C, label, t.id) }));
+      let fit = nba.filter((t) => t.dc.role !== "bench").sort(() => Math.random() - 0.5).slice(0, ov >= 94 ? 2 : 1);
+      if (!fit.length) fit = nba.sort((a, b) => a.strength - b.strength).slice(0, 1);
+      picks.push(...fit.map((t) => ({ ...t, abroad: true, nba: true, pay: { starter: 12, rotation: 7, bench: 4 }[t.dc.role] })));
+    }
+  }
   return picks.map((t) => {
     const loyal = (C.yearsAt[t.id] || 0) >= 3;
     const v = value(C) * budget(t) * (0.85 + Math.random() * 0.25) * (1 + ag.money) * (homeGrown === t.id ? 0.8 : 1) * (loyal ? 0.95 : 1);
     const dc = depthChart(C, label, t.id);
     return { team: t.id, name: t.name, salary: Math.round(v / 1000) * 1000, years: 1 + Math.floor(Math.random() * 3), role: dc.role,
-      homeGrown: homeGrown === t.id, loyal, own: C.contract?.team === t.id, foreigners: dc.foreigners, fam: dc.fam, rank: dc.rank, abroad: !!t.abroad };
+      homeGrown: homeGrown === t.id, loyal, own: C.contract?.team === t.id, foreigners: dc.foreigners, fam: dc.fam, rank: dc.rank, abroad: !!t.abroad, nba: !!t.nba || isNba(label, t.id) };
   });
 }
 /** Ask for more (salary +x, a better role). Returns accepted offer or null (offer withdrawn). */
@@ -865,6 +916,14 @@ export function endSeason(C) {
     po: averages(S.games.filter((g) => g.playoff)), income, attrs: { ...C.attrs }, league: S.league || "wl",
     euro: S.el ? { rank: euroTable(S.el).findIndex((t) => t.id === club) + 1, of: S.el.teams.length, f4: !!S.el.f4?.teams.includes(club), champion: S.el.champion === club, avg: averages(S.games.filter((g) => g.eu)) } : null,
   };
+  if (S.league === "nba") summary.playoffs = !S.playoffs ? null : title ? "NBA champions" : S.playoffs.outAt === -1 ? "Missed the playoffs" : S.playoffs.outAt === 0 ? "Out in the first round" : S.playoffs.outAt === 1 ? "Lost in the NBA semi-finals" : "Lost in the NBA Finals";
+  // NBA scouts: a strong season in Europe brings a Summer League invite, and NBA offers come sooner
+  if (S.league !== "nba" && !C.nbaWatch && nbaReady() && bestOverall(C) >= 86 && C.age <= 28) {
+    C.nbaWatch = S.label;
+    C.pop = clamp(C.pop + 4, 0, 100);
+    summary.summerLeague = true;
+    C.log.unshift({ t: "nba", text: `NBA Summer League invite: scouts saw ${C.name}'s ${S.label} season. NBA offers can now come from overall 88.` });
+  }
   if (S.league === "el") summary.playoffs = !S.playoffs ? null : title ? "EuroLeague champions" : S.playoffs.outAt === -1 ? "Missed the playoffs" : S.playoffs.outAt === 0 ? "Out in the playoffs" : S.playoffs.outAt === 1 ? "Lost in the Final Four semi-final" : "Lost the EuroLeague final";
   C.history.push(summary);
   const dev = seasonDevelopment(C, S, { potential: (DIFFICULTY[C.diff] || DIFFICULTY.star).potential });

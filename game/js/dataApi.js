@@ -2,6 +2,7 @@
 // data.js builds it over the chosen league (see leagueChoice.js); wl.js over the Winner League only (My Career).
 import { createDatabaseHelpers } from "../../src/database_helpers.js";
 import { euroleagueIndex } from "../data/euroleague_index.js";
+import { nbaTeamNames } from "../data/nba_teams.js";
 
 export const POSITIONS = ["PG", "SG", "SF", "PF", "C"];
 
@@ -33,9 +34,9 @@ export function makeDataApi(db) {
   const PLAYED_SEASONS = db.metadata.season_list.filter((s) => s !== CURRENT);
   const teamsById = new Map(db.teams.map((t) => [t.team_id, t]));
   const playersById = new Map(db.players.map((p) => [p.player_id, p]));
-  // EuroLeague clubs (separate data) get their names from the small EuroLeague index
+  // EuroLeague clubs (separate data) get their names from the small EuroLeague index, NBA clubs from the NBA names list
   const teamName = (id) => {
-    const name = teamsById.get(id)?.canonical_name ?? euroleagueIndex.teams[baseTeam(id)] ?? id;
+    const name = teamsById.get(id)?.canonical_name ?? euroleagueIndex.teams[baseTeam(id)] ?? nbaTeamNames[id] ?? id;
     return String(id).startsWith("el:") ? `${name} (EuroLeague)` : name; // mixed data: the club's EuroLeague side
   };
 

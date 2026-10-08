@@ -90,7 +90,7 @@ export async function drawCareerCard(C, avatarSvg, { overall, hofScore, hofLine 
   const awards = (name) => C.awards.filter((a) => a.name === name).length;
   const plural = (one, many, n) => (n === 1 ? one : many);
   const honours = [[plural("TITLE", "TITLES", count("title")), count("title")], [plural("EUROLEAGUE TITLE", "EUROLEAGUE TITLES", count("euroleague")), count("euroleague")],
-    [plural("STATE CUP", "STATE CUPS", count("cup")), count("cup")], [plural("ALL-STAR", "ALL-STARS", count("allstar")), count("allstar")], [plural("MVP", "MVPS", awards("MVP")), awards("MVP")]].filter(([, n]) => n);
+    [plural("NBA TITLE", "NBA TITLES", count("nba")), count("nba")], [plural("STATE CUP", "STATE CUPS", count("cup")), count("cup")], [plural("ALL-STAR", "ALL-STARS", count("allstar")), count("allstar")], [plural("MVP", "MVPS", awards("MVP")), awards("MVP")]].filter(([, n]) => n);
   let hx = 60;
   const hy = 1080;
   g.font = `800 30px ${DISPLAY}`;

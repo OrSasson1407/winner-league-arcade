@@ -160,9 +160,9 @@ export function seasonDevelopment(C, S, { academy = false, loan = false, potenti
   let level = 1;
   if (!academy && S) {
     const euro = S.games?.filter((x) => x.eu && !x.line.dnp).length || 0;
-    level = 0.9 + clamp(((S.base ?? 80) - 76) / 50, 0, 0.2) + (S.league === "el" ? 0.05 : 0) + Math.min(0.06, euro * 0.006);
+    level = 0.9 + clamp(((S.base ?? 80) - 76) / 50, 0, 0.2) + (S.league === "el" ? 0.05 : S.league === "nba" ? 0.08 : 0) + Math.min(0.06, euro * 0.006);
     const kind = (S.base ?? 80) >= 88 ? "top" : (S.base ?? 80) >= 82 ? "solid" : "weaker";
-    add("level", "Level", level, S.league === "el" ? "A season in the EuroLeague: practising against the best." : euro ? `Practising with a ${kind} roster, plus ${euro} EuroLeague games.` : `Practising with a ${kind} roster.`);
+    add("level", "Level", level, S.league === "nba" ? "A season in the NBA: practising with the best players in the world." : S.league === "el" ? "A season in the EuroLeague: practising against the best." : euro ? `Practising with a ${kind} roster, plus ${euro} EuroLeague games.` : `Practising with a ${kind} roster.`);
   } else if (academy && loan) { level = 1.05; add("level", "Level", level, "A loan to another academy: more of the ball."); }
   // a summer with the national team: practising with the country's best
   if (C.ntBonus && !academy) { level *= 1.04; add("national", "National team", 1.04, "Last summer with the national team: practising with the country's best."); delete C.ntBonus; }

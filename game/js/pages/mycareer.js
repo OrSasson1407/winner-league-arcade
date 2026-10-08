@@ -21,6 +21,7 @@ import { maybeEvent, resolveEvent } from "../mycareer/events.js";
 import { badgeMedals, bracket, contractHtml, gauge, radar, scheduleGrid, standings } from "../mycareer/visuals.js";
 import { clubThemeVars } from "../lib/clubTheme.js";
 import { MOCK_NOTE, elLoaded, loadEuroleague } from "../euroleague.js";
+import { loadNba, nbaReady } from "../mycareer/nba.js";
 import { drawCareerCard } from "../mycareer/shareCard.js";
 import { keysFor, openGameView } from "../lib/gameView.js";
 import { teamPreview } from "../shared/gameSim.js";
@@ -32,7 +33,7 @@ import { gameKeys, press } from "../lib/shortcuts.js";
 
 const KEY = "mc:save";
 const NATS = ["Israel", "United States", "Serbia", "Lithuania", "Greece", "France", "Spain", "Nigeria", "Canada", "Argentina", "Croatia", "Ukraine"];
-const TROPHY = { title: ["trophy", "Champion"], euroleague: ["crown", "EuroLeague"], cup: ["medal", "State Cup"], allstar: ["star", "All-Star"] };
+const TROPHY = { title: ["trophy", "Champion"], euroleague: ["crown", "EuroLeague"], nba: ["crown", "NBA title"], cup: ["medal", "State Cup"], allstar: ["star", "All-Star"], nbaallstar: ["star", "NBA All-Star"] };
 const money = fmtMoney;
 const roleName = (r) => E.ROLE_NAMES[r] || r;
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
@@ -52,10 +53,11 @@ function modal(label) {
 }
 
 export async function renderMyCareer(root, signal) {
-  if (!elLoaded()) {
-    root.innerHTML = `<span class="sr-only">Loading the EuroLeague data for your career…</span>${skeletonHtml("mycareer")}`;
+  if (!elLoaded() || !nbaReady()) {
+    root.innerHTML = `<span class="sr-only">Loading the EuroLeague and NBA data for your career…</span>${skeletonHtml("mycareer")}`;
     root.setAttribute("aria-busy", "true");
-    try { await loadEuroleague(); } catch { /* offline without it: the career stays in Israel */ }
+    // offline without them: the career stays where the loaded data reaches (Israel at least)
+    await Promise.all([loadEuroleague().catch(() => {}), loadNba().catch(() => {})]);
     root.removeAttribute("aria-busy");
     if (signal.aborted) return;
   }
@@ -125,7 +127,7 @@ export async function renderMyCareer(root, signal) {
     if (!clubs.includes(f.academy)) f.academy = clubs[0];
     root.innerHTML = html`
       <div class="game-head"><div><a class="back" href="#/">← Home</a><h1>My Career</h1>
-        <p>Create a player, grow up in a club academy and play a whole career in the Winner League against the real teams of every season.</p></div></div>
+        <p>Create a player, grow up in a club academy and play a whole career in the Winner League against the real teams of every season. Get good enough and the EuroLeague and the NBA call.</p></div></div>
       <div class="mc-create">
         <div class="card pad mc-form">
           <div class="row mc-two"><div class="field"><label for="mc-name">Name</label><input id="mc-name" class="input" maxlength="22" value="${esc(f.name)}" placeholder="Your player's name"></div>
@@ -186,7 +188,7 @@ export async function renderMyCareer(root, signal) {
     const rank = S ? E.table(S).findIndex((t) => t.id === S.team) + 1 : 0;
     const nx = S ? nextOpp() : null;
     const chips = [
-      S ? `<div class="hub-chip"><small>${esc(S.label)}</small><b>${rec.w}-${rec.l}</b><span>#${rank} in the ${S.league === "el" ? "EuroLeague" : "league"}</span></div>` : "",
+      S ? `<div class="hub-chip"><small>${esc(S.label)}</small><b>${rec.w}-${rec.l}</b><span>#${rank} in the ${S.league === "el" ? "EuroLeague" : S.league === "nba" ? "NBA" : "league"}</span></div>` : "",
       nx && nx.opp ? `<div class="hub-chip"><small>Next game</small><span class="hub-opp">${crestSvg(nx.opp, teamName(nx.opp), 22)} ${nx.home === false ? "at" : "vs"} ${esc(teamName(nx.opp))}</span></div>` : "",
       C.contract ? `<div class="hub-chip"><small>Contract</small><b>${money(C.contract.salary)}</b><span>${C.contract.left} season${C.contract.left === 1 ? "" : "s"} left</span></div>` : "",
       `<div class="hub-chip"><small>Bank</small><b>${money(C.money)}</b><span>${icon("bolt", { size: 12 })} ${C.tp} training points</span></div>`,
@@ -412,7 +414,7 @@ export async function renderMyCareer(root, signal) {
         <p class="muted">${first ? `The academy years are over. ${esc(teamName(C.academy.club))} wants to keep its own, and other clubs are calling.` : "Your contract is up. Here's who wants you."} Accept an offer, or try to negotiate (the club may walk away).</p>
         <div class="field"><label>Agent</label><div class="mc-cards" id="mc-agent">${Object.entries(E.AGENTS).map(([k, a]) => `<button class="mc-pick ${C.agent === k ? "on" : ""}" data-v="${k}" aria-pressed="${C.agent === k}"><b>${a.name}</b><small>${a.desc} Fee ${Math.round(a.fee * 100)}%.</small></button>`).join("")}</div></div>
         <div class="mc-offers">${view.offers.map((o, i) => html`<div class="card pad mc-offer ${o.homeGrown ? "home" : ""}">
-          <div class="row">${crestSvg(o.team, o.name, 36)}<div><b>${esc(o.name)}</b><small class="muted">${o.abroad ? `<span class="pill eu-pill">${icon("globe", { size: 12 })} EuroLeague · abroad</span>` : ""}${o.homeGrown ? "Your academy club" : o.own ? "Your current club" : ""}${o.loyal ? " · loyalty bonus" : ""}</small></div></div>
+          <div class="row">${crestSvg(o.team, o.name, 36)}<div><b>${esc(o.name)}</b><small class="muted">${o.nba ? `<span class="pill eu-pill nba-pill">${icon("globe", { size: 12 })} NBA</span>` : o.abroad ? `<span class="pill eu-pill">${icon("globe", { size: 12 })} EuroLeague · abroad</span>` : ""}${o.homeGrown ? "Your academy club" : o.own ? "Your current club" : ""}${o.loyal ? " · loyalty bonus" : ""}</small></div></div>
           <div class="mc-terms"><span>${money(o.salary)}<small>/season gross</small></span><span>${o.years} yr${o.years > 1 ? "s" : ""}</span><span>${roleName(o.role)}</span></div>
           <small class="muted">≈ ${money(E.netPay(o.salary, C.agent))} net after ~${Math.round(E.taxRate(o.salary) * 100)}% tax and the agent's ${Math.round(E.AGENTS[C.agent].fee * 100)}% · ${E.FAM_NAMES[o.fam] || ""} depth: #${(o.rank ?? 0) + 1}${C.nat !== "Israel" ? ` · ${o.foreigners} foreigners on the roster (minutes for ${E.FOREIGN_LIMIT})` : ""}</small>
           <div class="row" style="flex-wrap:wrap">
@@ -539,7 +541,7 @@ export async function renderMyCareer(root, signal) {
     }
     if (S.phase === "playoffs" && S.playoffs && !S.playoffs.out) {
       const s = S.playoffs.series.find((x) => x.a === S.team || x.b === S.team);
-      if (s) return { opp: s.a === S.team ? s.b : s.a, label: `${["Quarter-finals", "Semi-finals", "Final"][S.playoffs.round]} · series ${s.a === S.team ? s.w.join("-") : [...s.w].reverse().join("-")}` };
+      if (s) return { opp: s.a === S.team ? s.b : s.a, label: `${(S.league === "nba" ? ["First round", "Semi-finals", "NBA Finals"] : S.league === "el" ? ["Playoffs", "Final Four semi-final", "Final Four final"] : ["Quarter-finals", "Semi-finals", "Final"])[S.playoffs.round]} · series ${s.a === S.team ? s.w.join("-") : [...s.w].reverse().join("-")}` };
     }
     return null;
   }
@@ -572,7 +574,7 @@ export async function renderMyCareer(root, signal) {
     const S = C.cur, r = E.simFor(C, S, g);
     const mine = { name: teamName(S.team), id: S.team }, theirs = { name: teamName(g.opp), id: g.opp };
     const [home, away] = g.home ? [mine, theirs] : [theirs, mine];
-    const link = (l) => (l.id === "me" ? `<b>${esc(C.name)}</b>` : playersById.has(l.id) ? `<button class="link-name" data-profile="${l.id}">${esc(l.name)}</button>` : `<a class="link-name" href="#/euroleague/player/${esc(l.id)}">${esc(l.name)}</a>`);
+    const link = (l) => (l.id === "me" ? `<b>${esc(C.name)}</b>` : E.isNbaPlayer(l.id) ? esc(l.name) : playersById.has(l.id) ? `<button class="link-name" data-profile="${l.id}">${esc(l.name)}</button>` : `<a class="link-name" href="#/euroleague/player/${esc(l.id)}">${esc(l.name)}</a>`);
     let pre = null;
     if (start === "pregame") {
       // the preview shows the season numbers of the two rosters, not this game's
@@ -582,8 +584,8 @@ export async function renderMyCareer(root, signal) {
     return openGameView({ home, away, sim: r, label: g.label || "", pre, start, meId: "me", link, celebrate: g.won ? (g.home ? 0 : 1) : null, onClose });
   }
   function previewOf(tid) {
-    const europe = C.cur.league === "el";
-    const rows = (europe ? [] : E.rosterOf(E.dataSeason(C.cur.label), tid)).slice(0, 9);
+    const europe = C.cur.league === "el"; // EuroLeague numbers are placeholders: no preview numbers
+    const rows = (europe ? [] : C.cur.league === "nba" ? E.careerRoster(C.cur.label, tid) : E.rosterOf(E.dataSeason(C.cur.label), tid)).slice(0, 9);
     if (!rows.length) return { rating: "–", pts: "–", reb: "–", ast: "–", three: "–", star: null };
     const t = { players: rows.map((ps) => ({ id: ps.player_id, name: E.playerName(ps.player_id), pos: ps.position, rating: ps.rating_mock, mpg: ps.stats.mpg || 1,
       use: (ps.stats.ppg || 0) / (ps.stats.mpg || 1), reb: (ps.stats.rpg || 0) / (ps.stats.mpg || 1), ast: (ps.stats.apg || 0) / (ps.stats.mpg || 1), s3: (ps.stats.fg3_pct ?? 0) > 5 ? 0.33 : 0.05 })) };
@@ -594,7 +596,7 @@ export async function renderMyCareer(root, signal) {
     const b = E.boxScore(C, C.cur, g);
     const tbl = (name, lines, score) => `<div class="box-team"><div class="row"><b>${esc(name)}</b><span class="spacer"></span><b class="led">${score}</b></div>
       <table class="stat-table box"><thead><tr><th>Player</th><th></th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th></tr></thead><tbody>
-      ${lines.map((l) => `<tr class="${l.me ? "best" : ""}"><td>${l.me ? `<b>${esc(l.name)}</b>` : l.pid && l.el ? `<a class="link-name" href="#/euroleague/player/${esc(l.pid)}">${esc(l.name)}</a>` : l.pid ? `<button class="link-name" data-profile="${l.pid}">${esc(l.name)}</button>` : esc(l.name)}</td><td class="muted">${esc(l.pos)}</td><td>${l.min}</td><td><b>${l.pts}</b></td><td>${l.reb}</td><td>${l.ast}</td></tr>`).join("")}</tbody></table></div>`;
+      ${lines.map((l) => `<tr class="${l.me ? "best" : ""}"><td>${l.me ? `<b>${esc(l.name)}</b>` : l.pid && l.nba ? esc(l.name) : l.pid && l.el ? `<a class="link-name" href="#/euroleague/player/${esc(l.pid)}">${esc(l.name)}</a>` : l.pid ? `<button class="link-name" data-profile="${l.pid}">${esc(l.name)}</button>` : esc(l.name)}</td><td class="muted">${esc(l.pos)}</td><td>${l.min}</td><td><b>${l.pts}</b></td><td>${l.reb}</td><td>${l.ast}</td></tr>`).join("")}</tbody></table></div>`;
     const d = modal("Box score");
     d.innerHTML = html`<button class="icon-btn profile-close" aria-label="Close">${icon("close", { size: 18 })}</button>
       <div class="profile"><h2>${esc(teamName(C.cur.team))} ${g.my} – ${g.their} ${esc(teamName(g.opp))}</h2><p class="muted">${esc(g.label || "")}${C.cur.simulated ? " · simulated season" : ""}</p>
@@ -647,11 +649,12 @@ export async function renderMyCareer(root, signal) {
       else if (x.inIt) newsFlash({ kicker: "EUROLEAGUE FINAL FOUR", tone: "info", ic: "globe", title: `Final Four: ${teamName(x.f4.champion)} win the EuroLeague`, text: `${teamName(C.cur.team)} made the Final Four but fell short.` });
       else newsFlash({ kicker: "EUROLEAGUE", tone: "info", ic: "globe", title: `EuroLeague season over: #${x.rank} for ${teamName(C.cur.team)}`, text: `${teamName(x.f4.champion)} won the Final Four.` });
     }
-    if (out.allStar) { if (out.allStar.picked) { newsFlash({ kicker: "ALL-STAR GAME", tone: "good", ic: "star", title: `${C.name} is an All-Star!`, text: "Selected for this season's All-Star game." }); confetti(2000); emit("mc:trophy", { type: "allstar" }); } }
+    if (out.allStar) { if (out.allStar.picked) { newsFlash({ kicker: "ALL-STAR GAME", tone: "good", ic: "star", title: C.cur.league === "nba" ? `${C.name} is an NBA All-Star!` : `${C.name} is an All-Star!`, text: C.cur.league === "nba" ? "Selected for the NBA All-Star Game." : "Selected for this season's All-Star game." }); confetti(2000); emit("mc:trophy", { type: "allstar" }); } }
     save();
   }
   const liveOn = () => store.get("mc:live", true) !== false;
   function play(fn, { live = false } = {}) {
+    if (!C.cur) return draw(); // the season already ended (its review was closed with Esc): show where things stand
     meterBase = { trust: C.trust, pop: C.pop, chem: Math.round(C.chem?.[C.cur.team] || 0) };
     const S = C.cur;
     const out = fn();
@@ -681,7 +684,7 @@ export async function renderMyCareer(root, signal) {
     const S = C.cur;
     const title = S.playoffs?.champion === S.team;
     const { summary, dev } = E.endSeason(C);
-    if (title) { confetti(4500); sound.play("victory"); emit("mc:trophy", { type: "title" }); }
+    if (title) { confetti(4500); sound.play("victory"); emit("mc:trophy", { type: S.league === "nba" ? "nba" : "title" }); }
     for (const a of summary.awards) emit("mc:award", { name: a });
     emit("mc:season", { seasons: C.history.filter((h) => h.pro).length, pts: C.totals.pts, overall: summary.overall });
     save();
@@ -691,9 +694,10 @@ export async function renderMyCareer(root, signal) {
       <h2>${title ? `${icon("trophy", { size: 26 })} Champions!` : esc(summary.playoffs || "Season over")}</h2>
       <div class="mc-review-stats">${[["PPG", summary.avg.ppg], ["RPG", summary.avg.rpg], ["APG", summary.avg.apg], ["VAL", summary.avg.val], ["GP", summary.avg.gp], ["Finish", "#" + summary.standing]].map(([l, v]) => `<div><small>${l}</small><b class="led">${v}</b></div>`).join("")}</div>
       ${summary.awards.length ? `<div class="mc-awards">${summary.awards.map((a) => `<span class="pill">${icon("medal", { size: 13 })} ${esc(a)}</span>`).join("")}</div>` : ""}
-      ${summary.allStar ? `<p>${icon("star", { size: 15 })} All-Star</p>` : ""}${summary.cupWon ? `<p>${icon("medal", { size: 15 })} State Cup winners</p>` : ""}
+      ${summary.allStar ? `<p>${icon("star", { size: 15 })} ${summary.league === "nba" ? "NBA All-Star" : "All-Star"}</p>` : ""}${summary.cupWon ? `<p>${icon("medal", { size: 15 })} State Cup winners</p>` : ""}
       ${summary.euro ? `<p>${icon("globe", { size: 15 })} EuroLeague: ${summary.euro.champion ? "<b>champions!</b>" : summary.euro.f4 ? "Final Four" : `#${summary.euro.rank} of ${summary.euro.of}`} · ${summary.euro.avg.gp} games, ${summary.euro.avg.ppg} PPG</p>` : ""}
       ${summary.league === "el" ? `<p class="muted">A season abroad in the EuroLeague. Individual awards are only given in the Winner League here.</p>` : ""}
+      ${summary.summerLeague ? `<p>${icon("star", { size: 15 })} <b>NBA Summer League invite.</b> Scouts saw this season: NBA offers can now come from overall 88.</p>` : ""}
       <h3>Summer development (age ${C.age})</h3>
       ${devReportHtml(dev)}
       <p class="muted">Income after agent fee: ${money(summary.income)}</p>
@@ -805,11 +809,12 @@ export async function renderMyCareer(root, signal) {
   /** Who you're competing with for minutes at your position group. */
   function depthHtml(label, tid) {
     const dc = E.depthChart(C, label, tid);
-    const rows = dc.rivals.map((ps) => ({ name: E.playerName(ps.player_id), pid: ps.player_id, wl: playersById.has(ps.player_id), r: ps.rating_mock, foreign: !dc.abroad && !E.isIsraeliPlayer(ps.player_id) }));
+    const nbaTeam = E.isNba(label, tid);
+    const rows = dc.rivals.map((ps) => ({ name: E.playerName(ps.player_id), pid: ps.player_id, wl: playersById.has(ps.player_id), nba: E.isNbaPlayer(ps.player_id), r: ps.rating_mock, foreign: !dc.abroad && !E.isIsraeliPlayer(ps.player_id) }));
     rows.splice(dc.rank, 0, { me: true, name: C.name, r: Math.round(dc.myScore), foreign: !dc.abroad && C.nat !== "Israel" });
     return html`<h3>${icon("users")} Depth chart · ${E.FAM_NAMES[dc.fam]} at ${esc(teamName(tid))}</h3>
-      <ol class="mc-depth">${rows.slice(0, 7).map((x, i) => `<li class="${x.me ? "me" : ""}"><span>${i + 1}</span>${x.me ? `<b>${esc(x.name)} (you)</b>` : x.wl ? `<button class="link-name" data-profile="${x.pid}">${esc(x.name)}</button>` : `<a class="link-name" href="#/euroleague/player/${esc(x.pid)}">${esc(x.name)}</a>`}${x.foreign ? ` <small class="muted">foreign</small>` : ""}<b class="led">${x.r}</b></li>`).join("")}</ol>
-      <p class="muted" style="font-size:12px;margin:6px 0 0">Your number includes coach trust, chemistry${C.nat === "Israel" && !dc.abroad ? " and the Israeli-player edge" : ""}.${dc.abroad ? ` EuroLeague roster; its ratings are placeholder data, rescaled to the Winner League.` : ""}${dc.foreign ? ` Foreign players on the roster: ${dc.foreigners} (minutes for ${E.FOREIGN_LIMIT}).${dc.slotOk ? "" : " <b>You're not among the top foreigners yet: bench.</b>"}` : ""}</p>`;
+      <ol class="mc-depth">${rows.slice(0, 7).map((x, i) => `<li class="${x.me ? "me" : ""}"><span>${i + 1}</span>${x.me ? `<b>${esc(x.name)} (you)</b>` : x.wl ? `<button class="link-name" data-profile="${x.pid}">${esc(x.name)}</button>` : x.nba ? esc(x.name) : `<a class="link-name" href="#/euroleague/player/${esc(x.pid)}">${esc(x.name)}</a>`}${x.foreign ? ` <small class="muted">foreign</small>` : ""}<b class="led">${x.r}</b></li>`).join("")}</ol>
+      <p class="muted" style="font-size:12px;margin:6px 0 0">Your number includes coach trust, chemistry${C.nat === "Israel" && !dc.abroad ? " and the Israeli-player edge" : ""}.${nbaTeam ? ` NBA roster: real players of that season, ratings moved onto the Winner League scale.` : dc.abroad ? ` EuroLeague roster; its ratings are placeholder data, rescaled to the Winner League.` : ""}${dc.foreign ? ` Foreign players on the roster: ${dc.foreigners} (minutes for ${E.FOREIGN_LIMIT}).${dc.slotOk ? "" : " <b>You're not among the top foreigners yet: bench.</b>"}` : ""}</p>`;
   }
   /** Signing ceremony: the contract, a signature, and the first photo in the new jersey. */
   function ceremony(o) {
@@ -830,13 +835,13 @@ export async function renderMyCareer(root, signal) {
 
 
   function tableHtml() {
-    const S = C.cur, abroad = S.league === "el";
+    const S = C.cur, abroad = S.league === "el", nba = S.league === "nba";
     return html`<div class="mc-stack">
-      <div class="card pad" style="min-width:0"><h2>${icon(abroad ? "globe" : "chart")} ${abroad ? "EuroLeague " : ""}${S.label} standings${S.simulated ? ` <span class="muted" style="font-size:14px">(simulated season)</span>` : ""}</h2>
+      <div class="card pad" style="min-width:0"><h2>${icon(abroad || nba ? "globe" : "chart")} ${abroad ? "EuroLeague " : nba ? "NBA " : ""}${S.label} standings${S.simulated ? ` <span class="muted" style="font-size:14px">(simulated season)</span>` : ""}</h2>
         ${standings(S)}
-        <p class="muted" style="font-size:12px">▲▼ change since the last round. ${abroad ? `The top 8 make the playoffs (best of three); the winners go to a one-game Final Four. ${esc(MOCK_NOTE)} Team strengths are rescaled to the Winner League.` : "The top 8 (highlighted) make the playoffs, best of three. Team strengths come from each club's real roster that season."}</p></div>
+        <p class="muted" style="font-size:12px">▲▼ change since the last round. ${nba ? "One game against every team. The top 8 make the playoffs, best of three. Teams and rosters are the real NBA of that season, ratings on the Winner League scale." : abroad ? `The top 8 make the playoffs (best of three); the winners go to a one-game Final Four. ${esc(MOCK_NOTE)} Team strengths are rescaled to the Winner League.` : "The top 8 (highlighted) make the playoffs, best of three. Team strengths come from each club's real roster that season."}</p></div>
       <div class="card pad" style="min-width:0"><h2>${icon("trophy")} ${abroad ? "Playoffs & Final Four" : "Playoffs"}</h2>
-        ${S.playoffs ? bracket(S, abroad ? ["Playoffs", "Final Four semis", "Final"] : undefined) : `<p class="muted">The bracket appears when the regular season ends. Finish in the top 8 to get in.</p>`}</div>
+        ${S.playoffs ? bracket(S, abroad ? ["Playoffs", "Final Four semis", "Final"] : nba ? ["First round", "Semi-finals", "NBA Finals"] : undefined) : `<p class="muted">The bracket appears when the regular season ends. Finish in the top 8 to get in.</p>`}</div>
       ${S.el ? html`<div class="card pad" style="min-width:0"><h2>${icon("globe")} EuroLeague ${S.el.season}</h2>
         ${euroTableHtml(S.el, S.team, 99)}
         ${S.el.f4 ? `<p><b>Final Four:</b> ${S.el.f4.teams.map((t) => esc(teamName(t))).join(", ")} · champion <b>${esc(teamName(S.el.champion))}</b></p>` : `<p class="muted" style="font-size:12px">One game against every club, spread over the league season. The top four go to the Final Four when the league's regular season ends.</p>`}
@@ -855,6 +860,7 @@ export async function renderMyCareer(root, signal) {
   }
   /** The EuroLeague campaign of your Israeli club, on the season tab. */
   function euroCard(S) {
+    if (!S.el && S.league === "nba") return `<div class="card pad eu-card"><h3>${icon("globe")} A season in the NBA</h3><p class="muted" style="margin:0">${esc(teamName(S.team))}: ${S.schedule.length} games, one against every team, then the playoffs. Teammates and opponents are the real NBA rosters of that season.</p></div>`;
     if (!S.el) return S.league === "el" ? `<div class="card pad eu-card"><h3>${icon("globe")} A season abroad</h3><p class="muted" style="margin:0">${esc(teamName(S.team))} play the EuroLeague: ${S.schedule.length} rounds, then the playoffs and a one-game Final Four. Teammates and opponents are the real rosters of that EuroLeague season. ${esc(MOCK_NOTE)}</p></div>` : "";
     const rows = E.euroTable(S.el), mine = rows.findIndex((t) => t.id === S.team);
     const r = S.el.standings[S.team];
@@ -878,7 +884,7 @@ export async function renderMyCareer(root, signal) {
     return html`<div class="mc-grid">
       <div class="card pad" style="min-width:0"><div class="row"><h2 style="margin:0">${icon("clock")} Career</h2><span class="spacer"></span><button class="btn" data-share-card>${icon("camera", { size: 15 })} Share career card</button></div>
         ${pro.length ? `<div class="grid-wrap"><table class="stat-table"><thead><tr><th>Season</th><th>Team</th><th>Age</th><th>Role</th><th>GP</th><th>PPG</th><th>RPG</th><th>APG</th><th>VAL</th><th>OVR</th><th>Europe</th></tr></thead>
-          <tbody>${pro.map((h) => `<tr><td>${h.season}${h.simulated ? "*" : ""}</td><td>${esc(teamName(h.team))}${h.loan ? " (loan)" : ""}</td><td>${h.age}</td><td>${roleName(h.role)}</td><td>${h.avg.gp}</td><td>${h.avg.ppg}</td><td>${h.avg.rpg}</td><td>${h.avg.apg}</td><td>${h.avg.val}</td><td><b>${h.overall}</b></td><td>${h.league === "el" ? `<span class="pill eu-pill">EuroLeague club</span>` : h.euro ? (h.euro.champion ? "🏆 Champion" : h.euro.f4 ? "Final Four" : `#${h.euro.rank}`) : "–"}</td></tr>`).join("")}</tbody></table></div>
+          <tbody>${pro.map((h) => `<tr><td>${h.season}${h.simulated ? "*" : ""}</td><td>${esc(teamName(h.team))}${h.loan ? " (loan)" : ""}</td><td>${h.age}</td><td>${roleName(h.role)}</td><td>${h.avg.gp}</td><td>${h.avg.ppg}</td><td>${h.avg.rpg}</td><td>${h.avg.apg}</td><td>${h.avg.val}</td><td><b>${h.overall}</b></td><td>${h.league === "nba" ? `<span class="pill eu-pill">NBA${h.title ? " · 🏆" : ""}</span>` : h.league === "el" ? `<span class="pill eu-pill">EuroLeague club</span>` : h.euro ? (h.euro.champion ? "🏆 Champion" : h.euro.f4 ? "Final Four" : `#${h.euro.rank}`) : "–"}</td></tr>`).join("")}</tbody></table></div>
           <p class="muted" style="font-size:12px">* simulated season (after ${E.LAST_REAL}, rosters based on ${E.LAST_REAL}).</p>` : `<p class="muted">No pro seasons yet.</p>`}
       </div>
       <div style="display:grid;gap:16px;align-content:start"><div class="card pad"><h3>${icon("trophy")} Against the real records</h3>
