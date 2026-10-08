@@ -66,6 +66,8 @@ const routes = {
   find: lazy(() => import("./pages/find.js"), "renderFind"),
   nt: lazy(() => import("./pages/national.js"), "renderNational"),
   quick: lazy(() => import("./pages/quick.js"), "renderQuick"),
+  pass: lazy(() => import("./pages/pass.js"), "renderPass"),
+  stats: lazy(() => import("./pages/stats.js"), "renderStats"),
 };
 const loaded = new Map(); // key -> render function, once its module is in
 function loadRoute(key) {
@@ -279,6 +281,7 @@ const drawMe = () => {
 };
 document.addEventListener("me-changed", drawMe);
 document.addEventListener("xp-changed", drawMe);
+document.addEventListener("pass-tier", (e) => toast(`Season pass: tier ${e.detail.tier} reached! Claim your reward in the pass.`));
 drawMe();
 
 // one tap to pause / resume every animation (stored as the "Animations" setting)

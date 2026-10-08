@@ -36,6 +36,19 @@ export function buy(item, price) {
   save(w);
   return true;
 }
+/** Give an item (a season-pass reward): owned like a bought one. */
+export function grant(id) {
+  const w = wallet();
+  if (w.owned[id]) return;
+  w.owned[id] = new Date().toISOString();
+  save(w);
+}
+/** Give single-use helpers (a season-pass reward). */
+export function grantTokens(token, count) {
+  const w = wallet();
+  w.tokens[token] = (w.tokens[token] || 0) + count;
+  save(w);
+}
 /** Use one single-use helper (an extra hint, an extra re-spin). Returns false when none are left. */
 export function useToken(id) {
   const w = wallet();

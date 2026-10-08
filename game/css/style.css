@@ -2176,3 +2176,37 @@ dialog.ob-modal { width: min(560px, calc(100vw - 24px)); padding: 26px 24px 20px
 .el-chev { color: var(--muted); transition: transform var(--t-med) var(--ease); }
 .el-team[open] .el-chev { transform: rotate(90deg); }
 .el-team-link { margin: 0; padding: 0 14px 12px; font-size: 13px; }
+
+/* ---------- stats hub (#/stats) ---------- */
+.ks-games { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.ks-game { display: grid; gap: 4px; text-decoration: none; color: inherit; transition: transform .15s, border-color .15s; }
+.ks-game:hover { transform: translateY(-2px); border-color: var(--accent); }
+.ks-game .led { font-size: 30px; }
+.ks-spark { display: flex; align-items: flex-end; gap: 2px; height: 34px; margin-top: 6px; }
+.ks-spark i { flex: 1; min-height: 2px; border-radius: 2px 2px 0 0; background: linear-gradient(to top, var(--good) var(--ok), var(--bad) var(--ok)); opacity: .85; }
+.ks-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.ks-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) 44px 36px 22px; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.ks-list li > span:first-child:not(.ks-season), .ks-list li > span:nth-child(2) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ks-list li:has(.ks-season) { grid-template-columns: minmax(0, 1fr) 60px 36px 22px; }
+.ks-list li:not(:has(.ks-bar)) { grid-template-columns: minmax(0, 1fr) auto auto; }
+.ks-list small { text-align: end; font-size: 11px; }
+.ks-bar { height: 6px; border-radius: 99px; background: var(--bg2); overflow: hidden; }
+.ks-bar i { display: block; height: 100%; background: var(--accent); }
+.ks-list b { text-align: end; }
+
+/* ---------- season pass (#/pass) ---------- */
+.pass-head { margin-bottom: 14px; }
+.pass-head .row { gap: 16px; align-items: center; }
+.pass-tier { font-size: 44px; min-width: 64px; text-align: center; }
+.pass-track { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.pass-tile { position: relative; display: grid; justify-items: center; gap: 6px; padding: 14px 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); text-align: center; font-size: 13px; min-height: 130px; align-content: start; }
+.pass-tile > small { position: absolute; top: 6px; inset-inline-start: 8px; font-family: var(--f-display); color: var(--muted); }
+.pass-tile .ic { color: var(--accent); }
+.pass-tile.locked { opacity: .55; }
+.pass-tile.ready { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 6px 18px -8px var(--accent); }
+.pass-tile.got { background: var(--bg2); }
+.pass-tile.got em { color: var(--good); font-style: normal; font-weight: 700; }
+.pass-tile.item, .pass-tile.badge { border-width: 2px; }
+.pass-tile.badge .ic { color: var(--gold, #e8b64c); }
+.pass-tile em { font-style: normal; margin-top: auto; }
+.pass-badges { display: flex; flex-wrap: wrap; gap: 8px; }

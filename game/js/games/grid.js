@@ -2,6 +2,7 @@
 // (e.g. played for Maccabi Haifa AND averaged 15+ points in a season). 9 guesses for 9 cells,
 // each player once. Rarer right answers score more. Daily (same for everyone) or Unlimited.
 import { careerSummary, namedPlayers, playersById, seededRng, teamName } from "../data.js";
+import { recordAnswer } from "../lib/knowledge.js";
 import { autocomplete, esc, html, localDate, store, toast, track } from "../ui.js";
 import { crestSvg, icon } from "../lib/icons.js";
 import { confetti, sound } from "../lib/fx.js";
@@ -50,6 +51,7 @@ export function renderGrid(root, signal, params, query = {}) {
     const f = facts().get(pid);
     G.left--;
     const name = playersById.get(pid).name;
+    recordAnswer({ game: "grid", ok: !!(f && r.test(f) && c.test(f)), players: [pid], clubs: [r.club, c.club].filter(Boolean) });
     if (f && r.test(f) && c.test(f)) {
       const rare = rarity(pid, answersFor(r, c));
       G.cells[cell] = { pid, rarity: rare };

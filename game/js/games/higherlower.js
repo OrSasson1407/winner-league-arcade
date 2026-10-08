@@ -1,6 +1,7 @@
 // Higher or Lower: compare a stat between two real player-seasons.
 // Game types: Classic (one miss ends it), 3 Lives, Time attack (60 s). Pairs: random, or the same player in two seasons.
 import { db, isPlayable, pick, playersById, psByKey, psKey } from "../data.js";
+import { recordAnswer } from "../lib/knowledge.js";
 import { animate, countUp, html, store, toast, track } from "../ui.js";
 import { playerCard } from "../components/playerCard.js";
 import { sound } from "../lib/fx.js";
@@ -140,6 +141,7 @@ export function renderHigherLower(root, signal, params, query) {
     if (ok) state.score++;
     else { state.wrongs = (state.wrongs || 0) + 1; if (type !== "time") state.lives--; }
     emit("hl:answer", { ok, type, pairs, mode, score: state.score, tie: a === b, wrongs: state.wrongs });
+    recordAnswer({ game: "hl", ok, players: [state.left.player_id, state.right.player_id], clubs: [state.left.team_id, state.right.team_id], seasons: [state.left.season, state.right.season] });
     announce(`${ok ? "Correct" : "Wrong"}. ${playersById.get(state.right.player_id)?.name} had ${b.toFixed(c.dec)} ${c.label.toLowerCase()}, versus ${a.toFixed(c.dec)}. Score ${state.score}.`);
     sound.play(ok ? "place" : "bad");
     if (!ok && type !== "time" && state.lives <= 0) { render(); return setTimeout(() => !signal.aborted && gameOver("Game over"), 900); }

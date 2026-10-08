@@ -9,6 +9,7 @@ import { markDaily } from "../lib/daily.js";
 import { announce } from "../lib/a11y.js";
 import { shot } from "../lib/shot.js";
 import { makeConnections } from "../shared/leagueFacts.js";
+import { recordAnswer } from "../lib/knowledge.js";
 import { arrowGrid, gameKeys, press } from "../lib/shortcuts.js";
 
 const MISTAKES = 4;
@@ -87,6 +88,7 @@ export function renderConnections(root, signal, params, query = {}) {
 
   function finish(won) {
     S.over = true; S.won = won;
+    for (const g of puzzle) recordAnswer({ game: "conn", ok: S.solved.includes(g.level), players: g.players });
     if (!won) { for (const g of puzzle) if (!S.solved.includes(g.level)) S.solved.push(g.level); S.order = []; }
     const st = store.get(STATS_KEY, { played: 0, wins: 0, streak: 0, best: 0, perfect: 0 });
     st.played++;

@@ -14,6 +14,7 @@ import { lastStats } from "./online/net.js";
 import { reducedMotion } from "./lib/settings.js";
 import { missionText, missions } from "./lib/missions.js";
 import { coins } from "./lib/wallet.js";
+import { TIERS, daysLeft, passState, tierOf } from "./lib/pass.js";
 import { LEAGUES, LEAGUE_IDS, activeLeague, gameAvailable, setLeague } from "./leagueChoice.js";
 
 /** Slides for the home page's LED board (each links somewhere). */
@@ -183,6 +184,14 @@ export function renderHome(root, signal) {
           <span class="dh-flame">${icon("flag", { size: 24 })}</span>
           <div><small>WEEKLY MISSIONS · SHOP</small><b>${done}/4 missions done · 🏀 ${coins().toLocaleString("en-US")}</b>
             <span class="dh-dots">${m.list.map((x) => `<i class="${x.done ? "on" : ""}" title="${esc(missionText(x.def))}"></i>`).join("")}</span></div>
+          ${icon("arrowRight", { size: 18 })}</a>`;
+      })()}
+      ${(() => {
+        const s = passState(), t = tierOf(s.xp), open = t - s.claimed.length;
+        return html`<a class="card daily-home" href="#/pass">
+          <span class="dh-flame">${icon("crown", { size: 24 })}</span>
+          <div><small>SEASON PASS · ${daysLeft()} DAYS LEFT</small><b>Tier ${t}/${TIERS}${open > 0 ? ` · ${open} to claim` : ""}</b>
+            <span class="progress xp-bar"><i style="width:${Math.round((t / TIERS) * 100)}%"></i></span></div>
           ${icon("arrowRight", { size: 18 })}</a>`;
       })()}
     </section>

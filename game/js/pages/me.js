@@ -95,6 +95,8 @@ export function renderMe(root, signal) {
             <a class="btn" href="#/online">${icon("globe", { size: 16 })} Online 1v1</a>
             <a class="btn" href="#/challenge">${icon("users", { size: 16 })} Challenge a friend</a>
             <a class="btn" href="#/compare">${icon("chart", { size: 16 })} Compare players</a>
+            <a class="btn" href="#/stats">${icon("target", { size: 16 })} My stats</a>
+            <a class="btn" href="#/pass">${icon("crown", { size: 16 })} Season pass</a>
           </div>
           <div class="card pad"><div class="row"><h3>${icon("flag")} Achievements</h3><span class="spacer"></span><a class="btn ghost" href="#/achievements">Hall of Banners ${icon("arrowRight", { size: 14 })}</a></div>
             ${(() => {

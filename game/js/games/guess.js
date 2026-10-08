@@ -15,6 +15,7 @@ import { markDaily } from "../lib/daily.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
 import { tokens, useToken } from "../lib/wallet.js";
 import { LEAGUE, PLAYED_SEASONS } from "../data.js";
+import { recordAnswer } from "../lib/knowledge.js";
 import { LEAGUES } from "../leagueChoice.js";
 
 const MAX_GUESSES = 8;
@@ -104,6 +105,7 @@ export function renderGuess(root, signal, params, query) {
   }
 
   function endGame() {
+    { const cs = careerSummary(state.target.player_id); recordAnswer({ game: "guess", ok: state.won, players: [state.target.player_id], clubs: cs.teams, seasons: cs.played.map((r) => r.season) }); }
     const st = store.get(STATS_KEY, { played: 0, wins: 0, dist: {}, maxStreak: 0, hints: 0 });
     const streak = state.won ? store.get("guess:streak", 0) + 1 : 0;
     store.set("guess:streak", streak);

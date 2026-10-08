@@ -1,6 +1,8 @@
 // Career Path Quiz: see a player's journey, name the player.
 import { fmtHeight } from "../lib/units.js";
 import { careerSummary, namedPlayers, pick, playersById, seasonYear, shuffle, teamName } from "../data.js";
+import { recordAnswer } from "../lib/knowledge.js";
+import { weakSpots } from "../lib/knowledge.js";
 import { animate, esc, fmt1, html, store, toast, track } from "../ui.js";
 import { bestSeason, playerCard } from "../components/playerCard.js";
 import { clubColors } from "../lib/clubs.js";
@@ -22,13 +24,21 @@ const SAVE_KEY = "career:save";
 const ROUNDS = 10;
 
 export function renderCareer(root, signal, params, query) {
-  const pool = eligible();
   const ch = challengeFor(query, "career"); // challenge mode: same 10 careers for everyone
+  // practice: careers from your weak spots (the clubs and seasons you know least, the players who fool you)
+  const practice = !ch && query.practice === "1";
+  const pool = (() => {
+    const all = eligible();
+    if (!practice) return all;
+    const w = weakSpots(), clubs = new Set(w.clubs), seasons = new Set(w.seasons), players = new Set(w.players);
+    const mine = all.filter((p) => { const cs = careerSummary(p.player_id); return players.has(p.player_id) || cs.teams.some((t) => clubs.has(t)) || cs.played.some((r) => seasons.has(r.season)); });
+    return mine.length >= ROUNDS + 4 ? mine : all;
+  })();
   let rnd = Math.random;
   let state;
 
   function save() {
-    if (ch) return; // challenges don't touch your saved game
+    if (ch || practice) return; // challenges and practice don't touch your saved game
     store.set(SAVE_KEY, { targets: state.targets.map((p) => p.player_id), round: state.round, score: state.score, hint: state.hint,
       answered: state.answered, options: state.options.map((p) => p.player_id) });
   }
@@ -66,6 +76,8 @@ export function renderCareer(root, signal, params, query) {
     const target = state.targets[state.round];
     state.answered = id;
     const right = id === target.player_id;
+    const cs = careerSummary(target.player_id);
+    recordAnswer({ game: "career", ok: right, players: [target.player_id], clubs: cs.teams, seasons: cs.played.map((r) => r.season) });
     if (right) state.score += state.hint && !state.freeHint ? 2 : 3;
     sound.play(right ? "place" : "bad");
     announce(right ? `Correct! It's ${target.name}. Score ${state.score}.` : `Wrong. It was ${target.name}. Score ${state.score}.`);
@@ -109,7 +121,7 @@ export function renderCareer(root, signal, params, query) {
     const correct = target.player_id;
     root.innerHTML = html`${ch ? challengeBanner(ch) : ""}
       <div class="game-head"><div><a class="back" href="#/">← Home</a><h1>Career Path</h1>
-        <p>Whose career is this? 3 points, or 2 if you use the hint.</p></div>
+        <p>${practice ? "Practice: careers from your weak spots (the clubs and seasons you know least, the players who fool you)." : "Whose career is this? 3 points, or 2 if you use the hint."}</p></div>
         <div class="row"><span class="streak">Score ${state.score}</span><span class="muted">Round ${state.round + 1}/${ROUNDS}</span><button class="btn ghost" id="new-game">New game</button></div>
       </div>
       <div class="progress" style="margin-bottom:18px"><i style="width:${(state.round / ROUNDS) * 100}%"></i></div>
@@ -154,5 +166,5 @@ export function renderCareer(root, signal, params, query) {
   }
 
   gameKeys(signal, { h: press(root, "#hint"), n: press(root, "#next") });
-  if (ch || !resume()) start();
+  if (ch || practice || !resume()) start(); // practice always starts fresh
 }

@@ -2,6 +2,7 @@
 import { store } from "../ui.js";
 import { confetti, sound } from "./fx.js";
 import { coinsForLevel, earn, owns } from "./wallet.js";
+import { passGain } from "./pass.js";
 
 export const MAX_LEVEL = 50;
 /** XP needed to go from level n to n+1. */
@@ -37,6 +38,7 @@ export function addXP(amount, reason, { log = true } = {}) {
   const before = levelInfo();
   const xp = before.xp + Math.round(amount);
   store.set("xp", xp);
+  passGain(amount); // the season pass moves with every XP point
   if (log) logActivity("xp", { xp: Math.round(amount), r: reason });
   const after = levelInfo(xp);
   document.dispatchEvent(new CustomEvent("xp-changed", { detail: { amount, before, after } }));
