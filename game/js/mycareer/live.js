@@ -31,7 +31,7 @@ export function momentumHtml(g, myName, theirName) {
   let d = `M0 ${sy(0).toFixed(1)}`;
   for (let i = 1; i < pts.length; i++) d += `H${sx(pts[i][0]).toFixed(1)}V${sy(pts[i][1]).toFixed(1)}`;
   const area = `${d}V${mid.toFixed(1)}H0Z`;
-  const grid = [1, 2, 3].map((q) => `<line x1="${sx(q * QUARTER)}" x2="${sx(q * QUARTER)}" y1="${top}" y2="${H - bot}" class="mo-q"/>`).join("");
+  const grid = [1, 2, 3].map((q) => `<line x1="${sx(q * (tl.quarter || QUARTER))}" x2="${sx(q * (tl.quarter || QUARTER))}" y1="${top}" y2="${H - bot}" class="mo-q"/>`).join("");
   const desc = `Lead over the game. Biggest lead ${esc(myName)} ${f.bigUs}, ${esc(theirName)} ${f.bigThem}. ${f.changes} lead changes, ${f.ties} ties.`;
   return `<figure class="mc-momentum" data-seed="${g.seed}">
     <figcaption><b>Momentum</b><span class="mo-key"><i class="la"></i>${esc(myName)} ahead</span><span class="mo-key"><i class="lb"></i>${esc(theirName)} ahead</span></figcaption>

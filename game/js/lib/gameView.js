@@ -117,7 +117,7 @@ export function openGameView(opts) {
     cancelAnimationFrame(raf);
     keys = null;
     const won = sim.score[0] > sim.score[1] ? 0 : 1;
-    const g = { tl: { events: sim.events || [], lead: sim.lead, length: sim.length }, seed: 1 };
+    const g = { tl: { events: sim.events || [], lead: sim.lead, length: sim.length, quarter: sim.quarter }, seed: 1 };
     d.innerHTML = top() + html`<div class="gv-final">
       <div class="gv-score">${crest(home, 40)}<b class="led">${sim.score[0]}</b><span>–</span><b class="led">${sim.score[1]}</b>${crest(away, 40)}</div>
       <p class="gv-result"><span class="bc-strap">Final${sim.ot ? ` · ${sim.ot > 1 ? `${sim.ot} OT` : "OT"}` : ""}</span> ${esc((won === 0 ? home : away).name)} win</p>
@@ -166,7 +166,7 @@ export function openGameView(opts) {
     formation(0);
     let speed = 2, paused = false, t = 0, idx = 0, last = 0, done = false;
     // reduced motion: players and ball jump to their spots instead of gliding (the CSS drops the movement)
-    const setClock = () => { const c = clockOf(Math.min(t, sim.length)); $("#gv-q").textContent = c.label; $("#gv-c").textContent = c.text; };
+    const setClock = () => { const c = clockOf(Math.min(t, sim.length), sim.quarter); $("#gv-q").textContent = c.label; $("#gv-c").textContent = c.text; };
     const apply = (e, animate) => {
       $("#gv-s0").textContent = e.score[0]; $("#gv-s1").textContent = e.score[1];
       const shot = ["2", "3", "miss"].includes(e.type) || (e.type === "ft" && e.x);
@@ -188,7 +188,7 @@ export function openGameView(opts) {
         ball.classList.remove("fly"); void ball.getBBox(); ball.classList.add("fly");
         ball.style.setProperty("--dx", `${(hx - e.x).toFixed(1)}px`); ball.style.setProperty("--dy", `${(75 - e.y).toFixed(1)}px`);
       }
-      const c = clockOf(e.t);
+      const c = clockOf(e.t, sim.quarter);
       const strap = e.type === "timeout" ? `<span class="bc-strap">Timeout</span> ` : e.type.startsWith("period") ? `<span class="bc-strap">${e.type === "period" ? "Tip" : "Break"}</span> ` : "";
       $("#gv-feed").innerHTML = `<small>${c.label} · ${c.text}</small> ${strap}${e.pid === meId ? `<b>${esc(e.text)}</b>` : esc(e.text)}`;
       if (e.type === "timeout" || e.type === "period-end") announce(e.text);

@@ -568,7 +568,7 @@ export async function renderMyCareer(root, signal) {
     if (!g.sim) return g;
     const r = E.simFor(C, C.cur, g);
     const flip = !g.home; // the chart is drawn from your side
-    return { ...g, tl: { events: r.events.map((e) => (flip ? { ...e, score: [e.score[1], e.score[0]] } : e)), lead: r.lead.map(([t, l]) => [t, flip ? -l : l]), length: r.length } };
+    return { ...g, tl: { events: r.events.map((e) => (flip ? { ...e, score: [e.score[1], e.score[0]] } : e)), lead: r.lead.map(([t, l]) => [t, flip ? -l : l]), length: r.length, quarter: r.quarter } };
   }
   /** The shared game screen for one of your games (pre-game, live, final) from the game engine. */
   function gameScreen(g, start, onClose) {

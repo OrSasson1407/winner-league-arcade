@@ -335,7 +335,7 @@ function matchTeams(C, S, g) {
 /** The full game (events, box score, momentum) of one of your games: re-played from its seed. */
 export function simFor(C, S, g, events = true) {
   const [h, a] = matchTeams(C, S, g);
-  return simulateGame(h, a, { rnd: seededRng("mc-g-" + g.seed), neutral: !!g.neutral, events });
+  return simulateGame(h, a, { rnd: seededRng("mc-g-" + g.seed), neutral: !!g.neutral, events, quarter: S.league === "nba" ? 720 : 600 });
 }
 /** Play one of your games through the game engine: your line comes from the game itself. */
 export function playGame(C, S, oppId, home, rnd, { neutral = false, big = false, label = "", teams = S.teams, eu = false, rest = false } = {}) {

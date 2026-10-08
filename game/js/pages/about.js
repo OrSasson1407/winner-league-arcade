@@ -1,5 +1,5 @@
 // #/about: what this is and where the data comes from. The policy pages are in legal.js.
-import { CURRENT, PLAYED_SEASONS, db } from "../data.js";
+import { CURRENT, PLAYED_SEASONS, db } from "../wl.js"; // the Winner League numbers, whatever league the arcade is set to
 import { html } from "../ui.js";
 import { icon } from "../lib/icons.js";
 import { openFeedback, APP_VERSION } from "../lib/feedback.js";
@@ -18,11 +18,13 @@ export function renderAbout(root, signal) {
           <li><span>Current season</span><b>${CURRENT}: rosters only, no games yet</b></li>
           <li><span>Players · clubs</span><b>${players.toLocaleString()} players · ${db.teams.length} clubs</b></li>
           <li><span>Data last updated</span><b>${dataUpdated() || "–"}</b></li>
+          <li><span>NBA</span><b>Basketball-Reference (the open dataset sumitrodatta/bball-reference-datasets), 2010-11 on</b></li>
+          <li><span>EuroLeague</span><b>Names, clubs and seasons from 2000-01; its numbers are placeholders for now</b></li>
         </ul>
         <p class="muted">Player ratings are calculated by the game from real stats. They are not official league ratings. In My Career, seasons after ${PLAYED_SEASONS[PLAYED_SEASONS.length - 1]} are simulated from the latest rosters and labelled as such.</p>
       </section>
       <section class="card pad"><h2>${icon("info")} The arcade</h2>
-        <p>An independent, non-commercial fan project. Not affiliated with the Israeli Basketball Premier League, its clubs, Winner (the Israel Sports Betting Board) or Euroleague Basketball; their names are trademarks of their owners, used only to describe the real competitions. Club colours and logos identify the teams; logos are the clubs' trademarks, shown only for that, and removed at a club's request. Clubs without a logo here get simple initials drawn by the game. No betting, money or prizes.</p>
+        <p>An independent, non-commercial fan project. Not affiliated with the Israeli Basketball Premier League, its clubs, Winner (the Israel Sports Betting Board), Euroleague Basketball or the NBA; their names are trademarks of their owners, used only to describe the real competitions. Club colours and logos identify the teams; logos are the clubs' trademarks, shown only for that, and removed at a club's request. Clubs without a logo here get simple initials drawn by the game. No betting, money or prizes.</p>
         <ul class="clean about-list">
           <li><span>Version</span><b>${APP_VERSION}</b></li>
           <li><span>Works offline</span><b>Single-player games, once the site has loaded</b></li>

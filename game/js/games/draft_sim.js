@@ -40,7 +40,7 @@ export function rosterTools(D) {
   }
   /** Run (or re-run) a game through the engine. The same seed and teams always give the same game. */
   function runGame(home, away, seed, neutral, events = false) {
-    return simulateGame(simTeam(home), simTeam(away), { rnd: seededRng("g-" + seed), neutral, events });
+    return simulateGame(simTeam(home), simTeam(away), { rnd: seededRng("g-" + seed), neutral, events, quarter: nbaGame(home, away) ? 720 : 600 });
   }
   function playGame(home, away, rnd, neutral = false) {
     const seed = Math.floor(rnd() * 1e9);
@@ -51,6 +51,8 @@ export function rosterTools(D) {
   return { realRoster, realTeamStrength, simTeam, teamSeasonSide, runGame, playGame };
 }
 let gameSeq = 0;
+/** Two all-NBA rosters play NBA length (four 12-minute quarters); anything else plays FIBA's four 10s. */
+const nbaGame = (...teams) => teams.every((t) => { const r = (t.roster || []).filter(Boolean); return r.length && r.every((ps) => ps.league === "nba"); });
 export const { realRoster, realTeamStrength, simTeam, teamSeasonSide, runGame, playGame } = rosterTools({ H, isPlayable, playersById });
 /** The full game (events, box score, momentum) for the game screen. */
 export const simOf = (game) => runGame(game.home, game.away, game.seed, game.neutral, true);

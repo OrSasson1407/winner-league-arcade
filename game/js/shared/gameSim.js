@@ -52,11 +52,12 @@ export function profile(p) {
 /**
  * Play a game.
  *   home, away: { name, players: [profile...], minutes?: { [id]: target minutes }, tactics?: {pace, defense, focus} }
- *   opts: { rnd, neutral, events (record the play-by-play), starters?: number of starters (default 5) }
+ *   opts: { rnd, neutral, events (record the play-by-play), starters?: number of starters (default 5),
+ *           quarter?: seconds per quarter (600, FIBA's 10 minutes; 720 for an NBA game) }
  * Returns { score: [h, a], quarters: [[...], [...]], ot, box: [lines, lines], team: [stats, stats], events, mvp, lead }
  */
-export function simulateGame(home, away, { rnd = Math.random, neutral = false, events: record = false } = {}) {
-  const T = [home, away].map((t, side) => setupTeam(t, side));
+export function simulateGame(home, away, { rnd = Math.random, neutral = false, events: record = false, quarter = QUARTER } = {}) {
+  const T = [home, away].map((t, side) => setupTeam(t, side, quarter));
   const ev = record ? [] : null;
   const score = [0, 0], qs = [[], []];
   let t = 0, period = 0, poss = rnd() < 0.5 ? 0 : 1;
@@ -66,11 +67,11 @@ export function simulateGame(home, away, { rnd = Math.random, neutral = false, e
 
   const periods = () => 4;
   while (true) {
-    const len = period < 4 ? QUARTER : OT;
+    const len = period < 4 ? quarter : OT;
     const start = t, end = t + len;
     T.forEach((x) => { x.fouls = 0; });
     const q0 = [score[0], score[1]];
-    if (period > 0) T.forEach((x) => substitute(x, t, period, score, true));
+    if (period > 0) T.forEach((x) => substitute(x, t, period, score, true, quarter));
     say({ type: "period", text: period < 4 ? `Start of Q${period + 1}` : `Overtime ${period - 3}` });
     while (t < end) {
       const off = T[poss], def = T[1 - poss];
@@ -93,11 +94,11 @@ export function simulateGame(home, away, { rnd = Math.random, neutral = false, e
           timeouts[1 - poss]--;
           say({ type: "timeout", side: 1 - poss, text: `Timeout ${T[1 - poss].name} (${run.pts}-0 run)` });
           run.pts = 0;
-          T.forEach((x) => substitute(x, t, period, score, true));
+          T.forEach((x) => substitute(x, t, period, score, true, quarter));
         }
       }
       if (!res.keep) poss = 1 - poss;
-      if (res.dead) T.forEach((x) => substitute(x, t, period, score, false));
+      if (res.dead) T.forEach((x) => substitute(x, t, period, score, false, quarter));
     }
     qs[0].push(score[0] - q0[0]); qs[1].push(score[1] - q0[1]);
     period++;
@@ -111,16 +112,17 @@ export function simulateGame(home, away, { rnd = Math.random, neutral = false, e
   const gs = (l) => l.pts + 0.4 * l.fgm - 0.7 * l.fga - 0.4 * (l.fta - l.ftm) + 0.7 * l.oreb + 0.3 * l.dreb + l.stl + 0.7 * l.ast + 0.7 * l.blk - 0.4 * l.pf - l.tov;
   const mvpLine = box[win].slice().sort((a, b) => gs(b) - gs(a))[0];
   lead.push([r1(t), score[0] - score[1]]);
-  return { score, quarters: qs, ot: Math.max(0, period - 4), length: t, box, team, events: ev, lead, mvp: mvpLine ? { side: win, id: mvpLine.id, name: mvpLine.name, line: mvpLine } : null };
+  return { score, quarters: qs, ot: Math.max(0, period - 4), length: t, quarter, box, team, events: ev, lead, mvp: mvpLine ? { side: win, id: mvpLine.id, name: mvpLine.name, line: mvpLine } : null };
 }
 
 // ---------------------------------------------------------------- teams, minutes, fatigue
-function setupTeam(t, side) {
+function setupTeam(t, side, quarter = QUARTER) {
   const players = t.players.map((p) => ({ ...p, energy: p.energy0 ?? 1, box: blankLine(), onSince: 0, starter: false }));
-  // minutes plan: real minutes per game (or the given plan), scaled so the team shares 200 minutes
+  // minutes plan: real minutes per game (or the given plan), scaled so the team shares 200 minutes (240 in an NBA game)
+  const gameMin = (4 * quarter) / 60;
   const plan = players.map((p) => t.minutes?.[p.id] ?? p.mpg);
   const sum = plan.reduce((a, b) => a + b, 0) || 1;
-  players.forEach((p, i) => { p.target = Math.min(40, (plan[i] * 200) / sum); });
+  players.forEach((p, i) => { p.target = Math.min(gameMin, (plan[i] * 5 * gameMin) / sum); });
   const order = players.slice().sort((a, b) => b.target - a.target);
   const on = pickFive(order, null);
   on.forEach((p) => { p.starter = true; });
@@ -147,11 +149,11 @@ function tickTime(T, dur) {
   }
 }
 /** Substitutions at dead balls: tired players and foul trouble sit, players behind on their minutes come in. */
-function substitute(x, t, period, score, force) {
+function substitute(x, t, period, score, force, quarter = QUARTER) {
   const elapsed = Math.max(1, t);
-  const owed = (p) => (p.target * 60 * elapsed) / 2400 - p.box.sec; // seconds behind the plan
+  const owed = (p) => (p.target * 60 * elapsed) / (4 * quarter) - p.box.sec; // seconds behind the plan
   const foulLimit = [2, 3, 4, 5, 5][Math.min(period, 4)];
-  const lateClose = period >= 3 && Math.abs(score[0] - score[1]) <= 8 && t % QUARTER > (period >= 4 ? 0 : QUARTER - 240);
+  const lateClose = period >= 3 && Math.abs(score[0] - score[1]) <= 8 && t % quarter > (period >= 4 ? 0 : quarter - 240);
   const want = (p) => !p.out && (p.box.pf < foulLimit || lateClose) && p.energy > 0.42;
   let changed = false;
   for (const p of x.on.slice()) {
