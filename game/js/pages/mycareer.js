@@ -26,6 +26,7 @@ import * as NP from "../mycareer/nbaPath.js";
 import { tr } from "../i18n/index.js";
 import { cssHex, set3D, want3D } from "../three3d/core.js";
 const scenes3d = () => import("../three3d/scenes.js"); // loads Three.js only when a 3D view opens
+import { DESIGNS, designOf } from "../three3d/player.js";
 import { drawCareerCard } from "../mycareer/shareCard.js";
 import { keysFor, openGameView } from "../lib/gameView.js";
 import { teamPreview } from "../shared/gameSim.js";
@@ -460,7 +461,21 @@ export async function renderMyCareer(root, signal) {
   }
 
   // ---------------------------------------------------------------- 3D (the locker room, the trophy cabinet, the signing)
-  const body3d = () => ({ av: av(), name: C.name, num: av().num ?? 7, height: C.height, weight: C.weight ?? E.idealWeight(C) });
+  const SHOE_COLORS = ["#f4f4f4", "#111111", "#d71920", "#0a3e8c", "#ffd200", "#00843d", "#ff7a1a", "#6d28d9"];
+  /**
+   * How your player looks in 3D, from the career: the avatar, height and weight; muscle from athleticism, defence and
+   * rebounding (and bulking up); grey hair after 32 and shorter long hair after 36; the kit and shoes you picked.
+   */
+  const body3d = () => {
+    const a = { ...av() };
+    const age = C.age || 20;
+    if (age >= 36 && ["long", "afro", "bun", "dreads", "curly", "mohawk"].includes(a.hair)) a.hair = "short";
+    const strength = ((C.attrs?.ath ?? 60) + (C.attrs?.def ?? 60) + (C.attrs?.reb ?? 60)) / 3;
+    const muscle = Math.max(0, Math.min(1, (strength - 50) / 40 + (C.bodyPlan === "bulk" ? 0.15 : C.bodyPlan === "slim" ? -0.1 : 0)));
+    const team = clubNow();
+    return { av: a, name: C.name, num: a.num ?? 7, height: C.height, weight: C.weight ?? E.idealWeight(C),
+      look: { muscle, grey: Math.max(0, Math.min(1, (age - 32) / 7)), kit: C.gear?.kit || "home", shoes: C.gear?.shoes || SHOE_COLORS[0], design: designOf(team) } };
+  };
   const clubNow = () => C.loan?.team || C.contract?.team || C.club || C.academy?.club;
   /** Trophies and individual awards for the 3D cabinet, oldest first. */
   function cabinetItems() {
@@ -487,16 +502,34 @@ export async function renderMyCareer(root, signal) {
     d.innerHTML = html`<button class="icon-btn profile-close" aria-label="Close">${icon("close", { size: 18 })}</button>
       <div class="profile"><small class="muted">LOCKER ROOM · ${esc(teamName(team).toUpperCase())}</small><h2>${esc(C.name)}</h2>
         <div class="stage-box locker-box" id="lk-3d"></div>
-        <p class="muted" style="font-size:12px">Drag (or use the arrow keys) to turn. Your look comes from your avatar; height and weight shape the body.</p>
+        <p class="muted" style="font-size:12px">Drag (or use the arrow keys) to turn. Your look comes from your avatar; height, weight, training and age shape the body. ${esc(teamName(team))} wear the ${esc(DESIGNS[designOf(team)].toLowerCase())} design.</p>
+        <div class="row lk-gear" style="flex-wrap:wrap;gap:14px;margin-bottom:12px">
+          <div><small class="muted">KIT</small><div class="seg sm" id="lk-kit" role="radiogroup">${[["home", "Home"], ["away", "Away"]].map(([k, l]) => `<button role="radio" data-kit="${k}" aria-checked="${(C.gear?.kit || "home") === k}" class="${(C.gear?.kit || "home") === k ? "on" : ""}">${l}</button>`).join("")}</div></div>
+          <div><small class="muted">VIEW</small><button class="btn sm" id="lk-close-up" aria-pressed="false">${icon("search", { size: 14 })} Close-up</button></div>
+          <div><small class="muted">SHOES</small><div class="lk-shoes" id="lk-shoes" role="radiogroup">${SHOE_COLORS.map((c) => `<button role="radio" data-shoe="${c}" aria-checked="${(C.gear?.shoes || SHOE_COLORS[0]) === c}" aria-label="Shoe colour ${c}" class="${(C.gear?.shoes || SHOE_COLORS[0]) === c ? "on" : ""}" style="--sw:${c}"></button>`).join("")}</div></div>
+        </div>
         <div class="row"><button class="btn ghost" id="lk-off">${icon("close", { size: 14 })} Turn 3D views off</button><span class="spacer"></span><button class="btn primary" id="lk-close">Close</button></div></div>`;
     const close = () => closeModal(d);
     d.querySelector(".profile-close").addEventListener("click", close);
     d.querySelector("#lk-close").addEventListener("click", close);
     d.querySelector("#lk-off").addEventListener("click", () => { set3D(false); close(); toast("3D views are off. Turn them back on in Settings."); draw(); });
-    d.addEventListener("close", () => ctl.abort(), { once: true });
+    d.addEventListener("close", () => sceneCtl.abort(), { once: true });
     openModal(d);
-    scenes3d().then(({ lockerRoom }) => lockerRoom(d.querySelector("#lk-3d"), { ...body3d(), colors: clubColors(team).map(cssHex), club: teamName(team), signal: ctl.signal }))
+    let sceneCtl = ctl;
+    let lk = null, closeUp = false;
+    const mountScene = () => scenes3d().then(({ lockerRoom }) => lockerRoom(d.querySelector("#lk-3d"), { ...body3d(), colors: clubColors(team).map(cssHex), club: teamName(team), signal: sceneCtl.signal }))
+      .then((S) => { lk = S; if (closeUp) S?.closeUp(true); })
       .catch(() => { const b = d.querySelector("#lk-3d"); if (b) b.innerHTML = `<p class="muted">3D isn't available on this device.</p>`; });
+    // your kit and shoes: saved with the career, the scene rebuilds with them
+    const regear = (patch, sel, attr, val) => {
+      C.gear = { ...(C.gear || {}), ...patch }; save();
+      d.querySelectorAll(sel).forEach((b) => { const on = b.dataset[attr] === val; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); });
+      sceneCtl.abort(); sceneCtl = new AbortController(); mountScene();
+    };
+    d.querySelector("#lk-close-up").addEventListener("click", (e) => { closeUp = !closeUp; e.currentTarget.setAttribute("aria-pressed", String(closeUp)); e.currentTarget.classList.toggle("on", closeUp); lk?.closeUp(closeUp); });
+    d.querySelector("#lk-kit").addEventListener("click", (e) => { const b = e.target.closest("[data-kit]"); if (b) regear({ kit: b.dataset.kit }, "[data-kit]", "kit", b.dataset.kit); });
+    d.querySelector("#lk-shoes").addEventListener("click", (e) => { const b = e.target.closest("[data-shoe]"); if (b) regear({ shoes: b.dataset.shoe }, "[data-shoe]", "shoe", b.dataset.shoe); });
+    mountScene();
   }
 
   // ---------------------------------------------------------------- the road to the NBA

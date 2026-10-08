@@ -10,6 +10,7 @@ import { TACTICS } from "../shared/gameSim.js";
 import { bindMomentum, courtSvg, momentumHtml, SPOTS } from "../mycareer/live.js";
 import { COURT, clockOf } from "../mycareer/pbp.js";
 import { cssHex, set3D, want3D, webglOk } from "../three3d/core.js";
+import { designOf } from "../three3d/player.js";
 
 const SECONDS_PER_SECOND = 52;
 export const ESTIMATE_NOTE = "Played possession by possession from each player's real per-game numbers. Shot attempts, turnovers and fouls aren't in the league data, so the engine estimates them.";
@@ -170,7 +171,7 @@ export function openGameView(opts) {
     const live3d = new AbortController();
     ctl.signal.addEventListener("abort", () => live3d.abort(), { once: true });
     let c3 = null, c3p = null;
-    const build3d = () => (c3p ||= import("../three3d/court3d.js").then(({ court3D }) => court3D($("#gv-3d"), { teams: [{ c1: cssHex(h1), c2: cssHex(h2) }, { c1: cssHex(a1), c2: cssHex(a2) }], signal: live3d.signal }))
+    const build3d = () => (c3p ||= import("../three3d/court3d.js").then(({ court3D }) => court3D($("#gv-3d"), { teams: [{ c1: cssHex(h1), c2: cssHex(h2), design: designOf(home.id) }, { c1: cssHex(a1), c2: cssHex(a2), design: designOf(away.id) }], signal: live3d.signal }))
       .then((c) => { c3 = c; if (!c) $(".lv-court").classList.remove("is3d"); return c; }, () => { $(".lv-court").classList.remove("is3d"); }));
     if (want3D()) build3d();
     let speed = 2, paused = false, t = 0, idx = 0, last = 0, done = false;

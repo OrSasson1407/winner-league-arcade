@@ -58,7 +58,7 @@ function hoop(T, x, dir) {
 }
 
 /**
- * Build the court. teams: [{ c1, c2 }, { c1, c2 }] (home, away). Returns { formation(side), shot(e), dispose } or null.
+ * Build the court. teams: [{ c1, c2, design }, { c1, c2, design }] (home, away: the away team wears its second colour). Returns { formation(side), shot(e), dispose } or null.
  * shot(e): e is an engine event with x, y (2D court units), side, type ("2" | "3" | "miss" | "ft"), mine (your shot).
  */
 export async function court3D(el, { teams, signal }) {
@@ -75,7 +75,7 @@ export async function court3D(el, { teams, signal }) {
   scene.add(hoop(T, rx, 1), hoop(T, lx, -1));
   // ten players: home 0-4, away 5-9; heights vary a little by spot (bigs inside)
   const players = await Promise.all([0, 1].flatMap((s) => [0, 1, 2, 3, 4].map(async (i) => {
-    const o = { low: true, j1: teams[s].c1, j2: teams[s].c2, num: [3, 7, 11, 21, 33][i], height: [188, 196, 201, 206, 211][i], av: { skin: (i * 2 + s) % 6, hair: ["short", "fade", "buzz", "curly", "bald"][(i + s) % 5], hc: 0 } };
+    const o = { low: true, j1: teams[s].c1, j2: teams[s].c2, kit: s ? "away" : "home", design: teams[s].design ?? 0, expression: "focus", muscle: 0.35 + i * 0.08, num: [3, 7, 11, 21, 33][i], height: [188, 196, 201, 206, 211][i], av: { skin: (i * 2 + s) % 6, hair: ["short", "fade", "buzz", "curly", "bald"][(i + s) % 5], hc: 0 } };
     const rp = await makeRealPlayer(T, o);
     const p = rp ? rp.root : makePlayer(T, o);
     p.userData.rp = rp; p.userData.mode = "idle";

@@ -787,3 +787,9 @@ img.crest-logo { object-fit: contain; display: inline-block; vertical-align: mid
 .lv-court.is3d .lv-court3d { display: block; }
 .lv-court.is3d > svg { display: none; }
 .lv-court3d canvas.stage3d { display: block; width: 100% !important; height: 100% !important; }
+
+/* locker room: kit and shoe pickers */
+.lk-gear small { display: block; margin-bottom: 4px; font-weight: 800; letter-spacing: 1px; }
+.lk-shoes { display: flex; gap: 6px; flex-wrap: wrap; }
+.lk-shoes button { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--line, rgba(255,255,255,.25)); background: var(--sw); cursor: pointer; }
+.lk-shoes button.on { outline: 3px solid var(--accent, #ff7a1a); outline-offset: 2px; }

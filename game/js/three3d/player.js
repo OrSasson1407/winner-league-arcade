@@ -42,7 +42,7 @@ function paintAreas(T, mesh, { floor, height, headBox }) {
   const pos = g.getAttribute("position"), nor = g.getAttribute("normal"), J = g.getAttribute("skinIndex"), W = g.getAttribute("skinWeight");
   const names = mesh.skeleton.bones.map((b) => b.name);
   const v = new T.Vector3(), n = new T.Vector3(), tip = new T.Vector3();
-  const area = new Float32Array(pos.count);
+  const area = new Float32Array(pos.count), rest = new Float32Array(pos.count * 3);
   mesh.updateMatrixWorld(true);
   mesh.skeleton.update();
   for (let i = 0; i < pos.count; i++) {
@@ -57,6 +57,8 @@ function paintAreas(T, mesh, { floor, height, headBox }) {
     n.subVectors(tip, v).normalize();
     const y = (v.y - floor) / height; // 0 at the floor, 1 at the top of the head
     if (clean(name) === "DEF-head") headBox.expandByPoint(v);
+    // where it sits on the body in the rest pose (in heights): the shader draws the uniform's patterns from it
+    rest[i * 3] = v.x / height; rest[i * 3 + 1] = y; rest[i * 3 + 2] = v.z / height;
     let a = SKIN;
     if (/spine/.test(name)) a = Math.abs(n.x) > 0.8 ? TRIM : JERSEY; // side panels in the second colour
     else if (/shoulder/.test(name)) a = y > 0.79 ? SKIN : TRIM; // the jersey's straps
@@ -67,25 +69,49 @@ function paintAreas(T, mesh, { floor, height, headBox }) {
     area[i] = a;
   }
   g.setAttribute("area", new T.BufferAttribute(area, 1));
+  g.setAttribute("rest", new T.BufferAttribute(rest, 3));
 }
 
-/** A material that colours each body area from a uniform array (one material per player). */
-function areaMaterial(T, colors) {
+/** Jersey designs (drawn by the shader on the rest-pose body): 0 side panels only, 1 chest band, 2 sash, 3 pinstripes, 4 yoke. */
+export const DESIGNS = ["Side panels", "Chest band", "Sash", "Pinstripes", "Yoke"];
+/** A club's design: the same for every player of that club. */
+export const designOf = (club) => { let h = 0; for (const ch of String(club || "")) h = (h * 31 + ch.charCodeAt(0)) % 997; return h % DESIGNS.length; };
+
+const PATTERN_GLSL = `
+  vec3 c = areaColors[ int( vArea + 0.5 ) ];
+  int a = int( vArea + 0.5 );
+  float x = vRest.x, y = vRest.y;
+  if ( a == 1 ) { // jersey
+    if ( design == 1 && y > 0.655 && y < 0.695 ) c = areaColors[2];
+    else if ( design == 2 && abs( x - ( y - 0.6 ) * 1.1 + 0.02 ) < 0.022 ) c = areaColors[2];
+    else if ( design == 3 && fract( x * 48.0 ) < 0.14 ) c = mix( c, areaColors[2], 0.75 );
+    else if ( design == 4 && y > 0.735 ) c = areaColors[2];
+  } else if ( a == 3 ) { // shorts: a hem band for the striped designs
+    if ( ( design == 1 || design == 2 ) && y < 0.345 ) c = areaColors[2];
+    else if ( design == 3 && fract( x * 48.0 ) < 0.14 ) c = mix( c, areaColors[2], 0.75 );
+  }
+  vec4 diffuseColor = vec4( diffuse * c, opacity );`;
+
+/** A material that colours each body area from a uniform array (one material per player), with the club's design. */
+function areaMaterial(T, colors, design = 0) {
   const m = new T.MeshStandardMaterial({ color: "#ffffff", roughness: 0.62, metalness: 0.02 });
   m.userData.colors = colors.map((c) => new T.Color(c));
   m.onBeforeCompile = (sh) => {
     sh.uniforms.areaColors = { value: m.userData.colors };
-    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float area;\nvarying float vArea;")
-      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvArea = area;");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec3 areaColors[8];\nvarying float vArea;")
-      .replace("vec4 diffuseColor = vec4( diffuse, opacity );", "vec4 diffuseColor = vec4( diffuse * areaColors[ int( vArea + 0.5 ) ], opacity );");
+    sh.uniforms.design = { value: design };
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float area;\nattribute vec3 rest;\nvarying float vArea;\nvarying vec3 vRest;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvArea = area;\nvRest = rest;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform vec3 areaColors[8];\nuniform int design;\nvarying float vArea;\nvarying vec3 vRest;")
+      .replace("vec4 diffuseColor = vec4( diffuse, opacity );", PATTERN_GLSL);
   };
-  m.customProgramCacheKey = () => "area-v1";
+  m.customProgramCacheKey = () => "area-v2";
   return m;
 }
 
 /**
- * A player for a scene. opts: { av (avatar), j1, j2 (jersey colours), num, name, height (cm), weight (kg), ball, low (fewer extras) }
+ * A player for a scene. opts: { av (avatar), j1, j2 (club colours), kit ("home": body in the first colour, "away": the second),
+ *   design (0-4, see DESIGNS), shoes (colour), num, name, height (cm), weight (kg), muscle (0-1, arms, legs and chest),
+ *   grey (0-1, grey hair with age), expression ("neutral" | "focus" | "happy"), ball, low (fewer extras) }
  * Returns { root (add it to the scene), mixer, play(name, fade), update(dt, t), ball, hand, hasModel } or null if the model can't load.
  */
 export async function makeRealPlayer(T, opts = {}) {
@@ -93,11 +119,13 @@ export async function makeRealPlayer(T, opts = {}) {
   try { asset = await loadPlayerAsset(T); } catch { return null; }
   const { gltf, clips, height: h0, A } = asset;
   const av = opts.av || {};
-  const skin = SKINS[av.skin ?? 2] || SKINS[2], hairC = HAIR_COLORS[av.hc ?? 0] || HAIR_COLORS[0];
-  const j1 = opts.j1 || av.j1 || "#ff7a1a", j2 = opts.j2 || av.j2 || "#ffffff";
-  const colors = [skin, j1, j2, j1, j2, j2, "#f4f4f4", "#1d1d1d"];
+  const skin = SKINS[av.skin ?? 2] || SKINS[2];
+  const c1 = opts.j1 || av.j1 || "#ff7a1a", c2 = opts.j2 || av.j2 || "#ffffff";
+  const [j1, j2] = opts.kit === "away" ? [c2, c1] : [c1, c2]; // away: the colours swap
+  const hairC = greyed(T, HAIR_COLORS[av.hc ?? 0] || HAIR_COLORS[0], opts.grey || 0);
+  const colors = [skin, j1, j2, j1, j2, j2, opts.shoes || "#f4f4f4", "#1d1d1d"];
   const model = A.cloneSkinned(gltf.scene);
-  const mat = areaMaterial(T, colors);
+  const mat = areaMaterial(T, colors, opts.design ?? 0);
   const meshes = [];
   model.traverse((o) => { if (o.isSkinnedMesh) { o.material = mat; o.castShadow = true; o.receiveShadow = false; o.frustumCulled = false; meshes.push(o); } });
   const byName = Object.fromEntries(meshes[0].skeleton.bones.map((b) => [clean(b.name), b]));
@@ -145,20 +173,25 @@ export async function makeRealPlayer(T, opts = {}) {
     }
   }
   // hair, eyes and extras from the avatar, sized to the head (the avatar pieces are built around y = 0.06 + r)
-  const headGroup = new T.Group();
-  if (!opts.low) {
-    for (const sd of [-1, 1]) {
-      const eye = new T.Mesh(new T.SphereGeometry(r * 0.11, 8, 6), new T.MeshStandardMaterial({ color: "#151515", roughness: 0.3 }));
-      eye.position.set(sd * r * 0.34, 0.06 + r * 1.02, front * r * 0.86);
-      const brow = new T.Mesh(new T.BoxGeometry(r * 0.32, r * 0.06, r * 0.06), new T.MeshStandardMaterial({ color: hairC }));
-      brow.position.set(sd * r * 0.34, 0.06 + r * 1.22, front * r * 0.88);
-      headGroup.add(eye, brow);
-    }
-  }
-  addHair(T, headGroup, av.hair || "short", hairC, r, opts.low);
-  if (!opts.low) addExtra(T, headGroup, headGroup, av.x || "none", { headR: r, j2, hairC, skinC: skin, shoulder: -0.2 });
+  // the head is an egg (taller and deeper than wide): the hair is stretched to its shape, the face isn't
+  const ry = ((hb.max.y - hb.min.y) / 2) * s, rz = ((hb.max.z - hb.min.z) / 2) * s * w;
+  const headGroup = new T.Group(); // origin at the head's centre
+  const hairGroup = new T.Group(), faceGroup = new T.Group();
+  // the hair dome starts at the brow line (the box's middle is about eye level, its top the crown)
+  hairGroup.scale.set(1.05, (ry / r) * 0.72, (rz / r) * 0.99);
+  hairGroup.position.y = -(0.06 + r) * hairGroup.scale.y + ry * 0.3; // the pieces are built around y = 0.06 + r
+  faceGroup.position.y = -(0.06 + r) + ry * 0.12; // eyes a little above the middle (the box includes the jaw)
+  headGroup.add(hairGroup, faceGroup);
+  const face = opts.low ? null : makeFace(T, faceGroup, { r, rz, skin, hairC });
+  face?.set(opts.expression || "neutral");
+  addHair(T, hairGroup, av.hair || "short", "#" + hairC.getHexString(), r, opts.low);
+  const faceExtras = new T.Group(); // face pieces sized for a round head: pushed out to this head's depth
+  faceExtras.scale.set(1, ry / r, rz / r);
+  faceExtras.position.y = (0.06 + r) * (1 - ry / r); // stretched around the face's centre: beards reach the jaw
+  faceGroup.add(faceExtras);
+  if (!opts.low) addExtra(T, ["glasses", "goggles", "beard", "mustache", "facepaint"].includes(av.x) ? faceExtras : hairGroup, headGroup, av.x || "none", { headR: r, j2, hairC: "#" + hairC.getHexString(), skinC: skin, shoulder: -0.2 });
   if (front < 0) headGroup.rotation.y = Math.PI;
-  headGroup.position.set(headCenter.x, headCenter.y - (0.06 + r), headCenter.z); // the pieces are built around y = 0.06 + r
+  headGroup.position.copy(headCenter);
   headGroup.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   root.add(headGroup);
   head.attach(headGroup);
@@ -189,10 +222,14 @@ export async function makeRealPlayer(T, opts = {}) {
   const tmp = new T.Vector3();
   let mode = "idle";
   const forearmR = bones["DEF-forearm.R"], upperR = bones["DEF-upper_arm.R"], upperL = bones["DEF-upper_arm.L"], forearmL = bones["DEF-forearm.L"];
+  const mu = Math.max(0, Math.min(1, opts.muscle ?? 0.3));
+  const bulk = [["DEF-upper_arm.L", 0.16], ["DEF-upper_arm.R", 0.16], ["DEF-thigh.L", 0.1], ["DEF-thigh.R", 0.1], ["DEF-spine.003", 0.08]]
+    .map(([n, k]) => [bones[n], 1 + k * (mu - 0.3) * 1.6]).filter(([b]) => b);
   const q = new T.Quaternion(), ax = new T.Vector3(1, 0, 0);
   /** Per frame: the clips, then the hand-made parts on top (dribbling, the shooting arms). */
   const update = (dt, t) => {
     mixer.update(dt);
+    for (const [b, f] of bulk) { b.scale.x *= f; b.scale.z *= f; } // across the bone, not along it
     if (mode === "dribble" && ball) {
       const k = Math.abs(Math.sin(t * 4.4)); // 1: in the hand, 0: on the floor
       q.setFromAxisAngle(ax, (1 - k) * 0.55); forearmR.quaternion.multiply(q);
@@ -212,9 +249,64 @@ export async function makeRealPlayer(T, opts = {}) {
     mode = m;
     if (m === "run") play("Jog_Fwd_Loop", 0.2);
     else if (m === "sprint") play("Sprint_Loop", 0.2);
-    else if (m === "cheer") play("Dance_Loop", 0.3);
+    else if (m === "cheer") { play("Dance_Loop", 0.3); face?.set("happy"); }
     else if (m === "shoot") play("Jump_Start", 0.1, { once: true });
     else play("Idle_Loop", 0.3);
   };
-  return { root, mixer, play, update, setMode, ball, hand, hasModel: true, facing: front };
+  return { root, mixer, play, update, setMode, ball, hand, hasModel: true, facing: front, setExpression: (e) => face?.set(e) };
+}
+
+/** Hair colour going grey with age (0: none, 1: fully grey). */
+function greyed(T, hex, k) {
+  return new T.Color(hex).lerp(new T.Color("#a7abb2"), Math.max(0, Math.min(1, k)));
+}
+
+/**
+ * The face, on the head group (built around y = 0.06 + r, facing +z): eye whites and pupils, nose, ears,
+ * lips and brows. set("neutral" | "focus" | "happy") moves the brows and changes the mouth.
+ */
+function makeFace(T, head, { r, rz, skin, hairC }) {
+  const cy = 0.06 + r, fz = Math.max(r * 0.7, rz) * 0.93; // the front of the face
+  const skinM = new T.MeshStandardMaterial({ color: new T.Color(skin).multiplyScalar(0.93), roughness: 0.7 });
+  const white = new T.MeshStandardMaterial({ color: "#f4f1ea", roughness: 0.25 });
+  const dark = new T.MeshStandardMaterial({ color: "#1b1410", roughness: 0.2 });
+  const brows = [], g = new T.Group();
+  for (const sd of [-1, 1]) {
+    const ew = new T.Mesh(new T.SphereGeometry(r * 0.16, 12, 8), white);
+    ew.scale.set(1, 0.72, 0.5);
+    ew.position.set(sd * r * 0.33, cy + r * 0.1, fz - r * 0.06);
+    const pupil = new T.Mesh(new T.SphereGeometry(r * 0.08, 10, 8), dark);
+    pupil.position.set(sd * r * 0.33, cy + r * 0.1, fz + r * 0.005);
+    const brow = new T.Mesh(new T.BoxGeometry(r * 0.34, r * 0.07, r * 0.07), new T.MeshStandardMaterial({ color: hairC, roughness: 0.9 }));
+    brow.position.set(sd * r * 0.34, cy + r * 0.32, fz - r * 0.02);
+    brow.userData.side = sd;
+    brows.push(brow);
+    const ear = new T.Mesh(new T.SphereGeometry(r * 0.24, 10, 8), skinM);
+    ear.scale.set(0.45, 1, 0.8);
+    ear.position.set(sd * r * 0.98, cy, -r * 0.05);
+    g.add(ew, pupil, brow, ear);
+  }
+  const nose = new T.Mesh(new T.SphereGeometry(r * 0.15, 10, 8), skinM);
+  nose.scale.set(0.85, 1.15, 1.1);
+  nose.position.set(0, cy - r * 0.12, fz + r * 0.02);
+  const lipM = new T.MeshStandardMaterial({ color: new T.Color(skin).multiplyScalar(0.62).lerp(new T.Color("#8a3b35"), 0.25), roughness: 0.5 });
+  const flat = new T.Mesh(new T.CapsuleGeometry(r * 0.04, r * 0.3, 4, 8), lipM);
+  flat.rotation.z = Math.PI / 2;
+  flat.position.set(0, cy - r * 0.45, fz - r * 0.08);
+  const smile = new T.Mesh(new T.TorusGeometry(r * 0.2, r * 0.045, 6, 16, Math.PI), lipM);
+  smile.rotation.z = Math.PI;
+  smile.position.set(0, cy - r * 0.32, fz - r * 0.1);
+  g.add(nose, flat, smile);
+  g.traverse((o) => { if (o.isMesh) o.castShadow = false; });
+  head.add(g);
+  return {
+    set(e) {
+      for (const b of brows) {
+        b.rotation.z = e === "focus" ? b.userData.side * 0.28 : e === "happy" ? -b.userData.side * 0.1 : 0; // focus: inner ends down
+        b.position.y = cy + r * (e === "happy" ? 0.38 : e === "focus" ? 0.28 : 0.32);
+      }
+      smile.visible = e === "happy";
+      flat.visible = e !== "happy";
+    },
+  };
 }

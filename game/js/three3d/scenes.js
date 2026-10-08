@@ -7,7 +7,8 @@ import { basketball, makePlayer, pose } from "./figures.js";
 const std = (T, color, o = {}) => new T.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0, flatShading: true, ...o });
 
 /** The locker room: your player in the club's jersey, dribbling in front of the lockers. Drag to turn him. */
-export async function lockerRoom(el, { av, name, num, height, weight, colors = ["#ff7a1a", "#ffffff"], club = "", signal }) {
+/** look: { kit, design, shoes, muscle, grey } (see makeRealPlayer). */
+export async function lockerRoom(el, { av, name, num, height, weight, colors = ["#ff7a1a", "#ffffff"], club = "", look = {}, signal }) {
   const S = await stage(el, { signal, fov: 32, camera: [0, 1.25, 5.2], target: [0, 1.0, 0], shadows: true, label: `${name} in the locker room` });
   if (!S) return null;
   const { T, scene, pivot } = S;
@@ -46,15 +47,23 @@ export async function lockerRoom(el, { av, name, num, height, weight, colors = [
     scene.add(banner);
   }
   // the rigged player (the simple one if the model can't load)
-  const rp = await makeRealPlayer(T, { av, j1: c1, j2: c2, num, name, height, weight, ball: true });
+  const rp = await makeRealPlayer(T, { av, j1: c1, j2: c2, num, name, height, weight, ball: true, expression: "focus", ...look });
   if (signal?.aborted) return null;
   const p = rp ? rp.root : makePlayer(T, { av, j1: c1, j2: c2, num, name, height, weight, ball: true });
   pivot.add(p);
   pivot.rotation.y = -0.35;
   rp?.setMode("dribble");
+  // close-up: the camera glides to the face (and back)
+  const Hm = Math.max(1.7, Math.min(2.3, (height || 198) / 100));
+  const far = { pos: new T.Vector3(0, 1.25, 5.2), look: new T.Vector3(0, 1.0, 0) }, near = { pos: new T.Vector3(0, Hm * 0.93, 1.25), look: new T.Vector3(0, Hm * 0.91, 0) };
+  let want = far;
+  const lookAt = far.look.clone();
+  S.closeUp = (on) => { want = on ? near : far; if (on) rp?.setMode("idle"); else rp?.setMode("dribble"); S.kick(); };
   S.onFrame((t, dt) => {
     if (rp) rp.update(dt, t); else pose(p, t, "dribble");
-    if (!pivot.userData.held) pivot.rotation.y += dt * 0.25;
+    if (!pivot.userData.held) pivot.rotation.y += want === near ? (0 - Math.sin(pivot.rotation.y) * 1) * dt * 2 : dt * 0.25; // close-up: turn to face you
+    const k = Math.min(1, (dt || 0.016) * 3);
+    S.camera.position.lerp(want.pos, k); lookAt.lerp(want.look, k); S.camera.lookAt(lookAt);
   });
   return S;
 }
@@ -174,7 +183,7 @@ function labelTexture(T, label, season) {
 
 // ---------------------------------------------------------------- signing
 /** The signing: your player in the new jersey at the club's press backdrop, cameras flashing. */
-export async function signingScene(el, { av, name, num, height, weight, colors = ["#ff7a1a", "#ffffff"], club = "", nba = false, signal }) {
+export async function signingScene(el, { av, name, num, height, weight, colors = ["#ff7a1a", "#ffffff"], club = "", nba = false, look = {}, signal }) {
   const S = await stage(el, { signal, fov: 30, camera: [0, 1.3, 6.4], target: [0, 1.05, 0], label: `${name} signs with ${club}` });
   if (!S) return null;
   const { T, scene, pivot, camera } = S;
@@ -200,7 +209,7 @@ export async function signingScene(el, { av, name, num, height, weight, colors =
   mic.position.set(0.35, 0.92, 0.95); mic.rotation.x = -0.4;
   scene.add(wall, table, skirt, mic);
   if (nba) { const b = basketball(T, 0.11); b.position.set(-0.6, 0.92, 0.9); scene.add(b); }
-  const rp = await makeRealPlayer(T, { av, j1: c1, j2: c2, num, name, height, weight });
+  const rp = await makeRealPlayer(T, { av, j1: c1, j2: c2, num, name, height, weight, expression: "happy", ...look, kit: "home" });
   if (signal?.aborted) return null;
   const p = rp ? rp.root : makePlayer(T, { av, j1: c1, j2: c2, num, name, height, weight });
   p.position.z = 0.1;
