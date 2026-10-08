@@ -15,9 +15,13 @@ const MISTAKES = 4;
 const LEVEL_NAMES = ["Easiest", "Medium", "Hard", "Trickiest"];
 const EMOJI = ["🟨", "🟩", "🟦", "🟪"];
 const STATS_KEY = "conn:stats";
+// Unlimited puzzles come in three difficulties (the daily one is always Normal, the same for everyone)
+const DIFFS = { easy: "Easy", normal: "Normal", expert: "Expert" };
+const MAX_HINTS = 2; // each one costs a mistake
 
 export function renderConnections(root, signal, params, query = {}) {
   let mode = ["daily", "free"].includes(query.mode) ? query.mode : store.get("conn:mode", "daily");
+  let diff = DIFFS[store.get("conn:level", "normal")] ? store.get("conn:level", "normal") : "normal";
   let puzzle, S;
 
   function load(fresh = false) {
@@ -27,8 +31,8 @@ export function renderConnections(root, signal, params, query = {}) {
     if (saved?.puzzle) { puzzle = saved.puzzle; S = saved.state; }
     else {
       const rnd = mode === "daily" ? seededRng("connections-" + localDate()) : Math.random;
-      puzzle = makeConnections(rnd);
-      S = { order: shuffle(puzzle.flatMap((g) => g.players), rnd), selected: [], solved: [], mistakes: 0, guesses: [], over: false, won: false };
+      puzzle = makeConnections(rnd, { level: mode === "daily" ? "normal" : diff });
+      S = { order: shuffle(puzzle.flatMap((g) => g.players), rnd), selected: [], solved: [], mistakes: 0, guesses: [], over: false, won: false, hints: [], level: mode === "daily" ? "normal" : diff };
       track("connections");
     }
     draw();
@@ -65,12 +69,28 @@ export function renderConnections(root, signal, params, query = {}) {
     draw();
   }
 
+  /** A hint (costs a mistake): first the topic of the easiest group still hidden, then one of its players. */
+  function hint() {
+    S.hints ||= [];
+    if (S.over || S.hints.length >= MAX_HINTS || S.mistakes >= MISTAKES - 1) return;
+    const g = puzzle.find((x) => !S.solved.includes(x.level));
+    if (!g) return;
+    const told = S.hints.find((h) => h.level === g.level && h.type === "topic");
+    if (!told) S.hints.push({ type: "topic", level: g.level });
+    else S.hints.push({ type: "player", level: g.level, pid: g.players.find((p) => S.order.includes(p)) });
+    S.mistakes++;
+    sound.play("tick");
+    const h = S.hints[S.hints.length - 1];
+    announce(h.type === "topic" ? `Hint: one group is ${g.label}.` : `Hint: ${name(h.pid)} is in that group.`);
+    save(); draw();
+  }
+
   function finish(won) {
     S.over = true; S.won = won;
     if (!won) { for (const g of puzzle) if (!S.solved.includes(g.level)) S.solved.push(g.level); S.order = []; }
     const st = store.get(STATS_KEY, { played: 0, wins: 0, streak: 0, best: 0, perfect: 0 });
     st.played++;
-    if (won) { st.wins++; st.streak++; st.best = Math.max(st.best, st.streak); if (!S.mistakes) st.perfect++; } else st.streak = 0;
+    if (won) { st.wins++; st.streak++; st.best = Math.max(st.best, st.streak); if (!S.mistakes && !S.hints?.length) st.perfect++; } else st.streak = 0;
     store.set(STATS_KEY, st);
     emit("conn:end", { won, mistakes: S.mistakes, mode, streak: st.streak });
     if (mode === "daily") markDaily("connections", won ? `solved, ${S.mistakes} mistake${S.mistakes === 1 ? "" : "s"}` : "not solved");
@@ -81,7 +101,8 @@ export function renderConnections(root, signal, params, query = {}) {
 
   function shareText() {
     const rows = S.guesses.map((g) => g.map((p) => EMOJI[groupOf(p).level]).join(""));
-    return `Winner League Arcade · Connections${mode === "daily" ? ` ${localDate()}` : ""}\n${rows.join("\n")}`;
+    const extra = [mode === "free" && S.level !== "normal" ? DIFFS[S.level] : "", S.hints?.length ? `💡×${S.hints.length}` : ""].filter(Boolean).join(" · ");
+    return `Winner League Arcade · Connections${mode === "daily" ? ` ${localDate()}` : ""}${extra ? ` · ${extra}` : ""}\n${rows.join("\n")}`;
   }
 
   function draw() {
@@ -91,14 +112,17 @@ export function renderConnections(root, signal, params, query = {}) {
         <p>${LEAGUE === "el" ? "Find four groups of four players who share something: a club, a team-season, a long career… Every player fits exactly one group." : "Find four groups of four players who share something: a club, a team-season, a stat, a birth year… Every player fits exactly one group."}</p></div>
         <div class="row"><div class="seg" id="mode" role="radiogroup" aria-label="Puzzle">
           <button role="radio" data-m="daily" aria-checked="${mode === "daily"}" class="${mode === "daily" ? "on" : ""}">Daily</button>
-          <button role="radio" data-m="free" aria-checked="${mode === "free"}" class="${mode === "free" ? "on" : ""}">Unlimited</button></div></div>
+          <button role="radio" data-m="free" aria-checked="${mode === "free"}" class="${mode === "free" ? "on" : ""}">Unlimited</button></div>
+          ${mode === "free" ? `<div class="seg sm" id="diff" role="radiogroup" aria-label="Difficulty">${Object.entries(DIFFS).map(([k, l]) => `<button role="radio" data-d="${k}" aria-checked="${diff === k}" class="${diff === k ? "on" : ""}">${l}</button>`).join("")}</div>` : ""}</div>
       </div>
       <div class="cn-wrap">
         <div class="cn-solved">${S.solved.map((lv) => { const g = puzzle[lv]; return html`<div class="cn-group lv${lv} pop" role="group" aria-label="${esc(g.label)}">
           <b>${esc(g.label)}</b><span>${g.players.map((p) => `<button class="link-name" data-profile="${p}">${esc(name(p))}</button>`).join(", ")}</span></div>`; }).join("")}</div>
+        ${(S.hints || []).filter((h) => h.type === "topic" && !S.solved.includes(h.level)).map((h) => `<div class="cn-hint lv${h.level}">${icon("bulb", { size: 15 })} <span>Hint: one group is</span> <b>${esc(puzzle[h.level].label)}</b></div>`).join("")}
         ${S.order.length ? html`<div class="cn-board" role="group" aria-label="Players">${S.order.map((p) => {
           const on = S.selected.includes(p);
-          return `<button class="cn-tile ${on ? "on" : ""}" data-p="${p}" aria-pressed="${on}" ${S.over ? "disabled" : ""}>${esc(name(p))}</button>`;
+          const hinted = (S.hints || []).some((h) => h.pid === p && !S.solved.includes(h.level));
+          return `<button class="cn-tile ${on ? "on" : ""} ${hinted ? `hinted lv${groupOf(p).level}` : ""}" data-p="${p}" aria-pressed="${on}" ${S.over ? "disabled" : ""}>${esc(name(p))}${hinted ? ` <span class="sr-only">(hint)</span>` : ""}</button>`;
         }).join("")}</div>` : ""}
         <div class="cn-bar">
           <span class="cn-mistakes" role="img" aria-label="${MISTAKES - S.mistakes} mistakes left">Mistakes left ${Array.from({ length: MISTAKES }, (_, i) => `<i class="${i < MISTAKES - S.mistakes ? "" : "used"}"></i>`).join("")}</span>
@@ -106,6 +130,7 @@ export function renderConnections(root, signal, params, query = {}) {
             <button class="btn" id="share">${icon("link", { size: 15 })} Copy result</button>
             ${mode === "free" ? `<button class="btn primary" id="again">${icon("refresh", { size: 15 })} New puzzle</button>` : `<span class="muted">New daily puzzle tomorrow · try Unlimited</span>`}`
           : html`<span class="spacer"></span>
+            <button class="btn ghost" id="hint" ${(S.hints?.length || 0) >= MAX_HINTS || S.mistakes >= MISTAKES - 1 ? "disabled" : ""} title="The topic of the easiest group still hidden, then one of its players. Each hint costs a mistake.">${icon("bulb", { size: 15 })} Hint <small>(${MAX_HINTS - (S.hints?.length || 0)} left · costs a mistake)</small></button>
             <button class="btn ghost" id="shuffle">${icon("refresh", { size: 15 })} Shuffle</button>
             <button class="btn ghost" id="clear" ${S.selected.length ? "" : "disabled"}>Deselect</button>
             <button class="btn primary" id="submit" ${S.selected.length === 4 ? "" : "disabled"}>${icon("check", { size: 15 })} Submit</button>`}
@@ -114,6 +139,8 @@ export function renderConnections(root, signal, params, query = {}) {
           <pre class="cn-share" aria-label="Your guesses">${S.guesses.map((g) => g.map((p) => EMOJI[groupOf(p).level]).join("")).join("\n")}</pre></div>` : ""}
         <p class="muted cn-legend">${EMOJI.map((e, i) => `${e} ${LEVEL_NAMES[i]}`).join(" · ")} · Played ${st.played} · Won ${st.wins} · Streak ${st.streak} · Perfect ${st.perfect}</p>
       </div>`;
+    root.querySelector("#diff")?.addEventListener("click", (e) => { const b = e.target.closest("[data-d]"); if (b && b.dataset.d !== diff) { diff = b.dataset.d; store.set("conn:level", diff); load(true); } }, { signal });
+    root.querySelector("#hint")?.addEventListener("click", hint, { signal });
     root.querySelector("#mode").addEventListener("click", (e) => { const b = e.target.closest("[data-m]"); if (b && b.dataset.m !== mode) { mode = b.dataset.m; load(); } }, { signal });
     root.querySelector(".cn-board")?.addEventListener("click", (e) => {
       const b = e.target.closest("[data-p]"); if (!b || S.over) return;
@@ -137,7 +164,7 @@ export function renderConnections(root, signal, params, query = {}) {
     if (e.key === "Enter" && S.selected.length === 4 && !e.target.closest?.("button")) { e.preventDefault(); submit(); }
   }, { signal });
   arrowGrid(root, ".cn-tile", 4, signal);
-  gameKeys(signal, { s: press(root, "#shuffle"), Escape: press(root, "#clear"), Backspace: press(root, "#clear") });
+  gameKeys(signal, { s: press(root, "#shuffle"), h: press(root, "#hint"), Escape: press(root, "#clear"), Backspace: press(root, "#clear") });
 
   load();
 }

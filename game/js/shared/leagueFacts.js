@@ -22,6 +22,8 @@ export function makeLeagueFacts(D) {
       const full = real.filter((r) => (r.stats.games ?? 0) >= 15);
       const bio = !p._mockBio;
       const max = (k) => full.reduce((m, r) => Math.max(m, r.stats[k] ?? 0), 0);
+    // three-point shooting in a season, only for real scorers (8+ points a game): small samples don't count
+    const tp = full.filter((r) => (r.stats.ppg ?? 0) >= 8).reduce((m, r) => Math.max(m, r.stats.fg3_pct ?? 0), 0);
       _facts.set(p.player_id, {
         pid: p.player_id, name: p.name,
         clubs: new Set(s.played.map((r) => r.team_id)),
@@ -31,7 +33,7 @@ export function makeLeagueFacts(D) {
         born: bio && p.birth_date ? Number(p.birth_date.slice(0, 4)) : null,
         pos: bio ? p.primary_position || null : null,
         seasons: s.seasonsPlayed, games: s.totalGames, known: s.totalGames || s.seasonsPlayed * 30, // how well-known (EuroLeague: by seasons)
-        ppg: max("ppg"), rpg: max("rpg"), apg: max("apg"),
+        ppg: max("ppg"), rpg: max("rpg"), apg: max("apg"), tp,
       });
     }
     return _facts;
@@ -100,12 +102,31 @@ export function makeLeagueFacts(D) {
 
   // ---------------------------------------------------------------- Connections categories
   // kind sets the difficulty colour order (easiest first)
-  const KIND_ORDER = LEAGUE === "el" ? ["club", "teamseason", "seasons"] : ["club", "nat", "teamseason", "stat", "height", "born", "jersey"];
+  const KIND_ORDER = LEAGUE === "el" ? ["club", "teamseason", "career", "twoclubs", "seasons"] : ["club", "nat", "teamseason", "stat", "career", "height", "twoclubs", "born", "jersey"];
+  const CLUBISH = ["club", "teamseason", "twoclubs"]; // groups built on clubs (at most two of them in a board)
+  // what each difficulty uses: easy boards stick to clear groups and well-known players
+  const LEVELS = {
+    easy: { kinds: ["club", "nat", "stat", "career", "height", "seasons"], minGames: LEAGUE === "el" ? 150 : 120, traps: 0 },
+    normal: { kinds: KIND_ORDER, minGames: 30, traps: 0 },
+    expert: { kinds: KIND_ORDER, minGames: 10, traps: 3 },
+  };
   function allCategories() {
     const F = [...facts().values()];
     const cats = [];
     const add = (kind, label, members) => { if (members.length >= 4) cats.push({ kind, label, members: new Set(members.map((f) => f.pid)) }); };
-    for (const c of CLUB_LIST()) add("club", `Played for ${teamName(c)}`, F.filter((f) => f.clubs.has(c)));
+    const clubs = CLUB_LIST();
+    for (const c of clubs) add("club", `Played for ${teamName(c)}`, F.filter((f) => f.clubs.has(c)));
+    // played for both of two clubs (the pairs with enough players)
+    const byClub = new Map(clubs.map((c) => [c, F.filter((f) => f.clubs.has(c))]));
+    const big = clubs.filter((c) => byClub.get(c).length >= 8);
+    for (let i = 0; i < big.length; i++) for (let j = i + 1; j < big.length; j++) {
+      const both = byClub.get(big[i]).filter((f) => f.clubs.has(big[j]));
+      if (both.length >= 4) add("twoclubs", `Played for both ${teamName(big[i])} and ${teamName(big[j])}`, both);
+    }
+    // career milestones
+    if (LEAGUE !== "el") add("career", "300+ games", F.filter((f) => f.games >= 300));
+    add("career", "Played for 5+ clubs", F.filter((f) => f.clubs.size >= 5));
+    if (LEAGUE !== "el") add("stat", "40%+ from three in a season (8+ PPG)", F.filter((f) => f.tp >= 40));
     for (const n of new Set(F.flatMap((f) => [...f.nats]))) if (n !== "Israel" && n !== "United States") add("nat", `From ${n}`, F.filter((f) => f.nats.has(n)));
     const ts = new Map();
     for (const f of F) for (const k of f.teamSeasons) (ts.get(k) || ts.set(k, []).get(k)).push(f);
@@ -126,28 +147,43 @@ export function makeLeagueFacts(D) {
    * Four groups of four players. Every player belongs to exactly one of the four groups (so there's
    * one solution), but players often look like they could fit another group.
    */
-  function makeConnections(rnd, { minGames = 30 } = {}) {
+  /**
+   * Four groups of four. level: "easy" (clear groups, well-known players), "normal", "expert" (lesser-known
+   * players, every kind of group, and players who look like they fit two groups).
+   */
+  function makeConnections(rnd, { minGames, level = "normal" } = {}) {
     _cats ??= allCategories();
-    const known = (pid) => facts().get(pid).known >= minGames;
+    const L = LEVELS[level] || LEVELS.normal;
+    const minG = minGames ?? L.minGames;
+    const known = (pid) => facts().get(pid).known >= minG;
     const pickOne = (arr) => arr[Math.floor(rnd() * arr.length)];
-    // at most two club-based groups, unless there aren't enough other kinds (the EuroLeague has one)
-    const maxClubish = Math.max(2, 4 - (KIND_ORDER.length - 2));
-    for (let tries = 0; tries < 600; tries++) {
+    const kindsOk = KIND_ORDER.filter((k) => L.kinds.includes(k) && _cats.some((c) => c.kind === k));
+    // at most two club-based groups, unless there aren't enough other kinds (the EuroLeague has few)
+    const maxClubish = Math.max(2, 4 - kindsOk.filter((k) => !CLUBISH.includes(k)).length);
+    for (let tries = 0; tries < 900; tries++) {
       // pick the group types first, then a group of each type
       const kinds = [];
-      while (kinds.length < 4) {
-        const k = pickOne(KIND_ORDER);
-        const clubish = kinds.filter((x) => x === "club" || x === "teamseason").length;
-        if (kinds.includes(k) && k !== "club" && k !== "teamseason") continue;
-        if ((k === "club" || k === "teamseason") && clubish >= maxClubish) continue;
+      let guard = 0;
+      while (kinds.length < 4 && guard++ < 50) {
+        const k = pickOne(kindsOk);
+        const clubish = kinds.filter((x) => CLUBISH.includes(x)).length;
+        if (kinds.includes(k) && !CLUBISH.includes(k)) continue;
+        if (CLUBISH.includes(k) && clubish >= maxClubish) continue;
         kinds.push(k);
       }
+      if (kinds.length < 4) continue;
       const chosen = [];
       for (const k of kinds) {
         const pool = _cats.filter((c) => c.kind === k && !chosen.includes(c));
         if (pool.length) chosen.push(pickOne(pool));
       }
       if (chosen.length < 4) continue;
+      // expert: the board must have traps: players (on the board or not) who belong to two of these groups
+      if (L.traps) {
+        let shared = 0;
+        for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) for (const pid of chosen[i].members) if (chosen[j].members.has(pid) && known(pid)) shared++;
+        if (shared < L.traps) continue;
+      }
       const groups = [];
       const used = new Set();
       let ok = true;

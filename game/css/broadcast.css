@@ -793,3 +793,7 @@ img.crest-logo { object-fit: contain; display: inline-block; vertical-align: mid
 .lk-shoes { display: flex; gap: 6px; flex-wrap: wrap; }
 .lk-shoes button { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--line, rgba(255,255,255,.25)); background: var(--sw); cursor: pointer; }
 .lk-shoes button.on { outline: 3px solid var(--accent, #ff7a1a); outline-offset: 2px; }
+
+/* Connections: hints */
+.cn-hint { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 8px 12px; border-radius: 10px; margin-bottom: 8px; font-size: 14px; background: color-mix(in srgb, var(--accent, #ff7a1a) 14%, transparent); }
+.cn-tile.hinted { outline: 3px dashed var(--accent, #ff7a1a); outline-offset: -4px; }
