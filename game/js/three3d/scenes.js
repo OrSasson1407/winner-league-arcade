@@ -1,6 +1,7 @@
 // My Career 3D scenes: the locker room (your player), the trophy cabinet and the signing.
 // Every function draws into a container and cleans up when `signal` aborts. Returns null when 3D can't run.
-import { stage, studioLights, textTexture } from "./core.js";
+import { polishedFloor, stage, studioLights, textTexture, woodTexture } from "./core.js";
+import { makeRealPlayer } from "./player.js";
 import { basketball, makePlayer, pose } from "./figures.js";
 
 const std = (T, color, o = {}) => new T.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0, flatShading: true, ...o });
@@ -11,13 +12,11 @@ export async function lockerRoom(el, { av, name, num, height, weight, colors = [
   if (!S) return null;
   const { T, scene, pivot } = S;
   studioLights(T, scene, { shadows: true });
-  const spot = new T.SpotLight("#ffffff", 30, 12, Math.PI / 7, 0.5);
+  const spot = new T.SpotLight("#ffffff", 14, 12, Math.PI / 7, 0.6);
   spot.position.set(0, 5, 2.5); spot.target.position.set(0, 0.8, 0);
   scene.add(spot, spot.target);
   // floor and lockers
-  const floor = new T.Mesh(new T.CircleGeometry(4, 40), std(T, "#3b2a1e", { roughness: 0.6 }));
-  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
-  scene.add(floor);
+  polishedFloor(S, { size: [9, 7], map: woodTexture(T, { base: [150, 98, 58], repeat: 2 }), mirror: 0.18 });
   const [c1, c2] = colors;
   for (let i = -3; i <= 3; i++) {
     const locker = new T.Group();
@@ -46,11 +45,15 @@ export async function lockerRoom(el, { av, name, num, height, weight, colors = [
     banner.position.set(0, 2.62, -1.5);
     scene.add(banner);
   }
-  const p = makePlayer(T, { av, j1: c1, j2: c2, num, name, height, weight, ball: true });
+  // the rigged player (the simple one if the model can't load)
+  const rp = await makeRealPlayer(T, { av, j1: c1, j2: c2, num, name, height, weight, ball: true });
+  if (signal?.aborted) return null;
+  const p = rp ? rp.root : makePlayer(T, { av, j1: c1, j2: c2, num, name, height, weight, ball: true });
   pivot.add(p);
   pivot.rotation.y = -0.35;
+  rp?.setMode("dribble");
   S.onFrame((t, dt) => {
-    pose(p, t, "dribble");
+    if (rp) rp.update(dt, t); else pose(p, t, "dribble");
     if (!pivot.userData.held) pivot.rotation.y += dt * 0.25;
   });
   return S;
@@ -122,7 +125,7 @@ export async function trophyCabinet(el, { items, colors = ["#ff7a1a", "#ffffff"]
   if (!S) return null;
   const { T, scene, pivot } = S;
   studioLights(T, scene, { shadows: true, warm: "#fff1d6" });
-  const wood = std(T, "#4a3324", { roughness: 0.55 });
+  const wood = new T.MeshStandardMaterial({ map: woodTexture(T, { base: [110, 72, 44], planks: 8 }), roughness: 0.4 });
   const back = new T.Mesh(new T.BoxGeometry(W, Hc, 0.06), std(T, colors[0], { roughness: 0.8 }));
   back.position.set(0, Hc / 2, -0.42);
   back.receiveShadow = true;
@@ -188,24 +191,26 @@ export async function signingScene(el, { av, name, num, height, weight, colors =
   })();
   const wall = new T.Mesh(new T.PlaneGeometry(7, 3.5), new T.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
   wall.position.set(0, 1.75, -1.4);
-  const floor = new T.Mesh(new T.PlaneGeometry(9, 6), std(T, "#1f2228"));
-  floor.rotation.x = -Math.PI / 2;
+  polishedFloor(S, { size: [9, 6], map: woodTexture(T, { base: [70, 52, 40], repeat: 2 }), mirror: 0.25 });
   const table = new T.Mesh(new T.BoxGeometry(2.2, 0.06, 0.7), std(T, "#f4f4f4"));
   table.position.set(0, 0.78, 0.9);
   const skirt = new T.Mesh(new T.BoxGeometry(2.2, 0.72, 0.04), std(T, c1));
   skirt.position.set(0, 0.4, 1.24);
   const mic = new T.Mesh(new T.CylinderGeometry(0.02, 0.03, 0.22, 8), std(T, "#222"));
   mic.position.set(0.35, 0.92, 0.95); mic.rotation.x = -0.4;
-  scene.add(wall, floor, table, skirt, mic);
+  scene.add(wall, table, skirt, mic);
   if (nba) { const b = basketball(T, 0.11); b.position.set(-0.6, 0.92, 0.9); scene.add(b); }
-  const p = makePlayer(T, { av, j1: c1, j2: c2, num, name, height, weight });
+  const rp = await makeRealPlayer(T, { av, j1: c1, j2: c2, num, name, height, weight });
+  if (signal?.aborted) return null;
+  const p = rp ? rp.root : makePlayer(T, { av, j1: c1, j2: c2, num, name, height, weight });
   p.position.z = 0.1;
   pivot.add(p);
+  let cheering = false;
   // camera flashes: a few white lights that pop at random
   const flashes = Array.from({ length: 4 }, (_, i) => { const l = new T.PointLight("#ffffff", 0, 6); l.position.set(-2.5 + i * 1.7, 1.2 + (i % 2) * 0.5, 3); scene.add(l); return l; });
   let next = 0;
   S.onFrame((t, dt) => {
-    pose(p, t, t < 1.2 ? "idle" : "cheer");
+    if (rp) { if (!cheering && t > 1.2) { cheering = true; rp.setMode("cheer"); } rp.update(dt, t); } else pose(p, t, t < 1.2 ? "idle" : "cheer");
     camera.position.z = Math.max(4.6, 6.4 - t * 0.6);
     camera.lookAt(0, 1.05, 0);
     if (t > next) { const l = flashes[Math.floor(Math.random() * flashes.length)]; l.intensity = 40; next = t + 0.15 + Math.random() * 0.45; }

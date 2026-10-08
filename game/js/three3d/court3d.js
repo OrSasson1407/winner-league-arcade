@@ -2,7 +2,8 @@
 // the 2D court uses). The engine has no player tracking: players take spots in a half-court set around the
 // basket their team attacks, the shooter goes to the real shot spot, and the ball flies to the rim.
 // Court units: the 2D court is 280 × 150 (tenths of a metre), so x / 10 is metres along the court.
-import { stage, studioLights } from "./core.js";
+import { drawWood, polishedFloor, stage, studioLights } from "./core.js";
+import { makeRealPlayer } from "./player.js";
 import { basketball, makePlayer, pose } from "./figures.js";
 import { COURT } from "../mycareer/pbp.js";
 import { SPOTS } from "../mycareer/live.js";
@@ -14,8 +15,7 @@ function courtTexture(T, c1, c2) {
   const W = 1400, H = 750, k = W / COURT.w; // px per court unit
   const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
   const g = cv.getContext("2d");
-  g.fillStyle = "#c98f55"; g.fillRect(0, 0, W, H);
-  for (let i = 0; i < 70; i++) { g.fillStyle = i % 2 ? "rgba(255,255,255,.035)" : "rgba(0,0,0,.035)"; g.fillRect(0, i * (H / 70), W, H / 70); } // boards
+  drawWood(g, W, H, 40, [212, 158, 98]); // maple boards
   g.strokeStyle = "#ffffff"; g.lineWidth = 5;
   g.strokeRect(2.5, 2.5, W - 5, H - 5);
   g.beginPath(); g.moveTo(W / 2, 0); g.lineTo(W / 2, H); g.stroke();
@@ -62,25 +62,29 @@ function hoop(T, x, dir) {
  * shot(e): e is an engine event with x, y (2D court units), side, type ("2" | "3" | "miss" | "ft"), mine (your shot).
  */
 export async function court3D(el, { teams, signal }) {
-  const S = await stage(el, { signal, fov: 42, camera: [0, 11, 17.5], target: [0, 0, 0.5], drag: false, label: "The game on a 3D court" });
+  const S = await stage(el, { signal, fov: 40, camera: [0, 9.5, 15.5], target: [0, 0, 0.5], drag: false, bloom: 0.1, label: "The game on a 3D court" });
   if (!S) return null;
   const { T, scene, camera } = S;
   studioLights(T, scene, { warm: "#fff7ea" });
   const [w, h] = [COURT.w / 10, COURT.h / 10];
-  const floor = new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshStandardMaterial({ map: courtTexture(T, teams[0].c1, teams[1].c1), roughness: 0.45 }));
-  floor.rotation.x = -Math.PI / 2;
+  polishedFloor(S, { size: [w, h], map: courtTexture(T, teams[0].c1, teams[1].c1), roughness: 0.3, mirror: 0.2 });
   const apron = new T.Mesh(new T.PlaneGeometry(w + 6, h + 6), new T.MeshStandardMaterial({ color: "#1d2129" }));
   apron.rotation.x = -Math.PI / 2; apron.position.y = -0.01;
-  scene.add(apron, floor);
+  scene.add(apron);
   const [rx] = toWorld(COURT.hoopR[0], 75), [lx] = toWorld(COURT.hoopL[0], 75);
   scene.add(hoop(T, rx, 1), hoop(T, lx, -1));
   // ten players: home 0-4, away 5-9; heights vary a little by spot (bigs inside)
-  const players = [0, 1].flatMap((s) => [0, 1, 2, 3, 4].map((i) => {
-    const p = makePlayer(T, { low: true, j1: teams[s].c1, j2: teams[s].c2, num: [3, 7, 11, 21, 33][i], height: [188, 196, 201, 206, 211][i], av: { skin: (i * 2 + s) % 6, hair: ["short", "fade", "buzz", "curly", "bald"][(i + s) % 5], hc: 0 } });
+  const players = await Promise.all([0, 1].flatMap((s) => [0, 1, 2, 3, 4].map(async (i) => {
+    const o = { low: true, j1: teams[s].c1, j2: teams[s].c2, num: [3, 7, 11, 21, 33][i], height: [188, 196, 201, 206, 211][i], av: { skin: (i * 2 + s) % 6, hair: ["short", "fade", "buzz", "curly", "bald"][(i + s) % 5], hc: 0 } };
+    const rp = await makeRealPlayer(T, o);
+    const p = rp ? rp.root : makePlayer(T, o);
+    p.userData.rp = rp; p.userData.mode = "idle";
     p.userData.target = new T.Vector3(); p.userData.side = s;
     scene.add(p);
     return p;
-  }));
+  })));
+  if (signal?.aborted) return null;
+  const facing = players[0].userData.rp?.facing ?? 1;
   const ball = basketball(T, 0.17); // a little big, to be seen from the broadcast camera
   scene.add(ball);
   let flight = null, offense = 0; // flight: { from, to, t, dur, made }
@@ -113,8 +117,11 @@ export async function court3D(el, { teams, signal }) {
     for (const p of players) {
       const d = p.userData.target.clone().sub(p.position); d.y = 0;
       const dist = d.length();
-      if (dist > 0.05) { p.position.addScaledVector(d, Math.min(1, dt * 3)); p.rotation.y = Math.atan2(d.x, d.z); }
-      pose(p, t + p.id * 0.37, p.userData.shootUntil > performance.now() ? "shoot" : dist > 0.3 ? "run" : "idle");
+      if (dist > 0.05) { p.position.addScaledVector(d, Math.min(1, dt * 3)); p.rotation.y = Math.atan2(d.x, d.z) + (facing < 0 ? Math.PI : 0); }
+      const mode = p.userData.shootUntil > performance.now() ? "shoot" : dist > 0.6 ? "sprint" : dist > 0.25 ? "run" : "idle";
+      const rp = p.userData.rp;
+      if (rp) { if (mode !== p.userData.mode) { p.userData.mode = mode; rp.setMode(mode); } rp.update(dt, t + p.id * 0.37); }
+      else pose(p, t + p.id * 0.37, mode === "sprint" ? "run" : mode);
     }
     if (flight) {
       flight.t += dt / flight.dur;
@@ -130,7 +137,7 @@ export async function court3D(el, { teams, signal }) {
       ball.position.lerp(holder.position.clone().add(new T.Vector3(0.3, 0.5 + Math.abs(Math.sin(t * 6)) * 0.6, 0.2)), Math.min(1, dt * 5));
     }
     // follow the play: the half where the ball is, so the basket stays in the picture
-    const goal = flight ? flight.to.x * 0.55 : (offense === 0 ? rx : lx) * 0.5;
+    const goal = flight ? flight.to.x * 0.62 : (offense === 0 ? rx : lx) * 0.62;
     camera.position.x += (goal - camera.position.x) * Math.min(1, dt * 1.2);
     camera.lookAt(camera.position.x * 1.15, 0.6, 0.5);
   });

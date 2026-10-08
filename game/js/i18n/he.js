@@ -125,7 +125,7 @@ export const HE = {
   "Find four groups of four players who share something: a club, a team-season, a stat, a birth year… Every player fits exactly one group.": "צריך למצוא ארבע קבוצות של ארבעה שחקנים עם משהו משותף: קבוצה, קבוצה-עונה, נתון, שנת לידה… כל שחקן שייך לקבוצה אחת בדיוק.",
   "Four at a time: deselect one first": "ארבעה בכל פעם: קודם לבטל בחירה של אחד",
   "Hard": "קשה",
-  "Medium": "בינוני",
+  "Medium": "בינונית",
   "mistakes left": "טעויות נשארו",
   "Mistakes left": "טעויות שנשארו",
   "Mistakes left {0}": "טעויות שנשארו {0}",
@@ -3947,4 +3947,8 @@ export const HE = {
   "You're {0} and eligible. {1}": "אתה בן {0} ורשאי להשתתף. {1}",
   "Trophy cabinet: {0} trophies and awards": "ארון הגביעים: {0} גביעים ופרסים",
   "The game on a 3D court": "המשחק על מגרש תלת־ממדי",
+  "3D quality": "איכות תלת־ממד",
+  "(high: glow and floor reflections)": "(גבוהה: זוהר והשתקפויות ברצפה)",
+  "Low": "נמוכה",
+  "the 3D player model and its animations": "דמות השחקן התלת־ממדית והאנימציות שלה",
 };

@@ -5,8 +5,22 @@
 import { store } from "../ui.js";
 import { reducedMotion } from "../lib/settings.js";
 
-let threeP = null;
+let threeP = null, addonsP = null;
 export const loadThree = () => (threeP ||= import("../../vendor/three.min.js"));
+/** Loaders, post-processing and the reflective floor (game/vendor/three-addons.min.js). */
+export const loadAddons = () => (addonsP ||= import("../../vendor/three-addons.min.js"));
+
+/**
+ * Picture quality: "high" (glow, reflections, soft shadows), "medium" (shadows), "low" (simple light).
+ * Auto: phones and small machines get medium; the player can choose in Settings.
+ */
+export function quality() {
+  const q = store.get("3d:quality", "auto");
+  if (q !== "auto") return q;
+  const coarse = matchMedia?.("(pointer: coarse)").matches;
+  return coarse || (navigator.hardwareConcurrency || 4) <= 4 ? "medium" : "high";
+}
+export const setQuality = (q) => store.set("3d:quality", q);
 
 let glOk = null;
 export function webglOk() {
@@ -26,27 +40,49 @@ export const set3D = (on) => store.set("mc:3d", !!on);
  */
 export async function stage(container, opts = {}) {
   const T = await loadThree();
-  const { signal, fov = 35, camera: cam = [0, 1.6, 6], target = [0, 1, 0], drag = true, shadows = false, label = "" } = opts;
+  const { signal, fov = 35, camera: cam = [0, 1.6, 6], target = [0, 1, 0], drag = true, label = "", bloom = 0.22, exposure = 0.9 } = opts;
   if (signal?.aborted) return null;
-  const renderer = new T.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" });
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+  const Q = quality();
+  const shadows = !!opts.shadows && Q !== "low";
+  const renderer = new T.WebGLRenderer({ antialias: Q !== "high", alpha: true, powerPreference: Q === "high" ? "high-performance" : "low-power" });
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, Q === "high" ? 2 : Q === "medium" ? 1.5 : 1));
   renderer.outputColorSpace = T.SRGBColorSpace;
+  renderer.toneMapping = T.ACESFilmicToneMapping; // film-like colour: bright lights roll off instead of clipping
+  renderer.toneMappingExposure = exposure;
   renderer.shadowMap.enabled = shadows;
+  renderer.shadowMap.type = T.PCFSoftShadowMap;
   const canvas = renderer.domElement;
   canvas.className = "stage3d";
   canvas.setAttribute("role", "img");
   if (label) canvas.setAttribute("aria-label", label);
   container.appendChild(canvas);
   const scene = new T.Scene();
+  // image-based light: a soft studio room reflected in every surface (built in code, no files)
+  const A = await loadAddons();
+  if (signal?.aborted) { renderer.dispose(); return null; }
+  const pmrem = new T.PMREMGenerator(renderer);
+  const envRT = pmrem.fromScene(new A.RoomEnvironment(), 0.04);
+  scene.environment = envRT.texture;
+  scene.environmentIntensity = 0.55;
+  pmrem.dispose();
   const camera = new T.PerspectiveCamera(fov, 1, 0.05, 200);
   camera.position.set(...cam);
   camera.lookAt(...target);
   const pivot = new T.Group();
   scene.add(pivot);
 
+  // glow around the brightest parts (lights, metal, white lines): high quality only
+  let composer = null;
+  if (Q === "high" && bloom > 0) {
+    composer = new A.EffectComposer(renderer);
+    composer.addPass(new A.RenderPass(scene, camera));
+    composer.addPass(new A.UnrealBloomPass(new T.Vector2(256, 256), bloom, 0.4, 1.15));
+    composer.addPass(new A.OutputPass());
+  }
   const size = () => {
     const w = container.clientWidth || 300, h = container.clientHeight || 300;
     renderer.setSize(w, h, false);
+    composer?.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   };
@@ -57,7 +93,7 @@ export async function stage(container, opts = {}) {
   const frames = [];
   const still = reducedMotion();
   let raf = 0, last = 0, t0 = 0, visible = true, alive = true;
-  const render = () => renderer.render(scene, camera);
+  const render = () => (composer ? composer.render() : renderer.render(scene, camera));
   const loop = (now) => {
     raf = 0;
     if (!alive) return;
@@ -100,20 +136,22 @@ export async function stage(container, opts = {}) {
       o.geometry?.dispose?.();
       for (const m of [].concat(o.material || [])) { m.map?.dispose?.(); m.dispose?.(); }
     });
+    envRT.dispose();
+    composer?.dispose?.();
     renderer.dispose();
     canvas.remove();
   };
   signal?.addEventListener("abort", dispose);
   kick();
-  return { T, scene, camera, renderer, pivot, canvas, onFrame: (f) => { frames.push(f); kick(); }, render, kick, dispose, still };
+  return { T, A, Q, scene, camera, renderer, pivot, canvas, onFrame: (f) => { frames.push(f); kick(); }, render, kick, dispose, still };
 }
 
 /** Soft studio light: a sky/ground fill, a key light (with shadows if asked) and a rim light. */
 export function studioLights(T, scene, { shadows = false, warm = "#fff4e6", rim = "#9cc7ff" } = {}) {
-  scene.add(new T.HemisphereLight("#ffffff", "#3a3f4a", 1.1));
-  const key = new T.DirectionalLight(warm, 2.2);
+  scene.add(new T.HemisphereLight("#ffffff", "#3a3f4a", 0.45));
+  const key = new T.DirectionalLight(warm, 2.4);
   key.position.set(3, 6, 4);
-  if (shadows) { key.castShadow = true; key.shadow.mapSize.set(1024, 1024); key.shadow.camera.near = 1; key.shadow.camera.far = 20; key.shadow.bias = -0.0005; }
+  if (shadows) { key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.camera.near = 1; key.shadow.camera.far = 20; key.shadow.camera.left = key.shadow.camera.bottom = -4; key.shadow.camera.right = key.shadow.camera.top = 4; key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02; key.shadow.radius = 4; }
   scene.add(key);
   const back = new T.DirectionalLight(rim, 1.2);
   back.position.set(-4, 3, -5);
@@ -141,4 +179,58 @@ export function cssHex(c) {
   const x = document.createElement("canvas").getContext("2d");
   x.fillStyle = "#000"; x.fillStyle = c;
   return x.fillStyle;
+}
+
+/** Wooden floor boards drawn in code (no image files): planks, grain and a little colour variation. */
+export function woodTexture(T, { w = 1024, h = 1024, planks = 16, base = [201, 143, 85], repeat = 1 } = {}) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d");
+  drawWood(g, w, h, planks, base);
+  const t = new T.CanvasTexture(c);
+  t.colorSpace = T.SRGBColorSpace; t.anisotropy = 8;
+  t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(repeat, repeat);
+  return t;
+}
+/** Paint boards into a 2D canvas context (used for plain floors and under the court lines). */
+export function drawWood(g, w, h, planks = 16, base = [201, 143, 85]) {
+  const ph = h / planks;
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < planks; i++) {
+    let x = -rnd() * w * 0.5;
+    while (x < w) {
+      const len = w * (0.35 + rnd() * 0.5), k = 0.86 + rnd() * 0.22;
+      g.fillStyle = "rgb(" + base.map((v) => Math.round(v * k)).join(",") + ")";
+      g.fillRect(x, i * ph, len, ph);
+      for (let j = 0; j < 7; j++) { // grain
+        g.strokeStyle = "rgba(80,45,15," + (0.05 + rnd() * 0.08) + ")"; g.lineWidth = 1 + rnd() * 1.5;
+        const y = i * ph + rnd() * ph;
+        g.beginPath(); g.moveTo(x, y); g.bezierCurveTo(x + len * 0.3, y + (rnd() - 0.5) * 6, x + len * 0.7, y + (rnd() - 0.5) * 6, x + len, y); g.stroke();
+      }
+      g.fillStyle = "rgba(40,22,8,.35)"; g.fillRect(x + len - 1.5, i * ph, 1.5, ph); // board ends
+      x += len;
+    }
+    g.fillStyle = "rgba(40,22,8,.4)"; g.fillRect(0, (i + 1) * ph - 1, w, 1.5); // seams
+  }
+}
+
+/**
+ * A polished wooden floor: the boards on top, and on high quality a real mirror under them (the players
+ * show in the floor, softly). size: [w, d] in metres; map: the floor's texture (boards, or a court).
+ */
+export function polishedFloor(S, { size = [8, 8], map, roughness = 0.32, mirror = 0.22 } = {}) {
+  const { T, A, Q, scene } = S;
+  const g = new T.Group();
+  const top = new T.Mesh(new T.PlaneGeometry(...size), new T.MeshStandardMaterial({ map, roughness, metalness: 0, transparent: Q === "high", opacity: Q === "high" ? 1 - mirror : 1 }));
+  top.rotation.x = -Math.PI / 2;
+  top.receiveShadow = true;
+  g.add(top);
+  if (Q === "high") {
+    const m = new A.Reflector(new T.PlaneGeometry(...size), { textureWidth: 1024, textureHeight: 1024, color: 0x888888 });
+    m.rotation.x = -Math.PI / 2;
+    m.position.y = -0.002;
+    g.add(m);
+  }
+  scene.add(g);
+  return g;
 }

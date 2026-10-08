@@ -27,9 +27,9 @@ const HOST = process.env.HOST || (process.env.PORT || process.argv.includes("--l
 const RECONNECT_GRACE = 45000; // a dropped player keeps their seat this long (phones switching networks)
 
 // ---------------------------------------------------------------- static files
-const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json",
+const TYPES = { ".glb": "model/gltf-binary", ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json",
   ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".ico": "image/x-icon", ".txt": "text/plain", ".webmanifest": "application/manifest+json", ".woff2": "font/woff2" };
-const TEXT = new Set([".html", ".js", ".mjs", ".css", ".json", ".svg", ".txt", ".webmanifest"]);
+const TEXT = new Set([".html", ".js", ".mjs", ".css", ".json", ".svg", ".txt", ".webmanifest", ".glb"]); // compressed on the way out (a .glb model compresses well too)
 const ALLOWED = ["game", "src"]; // only the game and its data helpers are public
 const gzCache = new Map(); // file -> { mtime, body }
 

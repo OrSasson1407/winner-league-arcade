@@ -145,7 +145,7 @@ export function basketball(T, r = 0.12) {
   return b;
 }
 
-function addHair(T, head, style, color, r, low) {
+export function addHair(T, head, style, color, r, low) {
   const m = mat(T, color, { roughness: 0.95 });
   const top = 0.06 + r;
   const cap = (scale = 1.04, cut = 0.55) => {
@@ -156,8 +156,8 @@ function addHair(T, head, style, color, r, low) {
   switch (style) {
     case "bald": return;
     case "buzz": case "fade": head.add(cap(1.02, style === "fade" ? 0.38 : 0.5)); return;
-    case "afro": { const a = new T.Mesh(new T.IcosahedronGeometry(r * 1.45, 1), m); a.position.y = top + r * 0.35; head.add(a); return; }
-    case "curly": { const a = new T.Mesh(new T.IcosahedronGeometry(r * 1.12, 1), m); a.position.y = top + r * 0.2; a.scale.y = 0.85; head.add(a); return; }
+    case "afro": { const a = new T.Mesh(new T.IcosahedronGeometry(r * 1.4, 1), m); a.position.set(0, top + r * 0.5, -r * 0.38); head.add(a); return; } // set back: the face stays clear
+    case "curly": { const a = new T.Mesh(new T.IcosahedronGeometry(r * 1.1, 1), m); a.position.set(0, top + r * 0.32, -r * 0.22); a.scale.y = 0.85; head.add(a); return; }
     case "mohawk": { head.add(cap(1.01, 0.35)); const b = new T.Mesh(new T.BoxGeometry(r * 0.35, r * 0.5, r * 1.9), m); b.position.y = top + r * 0.95; head.add(b); return; }
     case "long": { head.add(cap(1.06, 0.6)); const b = new T.Mesh(new T.BoxGeometry(r * 1.8, r * 1.6, r * 0.5), m); b.position.set(0, top - r * 0.6, -r * 0.7); head.add(b); return; }
     case "bun": { head.add(cap(1.04, 0.55)); const b = new T.Mesh(new T.SphereGeometry(r * 0.45, 10, 8), m); b.position.set(0, top + r * 1.05, -r * 0.35); head.add(b); return; }
@@ -168,7 +168,7 @@ function addHair(T, head, style, color, r, low) {
   }
 }
 
-function addExtra(T, head, g, x, { headR: r, j2, hairC, skinC, shoulder }) {
+export function addExtra(T, head, g, x, { headR: r, j2, hairC, skinC, shoulder }) {
   const top = 0.06 + r;
   const gold = mat(T, "#e2b33c", { metalness: 0.8, roughness: 0.3 });
   switch (x) {
