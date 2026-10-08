@@ -171,7 +171,7 @@ export function openGameView(opts) {
     const live3d = new AbortController();
     ctl.signal.addEventListener("abort", () => live3d.abort(), { once: true });
     let c3 = null, c3p = null;
-    const build3d = () => (c3p ||= import("../three3d/court3d.js").then(({ court3D }) => court3D($("#gv-3d"), { teams: [{ c1: cssHex(h1), c2: cssHex(h2), design: designOf(home.id) }, { c1: cssHex(a1), c2: cssHex(a2), design: designOf(away.id) }], signal: live3d.signal }))
+    const build3d = () => (c3p ||= import("../three3d/court3d.js").then(({ court3D }) => court3D($("#gv-3d"), { teams: [{ c1: cssHex(h1), c2: cssHex(h2), design: designOf(home.id), name: home.name, id: home.id }, { c1: cssHex(a1), c2: cssHex(a2), design: designOf(away.id), name: away.name }], signal: live3d.signal }))
       .then((c) => { c3 = c; if (!c) $(".lv-court").classList.remove("is3d"); return c; }, () => { $(".lv-court").classList.remove("is3d"); }));
     if (want3D()) build3d();
     let speed = 2, paused = false, t = 0, idx = 0, last = 0, done = false;

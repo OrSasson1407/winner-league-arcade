@@ -113,6 +113,15 @@ export function crestSvg(teamId, name, size = 44) {
   </svg>`;
 }
 
+/** A club's crest as an image URL (the logo file, or the drawn shield as an SVG data URL), for canvases and 3D. */
+export async function crestUrl(teamId, name, size = 256) {
+  await crestsReady;
+  if (LOGOS[teamId]) return LOGOS[teamId];
+  let svg = crestSvg(teamId, name, size);
+  if (!/xmlns=/.test(svg)) svg = svg.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" ');
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+}
+
 /** Position family colour class: guards / forwards / center (validated categorical palette). */
 const FAMILY = { PG: "g", SG: "g", G: "g", SF: "f", PF: "f", F: "f", C: "c" };
 export const posFamily = (pos) => FAMILY[pos] || "";
