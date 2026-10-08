@@ -16,7 +16,7 @@ const POOL = [
   { id: "conn-wins", n: 2, text: "Solve {n} Connections puzzles", on: "conn:end", test: (e) => e.won, reward: 60 },
   { id: "grid-full", n: 1, text: "Fill a whole Grid", on: "grid:end", test: (e) => e.filled === 9, reward: 70 },
   { id: "daily-days", n: 3, text: "Finish daily challenges on {n} different days", on: "daily:done", test: () => true, unique: () => localDate(), reward: 70 },
-  { id: "daily-full", n: 1, text: "Get a daily Full House (all four in a day)", on: "daily:done", test: (e) => e.today >= 4, reward: 80 },
+  { id: "daily-full", n: 1, text: "Get a daily Full House (every daily game in a day)", on: "daily:done", test: (e) => e.today >= (e.of || 4), reward: 80 }, // the EuroLeague choice has three
   { id: "mc-games", n: 10, text: "Play {n} My Career games", on: "mc:game", test: (e) => !e.dnp, reward: 60 },
   { id: "mc-30", n: 1, text: "Score 30 points in a My Career game", on: "mc:game", test: (e) => e.pts >= 30, reward: 80 },
   { id: "matchups", n: 2, text: "Play {n} Single games", on: "matchup:play", test: () => true, reward: 40 },

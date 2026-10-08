@@ -442,6 +442,7 @@ export async function renderMyCareer(root, signal) {
       const firstPro = !C.contract;
       E.sign(C, o);
       if (firstPro) emit("mc:pro", {});
+      emit("mc:sign", { nba: !!o.nba, abroad: !!o.abroad });
       C.phase = "offseason"; view = null; save(); sound.play("win");
       announce(`Signed with ${o.name}: ${money(o.salary)} per season for ${o.years} seasons.`);
       draw();

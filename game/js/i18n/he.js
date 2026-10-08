@@ -3847,4 +3847,11 @@ export const HE = {
   "Out in the first round": "הדחה בסיבוב הראשון",
   "Selected for the NBA All-Star Game.": "נבחר למשחק האולסטאר של ה־NBA.",
   "Create a player, grow up in a club academy and play a whole career in the Winner League against the real teams of every season. Get good enough and the EuroLeague and the NBA call.": "יוצרים שחקן, גדלים באקדמיה של קבוצה ומשחקים קריירה שלמה בליגת ווינר מול הקבוצות האמיתיות של כל עונה. מי שמספיק טוב, מקבל טלפון מהיורוליג ומה־NBA.",
+  "Get a daily Full House (every daily game in a day)": "להשיג בית מלא יומי (כל המשחקים היומיים ביום אחד)",
+  "Kings of Europe": "מלכי אירופה",
+  "Win the EuroLeague.": "לזכות ביורוליג.",
+  "The Call": "הטלפון",
+  "Sign with an NBA team.": "לחתום בקבוצת NBA.",
+  "World Champion": "אלוף העולם",
+  "Win the NBA title.": "לזכות באליפות ה־NBA.",
 };

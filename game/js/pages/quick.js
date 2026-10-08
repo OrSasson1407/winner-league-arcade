@@ -4,6 +4,7 @@ import { store } from "../ui.js";
 import { icon } from "../lib/icons.js";
 import { announce } from "../lib/a11y.js";
 import { reducedMotion } from "../lib/settings.js";
+import { gameAvailable } from "../leagueChoice.js";
 
 export const QUICK = [
   ["higher-lower", "Higher or Lower", "chart"], ["guess?mode=free", "Guess the Player", "search"], ["career", "Career Path", "arrowRight"],
@@ -12,7 +13,7 @@ export const QUICK = [
 
 export function renderQuick(root, signal) {
   const last = store.get("quick:last", "");
-  const pool = QUICK.filter(([r]) => r !== last);
+  const pool = QUICK.filter(([r]) => r !== last && gameAvailable(r.split("?")[0])); // only games the chosen league has
   const [route, name, ic] = pool[Math.floor(Math.random() * pool.length)];
   store.set("quick:last", route);
   const go = () => { if (!signal.aborted) location.replace(`#/${route}`); };

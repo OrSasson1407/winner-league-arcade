@@ -134,7 +134,7 @@ export function renderHome(root, signal) {
         <p class="bc-sub">Welcome back, <b>${esc(myName("Guest"))}</b>. ${namedPlayers.length.toLocaleString()} players and ${db.teams.length} clubs of ${LEAGUES[activeLeague()].phrase}, every season since ${activeLeague() === "el" ? "2000-01" : "2010-11"}. Pick a game or look up any player.</p>
         <div class="search guess-input">${icon("search", { size: 18, cls: "search-ic" })}<input id="search" class="input" placeholder="Search any player…" autocomplete="off" aria-label="Search players"></div>
         <div class="row hero-actions">
-          ${last && GAMES[last] ? `<a class="btn jump" href="${GAMES[last].href}">${icon("play", { size: 14 })} Jump back into ${GAMES[last].title}</a>` : ""}
+          ${last && GAMES[last] && gameAvailable(GAMES[last].href.replace(/^#\//, "").split("?")[0]) ? `<a class="btn jump" href="${GAMES[last].href}">${icon("play", { size: 14 })} Jump back into ${GAMES[last].title}</a>` : ""}
           <a class="btn jump" href="#/quick">${icon("dice", { size: 14 })} Quick game</a>
           <a class="btn jump" href="#/online">${icon("globe", { size: 14 })} Play online 1v1</a>
           <a class="btn jump" href="#/challenge">${icon("users", { size: 14 })} Challenge a friend</a>

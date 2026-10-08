@@ -74,6 +74,6 @@ export function markDaily(gameKey, result) {
   const streak = dailyStreak();
   if (streak > store.get("daily:best", 0)) store.set("daily:best", streak);
   const s = dailyStats();
-  emit("daily:done", { game: gameKey, streak, today: Object.keys(day).length, total: s.total, fullDays: s.fullDays });
+  emit("daily:done", { game: gameKey, streak, today: Object.keys(day).length, of: DAILY_COUNT, total: s.total, fullDays: s.fullDays });
   toast(Object.keys(day).length >= DAILY_COUNT ? `All ${DAILY_COUNT} daily challenges done today! 🔥` : `Daily challenge done · ${streak}-day streak 🔥`);
 }
