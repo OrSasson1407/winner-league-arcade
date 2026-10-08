@@ -194,6 +194,7 @@ export function renderLicenses(root, signal) {
         ["Inter", L("share images", "תמונות שיתוף"), "SIL Open Font License 1.1", "https://rsms.me/inter/"],
         ["Orbitron", L("scoreboards", "לוחות תוצאות"), "SIL Open Font License 1.1", "https://fonts.google.com/specimen/Orbitron"],
         ["Fontsource", L("font packaging", "אריזת הגופנים"), "MIT", "https://fontsource.org"],
+        ["three.js", L("3D views in My Career and on the live court", "תצוגות תלת־ממד בקריירה ובמגרש החי"), "MIT", "https://threejs.org"],
       ].map(row).join("")}</ul>`],
       ["globe", L("Server", "שרת"), `<ul class="pv-list">${[
         ["Node.js", L("runtime", "סביבת הרצה"), "MIT", "https://nodejs.org"],

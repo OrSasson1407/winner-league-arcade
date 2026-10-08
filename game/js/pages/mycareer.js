@@ -23,6 +23,9 @@ import { clubThemeVars } from "../lib/clubTheme.js";
 import { MOCK_NOTE, elLoaded, loadEuroleague } from "../euroleague.js";
 import { loadNba, nbaReady } from "../mycareer/nba.js";
 import * as NP from "../mycareer/nbaPath.js";
+import { tr } from "../i18n/index.js";
+import { cssHex, set3D, want3D } from "../three3d/core.js";
+const scenes3d = () => import("../three3d/scenes.js"); // loads Three.js only when a 3D view opens
 import { drawCareerCard } from "../mycareer/shareCard.js";
 import { keysFor, openGameView } from "../lib/gameView.js";
 import { teamPreview } from "../shared/gameSim.js";
@@ -197,7 +200,7 @@ export async function renderMyCareer(root, signal) {
     return html`<h1 class="sr-only">My Career: ${esc(C.name)}</h1><section class="mc-hub" aria-label="Player hub">
       <svg class="hub-court" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><circle cx="200" cy="100" r="34"/><path d="M200 0v200M0 40h70v120H0M400 40h-70v120h70M70 70a30 30 0 0 1 0 60M330 70a30 30 0 0 0 0 60"/></svg>
       <div class="hub-main">
-        <div class="hub-face">${face(104)}</div>
+        <div class="hub-face">${want3D() ? `<button class="hub-face-btn" id="mc-locker" title="Locker room (3D)" aria-label="Open the locker room in 3D">${face(104)}<span class="hub-3d">3D</span></button>` : face(104)}</div>
         <div class="hub-id"><small>${esc(C.pos)}/${esc(C.pos2)} · ${fmtHeight(C.height)}${C.weight ? ` · ${Math.round(C.weight)} kg` : ""} · age ${C.age}${C.label ? ` · ${C.label}${S?.simulated ? " (simulated)" : ""}` : ""}</small>
           <h2 class="mc-name">${esc(C.name)}</h2>
           <span class="mc-club">${crestSvg(team, teamName(team), 24)} ${esc(teamName(team))}${C.loan ? " (on loan)" : C.phase === "academy" ? " academy" : ""}${S ? ` · ${roleName(S.role)}` : ""} <span class="pill mc-nat">${C.nat === "Israel" ? "Israeli" : "Foreign player"}</span></span></div>
@@ -225,6 +228,7 @@ export async function renderMyCareer(root, signal) {
   }
   function bindTabs(redraw) {
     tabRedraw = redraw;
+    mount3D();
     const bar = root.querySelector("#mc-tabs");
     bar?.addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) goTab(b.dataset.tab); }, { signal });
     bar?.addEventListener("keydown", (e) => {
@@ -455,6 +459,46 @@ export async function renderMyCareer(root, signal) {
     }, { signal }));
   }
 
+  // ---------------------------------------------------------------- 3D (the locker room, the trophy cabinet, the signing)
+  const body3d = () => ({ av: av(), name: C.name, num: av().num ?? 7, height: C.height, weight: C.weight ?? E.idealWeight(C) });
+  const clubNow = () => C.loan?.team || C.contract?.team || C.club || C.academy?.club;
+  /** Trophies and individual awards for the 3D cabinet, oldest first. */
+  function cabinetItems() {
+    const NAME = { title: "Champion", nba: "NBA title", euroleague: "EuroLeague", cup: "State Cup", allstar: "All-Star", nbaallstar: "NBA All-Star" };
+    // drawn inside the 3D canvas, so translated here (the page translator doesn't reach canvas text)
+    return [...C.trophies.map((t) => ({ type: t.type, label: tr(NAME[t.type] || t.type), season: t.season })), ...C.awards.map((a) => ({ type: "award", label: tr(a.name), season: a.season }))]
+      .sort((a, b) => String(a.season).localeCompare(String(b.season)));
+  }
+  let view3d = null;
+  /** Mount the 3D views of the screen just drawn (the old ones are cleaned up). */
+  function mount3D() {
+    view3d?.abort();
+    view3d = new AbortController();
+    const sig = view3d.signal;
+    signal.addEventListener("abort", () => view3d?.abort(), { once: true });
+    root.querySelector("#mc-locker")?.addEventListener("click", openLocker, { signal: sig });
+    const cab = root.querySelector("#mc-cabinet3d");
+    if (cab) scenes3d().then(({ trophyCabinet }) => trophyCabinet(cab, { items: cabinetItems(), colors: clubColors(clubNow()).map(cssHex), signal: sig })).catch(() => cab.remove());
+  }
+  function openLocker() {
+    const team = clubNow();
+    const d = modal("Locker room");
+    const ctl = new AbortController();
+    d.innerHTML = html`<button class="icon-btn profile-close" aria-label="Close">${icon("close", { size: 18 })}</button>
+      <div class="profile"><small class="muted">LOCKER ROOM · ${esc(teamName(team).toUpperCase())}</small><h2>${esc(C.name)}</h2>
+        <div class="stage-box locker-box" id="lk-3d"></div>
+        <p class="muted" style="font-size:12px">Drag (or use the arrow keys) to turn. Your look comes from your avatar; height and weight shape the body.</p>
+        <div class="row"><button class="btn ghost" id="lk-off">${icon("close", { size: 14 })} Turn 3D views off</button><span class="spacer"></span><button class="btn primary" id="lk-close">Close</button></div></div>`;
+    const close = () => closeModal(d);
+    d.querySelector(".profile-close").addEventListener("click", close);
+    d.querySelector("#lk-close").addEventListener("click", close);
+    d.querySelector("#lk-off").addEventListener("click", () => { set3D(false); close(); toast("3D views are off. Turn them back on in Settings."); draw(); });
+    d.addEventListener("close", () => ctl.abort(), { once: true });
+    openModal(d);
+    scenes3d().then(({ lockerRoom }) => lockerRoom(d.querySelector("#lk-3d"), { ...body3d(), colors: clubColors(team).map(cssHex), club: teamName(team), signal: ctl.signal }))
+      .catch(() => { const b = d.querySelector("#lk-3d"); if (b) b.innerHTML = `<p class="muted">3D isn't available on this device.</p>`; });
+  }
+
   // ---------------------------------------------------------------- the road to the NBA
   /** Contract details on an offer: an option year, a two-way deal, an NBA-out clause, a draft pick. */
   function contractTags(o) {
@@ -538,15 +582,14 @@ export async function renderMyCareer(root, signal) {
         confetti(3500); sound.play("victory");
       }
       dlg.querySelector("#dn-ok").addEventListener("click", () => {
-        closeModal(dlg);
-        if (!d.undrafted) {
+        if (!d.undrafted) { // the signing opens in the same window (closing and reopening races the Back step)
           const o = NP.draftContract(C, d);
           E.sign(C, o);
           C.phase = "offseason";
           emit("mc:sign", { nba: true, abroad: true });
           view = null; save();
-          afterBack(() => { draw(); ceremony(o); });
-        } else redraw();
+          draw(); ceremony(o);
+        } else { closeModal(dlg); redraw(); }
       });
       dlg.querySelector("#dn-ok").focus();
     };
@@ -928,13 +971,20 @@ export async function renderMyCareer(root, signal) {
     const toHex = (c) => { const x = document.createElement("canvas").getContext("2d"); x.fillStyle = c; return x.fillStyle; };
     const jersey = `<span class="avatar-chip player ct-av" style="--av:${c1};width:150px;height:150px">${playerAvatarSvg({ ...av(), j1: toHex(c1), j2: toHex(c2) }, c1)}</span>`;
     const d = modal("Contract signed");
+    const three = want3D();
     d.innerHTML = html`<button class="icon-btn profile-close" aria-label="Close">${icon("close", { size: 18 })}</button>
-      <div class="profile">${contractHtml(C, o, money, jersey, E.seasonLabel(C.debut, C.seasonNo))}
+      <div class="profile">${contractHtml(C, o, money, three ? `<div class="stage-box sign-box" id="ct-3d"></div>` : jersey, E.seasonLabel(C.debut, C.seasonNo))}
         <div class="row" style="justify-content:center;margin-top:14px"><button class="btn primary" id="ct-go">${icon("arrowRight", { size: 15 })} Let's go</button></div></div>`;
     const close = () => closeModal(d);
     d.querySelector(".profile-close").addEventListener("click", close);
     d.querySelector("#ct-go").addEventListener("click", close);
     openModal(d);
+    if (three) {
+      const ctl = new AbortController();
+      d.addEventListener("close", () => ctl.abort(), { once: true });
+      scenes3d().then(({ signingScene }) => signingScene(d.querySelector("#ct-3d"), { ...body3d(), colors: [cssHex(c1), cssHex(c2)], club: o.name, nba: !!o.nba, signal: ctl.signal }))
+        .catch(() => { const b = d.querySelector("#ct-3d"); if (b) b.outerHTML = jersey; });
+    }
     setTimeout(() => { confetti(1800); sound.play("place"); }, 900);
     d.querySelector("#ct-go").focus();
   }
@@ -1021,6 +1071,7 @@ export async function renderMyCareer(root, signal) {
     const MS = [["debut", "Pro debut"], ["pts20", "20-point game"], ["pts30", "30-point game"], ["pts40", "40-point game"], ["dd", "Double-double"], ["td", "Triple-double"], ["k1", "1,000 career points"]];
     return html`<div class="mc-grid">
       <div class="card pad"><h2>${icon("trophy")} Trophy cabinet</h2>
+        ${want3D() && cabinetItems().length ? `<div class="stage-box cabinet-box" id="mc-cabinet3d"></div><p class="muted" style="font-size:12px;margin:4px 0 10px">Drag to turn the cabinet.</p>` : ""}
         <div class="mc-cabinet">${Object.entries(TROPHY).map(([k, [ic, l]]) => `<div class="mc-trophy ${count(k) ? "got" : ""}">${icon(ic, { size: 34 })}<b class="led">${count(k)}</b><small>${l}</small></div>`).join("")}
           <div class="mc-trophy ${C.awards.length ? "got" : ""}">${icon("medal", { size: 34 })}<b class="led">${C.awards.length}</b><small>Awards</small></div></div>
         ${C.awards.length ? `<ul class="clean mc-awardlist">${C.awards.slice().reverse().map((a) => `<li>${icon("medal", { size: 13 })} ${esc(a.name)} <span class="muted">${a.season}</span></li>`).join("")}</ul>` : `<p class="muted">Win games, win awards. They'll all live here.</p>`}

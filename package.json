@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node server/index.js",
     "build:rtl": "node game/tools/build_rtl.mjs",
+    "vendor:three": "esbuild node_modules/three/build/three.module.js --bundle --minify --format=esm --outfile=game/vendor/three.min.js",
     "i18n:missing": "node game/tools/extract_ui_strings.mjs --missing",
     "test": "node server/test/db.test.mjs && node server/test/db.pg.test.mjs",
     "build:fonts": "node game/tools/build_fonts.mjs",
@@ -36,6 +37,7 @@
     "flag-icons": "^7.5.0",
     "pdfjs-dist": "^6.4.299",
     "rtlcss": "^4.3.0",
-    "sharp": "^0.35.5"
+    "sharp": "^0.35.5",
+    "three": "^0.186.1"
   }
 }

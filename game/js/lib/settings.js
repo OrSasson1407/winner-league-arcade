@@ -9,6 +9,7 @@ import { applyClubTheme } from "./clubTheme.js";
 import { db } from "../data.js";
 import { installRowHtml, onInstallChange, promptInstall } from "./install.js";
 import { LEAGUES, LEAGUE_IDS, activeLeague, setLeague } from "../leagueChoice.js";
+import { set3D, want3D, webglOk } from "../three3d/core.js";
 
 const DEFAULTS = { theme: "dark", cb: false, size: "md", motion: "system", club: "", contrast: "system", lang: "en" };
 
@@ -64,6 +65,7 @@ export function initSettingsButton(btn) {
       <div class="field"><label>Colours</label>${seg("cb", [[false, "Standard"], [true, "Colour-blind safe"]], s.cb)}</div>
       <div class="field"><label>Text size</label>${seg("size", [["sm", "S"], ["md", "M"], ["lg", "L"], ["xl", "XL"]], s.size)}</div>
       <div class="field"><label>Animations</label>${seg("motion", [["system", "System"], ["full", "Full"], ["reduced", "Reduced"]], s.motion)}</div>
+      ${webglOk() ? `<div class="field"><label>3D views <small class="muted">(My Career and the live court)</small></label>${seg("3d", [[true, "On"], [false, "Off"]], want3D())}</div>` : ""}
       <div class="field"><label>Sound</label>${seg("sound", [[true, `${icon("soundOn", { size: 14 })} On`], [false, `${icon("soundOff", { size: 14 })} Off`]], sound.on)}</div>
       ${canVibrate() ? `<div class="field"><label>Vibration</label>${seg("haptics", [[true, "On"], [false, "Off"]], haptics.on)}</div>` : ""}
       <div class="field"><label>Height</label>${seg("u-height", [["m", "Metres"], ["ft", "Feet & inches"]], getUnits().height)}</div>
@@ -105,7 +107,8 @@ export function initSettingsButton(btn) {
       if (key === "notify-online") { (val ? enableOnlineAlerts() : Promise.resolve(disableOnlineAlerts())).then(() => pop && render()); return; }
       if (key === "league") { if (val !== activeLeague()) setLeague(val); return; } // the whole arcade reloads on the new data
       if (key === "remind") { (val ? enableReminders() : disableReminders()).then(() => pop && render()); return; }
-      if (key === "sound") sound.on = val;
+      if (key === "3d") set3D(val);
+      else if (key === "sound") sound.on = val;
       else if (key === "haptics") { haptics.on = val; if (val) navigator.vibrate?.(15); }
       else if (key === "u-height" || key === "u-money") setUnits({ [key.slice(2)]: val });
       else if (key === "lang") { if (val !== getSettings().lang) { save({ lang: val }); location.reload(); } return; } // the whole page is redrawn in the new language

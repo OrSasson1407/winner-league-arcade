@@ -9,6 +9,7 @@ import { esc, html } from "../ui.js";
 import { TACTICS } from "../shared/gameSim.js";
 import { bindMomentum, courtSvg, momentumHtml, SPOTS } from "../mycareer/live.js";
 import { COURT, clockOf } from "../mycareer/pbp.js";
+import { cssHex, set3D, want3D, webglOk } from "../three3d/core.js";
 
 const SECONDS_PER_SECOND = 52;
 export const ESTIMATE_NOTE = "Played possession by possession from each player's real per-game numbers. Shot attempts, turnovers and fouls aren't in the league data, so the engine estimates them.";
@@ -143,11 +144,12 @@ export function openGameView(opts) {
         <div class="lv-clock"><small id="gv-q">Q1</small><b class="led" id="gv-c">10:00</b></div>
         <div class="lv-team r"><b class="led" id="gv-s1">0</b><span>${esc(away.name)}</span>${crest(away, 30)}</div>
       </div>
-      <div class="lv-court"><svg viewBox="-6 -6 ${COURT.w + 12} ${COURT.h + 12}" aria-hidden="true">${courtSvg()}<g id="gv-shots"></g>
+      <div class="lv-court ${want3D() ? "is3d" : ""}"><div class="lv-court3d" id="gv-3d"></div><svg viewBox="-6 -6 ${COURT.w + 12} ${COURT.h + 12}" aria-hidden="true">${courtSvg()}<g id="gv-shots"></g>
         ${[0, 1].map((s) => [0, 1, 2, 3, 4].map((i) => `<g class="lv-p s${s}" data-s="${s}" data-i="${i}" style="--c:${s ? a1 : h1};--c2:${s ? a2 : h2}"><circle r="4.6"/></g>`).join("")).join("")}
         <circle id="gv-ball" r="2.4" class="lv-ball" cx="140" cy="75"/></svg></div>
       <p class="lv-feed" id="gv-feed" aria-live="off">Tip-off!</p>
       <div class="lv-ctrl"><div class="seg sm" role="group" aria-label="Speed">${[1, 2, 4].map((x) => `<button data-x="${x}" class="${x === 2 ? "on" : ""}" aria-pressed="${x === 2}">${x}×</button>`).join("")}</div>
+        ${webglOk() ? `<button class="btn" id="gv-3dt" aria-pressed="${want3D()}">${want3D() ? "2D court" : "3D court"}</button>` : ""}
         <button class="btn" id="gv-pause" aria-keyshortcuts="Space" title="Pause (Space)">${icon("pause", { size: 15 })} Pause</button><button class="btn primary" id="gv-skip" aria-keyshortcuts="F" title="Final score (F)">${icon("skip", { size: 15 })} Final score</button></div>`;
     wire();
     const $ = (q) => d.querySelector(q);
@@ -164,6 +166,13 @@ export function openGameView(opts) {
       }
     };
     formation(0);
+    // the 3D court: built when it's on, fed the same events, removed with the live view
+    const live3d = new AbortController();
+    ctl.signal.addEventListener("abort", () => live3d.abort(), { once: true });
+    let c3 = null, c3p = null;
+    const build3d = () => (c3p ||= import("../three3d/court3d.js").then(({ court3D }) => court3D($("#gv-3d"), { teams: [{ c1: cssHex(h1), c2: cssHex(h2) }, { c1: cssHex(a1), c2: cssHex(a2) }], signal: live3d.signal }))
+      .then((c) => { c3 = c; if (!c) $(".lv-court").classList.remove("is3d"); return c; }, () => { $(".lv-court").classList.remove("is3d"); }));
+    if (want3D()) build3d();
     let speed = 2, paused = false, t = 0, idx = 0, last = 0, done = false;
     // reduced motion: players and ball jump to their spots instead of gliding (the CSS drops the movement)
     const setClock = () => { const c = clockOf(Math.min(t, sim.length), sim.quarter); $("#gv-q").textContent = c.label; $("#gv-c").textContent = c.text; };
@@ -178,6 +187,8 @@ export function openGameView(opts) {
         shots.appendChild(g2);
       }
       if (!animate) return;
+      if (c3 && (e.side === 0 || e.side === 1)) c3.formation(e.side);
+      if (c3 && shot && e.x != null) c3.shot(e);
       if (e.side === 0 || e.side === 1) formation(e.side);
       if (shot && e.x != null) {
         const sh = dots[(e.side ? 5 : 0) + Math.floor(rnd() * 5)];
@@ -193,7 +204,7 @@ export function openGameView(opts) {
       $("#gv-feed").innerHTML = `<small>${c.label} · ${c.text}</small> ${strap}${e.pid === meId ? `<b>${esc(e.text)}</b>` : esc(e.text)}`;
       if (e.type === "timeout" || e.type === "period-end") announce(e.text);
     };
-    const finish = () => { if (done) return; done = true; cancelAnimationFrame(raf); showFinal(); };
+    const finish = () => { if (done) return; done = true; cancelAnimationFrame(raf); live3d.abort(); showFinal(); };
     const tick = (now) => {
       if (done || closed) return;
       const dt = last ? Math.min(0.1, (now - last) / 1000) : 0; last = now;
@@ -211,6 +222,14 @@ export function openGameView(opts) {
     });
     $("#gv-pause").addEventListener("click", () => { paused = !paused; $("#gv-pause").innerHTML = paused ? `${icon("play", { size: 15 })} Resume` : `${icon("pause", { size: 15 })} Pause`; });
     $("#gv-skip").addEventListener("click", finish);
+    $("#gv-3dt")?.addEventListener("click", (e) => {
+      const on = !$(".lv-court").classList.contains("is3d");
+      set3D(on);
+      $(".lv-court").classList.toggle("is3d", on);
+      e.currentTarget.textContent = on ? "2D court" : "3D court";
+      e.currentTarget.setAttribute("aria-pressed", String(on));
+      if (on) build3d();
+    });
     keys = (e) => { // Space pause · 1 2 4 speed · F final score
       if (e.key === " " || e.key === "k") { e.preventDefault(); $("#gv-pause").click(); }
       else if (["1", "2", "4"].includes(e.key)) d.querySelector(`[data-x="${e.key}"]`)?.click();
