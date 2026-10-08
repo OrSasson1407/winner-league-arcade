@@ -12,6 +12,8 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { GAMES, createEngine } from "./duels.js";
 import { BOT_LEVELS, createBot } from "./bot.js";
+import { LEAGUE_KEYS, cleanLeague, gameInLeague, getKit, kitFor } from "./leagueKit.js";
+import { LEAGUES } from "../game/js/leagueChoice.js";
 import { addWeekly, applyResult, blockName, findByCode, forgetRecord, initRecords, leaderboard, recordBySid, recordFor, recordMsg, saveRecords, secretSource, setProfile, weekId, weekOf } from "./records.js";
 import { MAX_MEMBERS, cleanLeagueId, createLeague, getLeague, initLeagues, joinLeague, leaveAllLeagues, leaveLeague, saveLeagues, styleLeague, syncLeague } from "./leagues.js";
 import { isOffensive } from "../game/js/shared/moderation.js";
@@ -128,7 +130,9 @@ const server = http.createServer((req, res) => {
 
 // ---------------------------------------------------------------- online lobby
 const clients = new Map(); // sid -> client
-const queues = new Map(GAMES.map((g) => [g, []])); // game -> [{ c, at }]
+// one queue per game and league: players are matched only with people playing the same league
+const qKey = (game, league) => `${game}@${league}`;
+const queues = new Map(LEAGUE_KEYS.flatMap((l) => GAMES.map((g) => [qKey(g, l), []]))); // "game@league" -> [{ c, at }]
 const invites = new Map(); // code -> { host, game, at, to? }
 const rooms = new Map(); // id -> room
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -152,8 +156,8 @@ function newCode() {
   }
 }
 
-function stats() {
-  const waiting = Object.fromEntries(GAMES.map((g) => [g, queues.get(g).length]));
+function stats(league = "wl") {
+  const waiting = Object.fromEntries(GAMES.map((g) => [g, queues.get(qKey(g, league)).length]));
   const live = [...rooms.values()].filter((r) => !r.over);
   return { t: "stats", online: [...clients.values()].filter((c) => c.ws).length, playing: live.reduce((s, r) => s + r.players.filter((p) => !p.isBot).length, 0), waiting };
 }
@@ -162,8 +166,8 @@ function pushStats() { // batched: at most one broadcast per second
   if (statsTimer) return;
   statsTimer = setTimeout(() => {
     statsTimer = null;
-    const s = stats();
-    for (const c of clients.values()) if (!c.room) send(c, s);
+    const s = Object.fromEntries(LEAGUE_KEYS.map((l) => [l, stats(l)]));
+    for (const c of clients.values()) if (!c.room) send(c, s[c.league || "wl"]);
   }, 1000);
 }
 
@@ -173,8 +177,9 @@ function leaveLobby(c) {
 }
 
 /** Rating-based matchmaking: the allowed rating gap grows the longer people wait. */
-function matchQueue(game) {
-  const q = queues.get(game);
+function matchQueue(key) {
+  const q = queues.get(key);
+  const [game, league] = key.split("@");
   const now = Date.now();
   for (let i = 0; i < q.length; i++) {
     for (let j = i + 1; j < q.length; j++) {
@@ -183,19 +188,21 @@ function matchQueue(game) {
       const waited = (now - Math.min(a.at, b.at)) / 1000;
       if (Math.abs(eloOf(a.c, game) - eloOf(b.c, game)) <= matchRange(waited)) {
         q.splice(j, 1); q.splice(i, 1);
-        createRoom(game, a.c, b.c, "ranked");
-        return matchQueue(game);
+        createRoom(game, a.c, b.c, "ranked", league);
+        return matchQueue(key);
       }
     }
   }
 }
-setInterval(() => GAMES.forEach(matchQueue), 2000).unref();
+setInterval(() => [...queues.keys()].forEach(matchQueue), 2000).unref();
 
 // ---------------------------------------------------------------- rooms
-function createRoom(game, a, b, mode) {
+function createRoom(game, a, b, mode, league = "wl") {
+  const kit = getKit(league);
+  if (!kit) return; // not loaded: the callers load the league's kit first (withKit)
   leaveLobby(a); leaveLobby(b);
   const room = {
-    id: crypto.randomUUID(), game, mode, rated: mode === "ranked" && !pairCapped(a, b), players: [a, b], timers: new Set(), over: false, rematch: new Set(), seq: 0,
+    id: crypto.randomUUID(), game, mode, league: kit.league, kit, rated: mode === "ranked" && !pairCapped(a, b), players: [a, b], timers: new Set(), over: false, rematch: new Set(), seq: 0,
     spectators: new Set(), only: null,
     send(seat, msg) {
       if (this.only) { if (seat === 0) send(this.only, msg); return; } // re-sending the state to a new spectator
@@ -206,7 +213,10 @@ function createRoom(game, a, b, mode) {
     timer(fn, ms) { const t = setTimeout(() => { this.timers.delete(t); if (!this.over) fn(); }, ms); this.timers.add(t); return t; },
     clearTimers() { this.timers.forEach(clearTimeout); this.timers.clear(); },
     names() { return this.players.map((p) => p.profile.name); },
-    finish(res) { finishRoom(this, { ...res, replay: res.replay ?? this.engine?.replay?.() ?? null }); },
+    finish(res) {
+      const replay = res.replay ?? this.engine?.replay?.() ?? null;
+      finishRoom(this, { ...res, replay: replay && this.league !== "wl" ? { ...replay, league: this.league } : replay }); // a replay is read on its league's data
+    },
     chatFrom(c, i) { const seat = this.players.indexOf(c); if (seat >= 0) send(this.players[1 - seat], { t: "chat", i }); },
     rematchFrom(c) { onMessage(c, { t: "rematch" }); },
   };
@@ -220,7 +230,7 @@ function startMatch(room) {
   room.over = false;
   room.rematch.clear();
   room.seq++;
-  room.engine = createEngine(room.game, room, `${room.id}-${room.seq}`);
+  room.engine = createEngine(room.game, room, `${room.id}-${room.seq}`, room.kit);
   room.players.forEach((p, seat) => send(p, matchMsg(room, seat)));
   room.spectators.forEach((s) => send(s, matchMsg(room, 0, { spectator: true, watchers: room.spectators.size })));
   // a short countdown before the first round
@@ -240,7 +250,7 @@ function pairCapped(a, b) {
 }
 function countPair(room) { if (room.rated) { const k = pairKey(...room.players); pairGames.set(k, [...(pairGames.get(k) || []), Date.now()]); } }
 
-const matchMsg = (room, seat, extra = {}) => ({ t: "match", room: room.id, game: room.game, mode: room.mode, rated: room.rated, seat,
+const matchMsg = (room, seat, extra = {}) => ({ t: "match", room: room.id, game: room.game, league: room.league, mode: room.mode, rated: room.rated, seat,
   unrated: room.mode === "ranked" && !room.rated ? "pair" : null,
   you: publicProfile(room.players[seat], room.game), opp: publicProfile(room.players[1 - seat], room.game), seq: room.seq, ...extra });
 
@@ -373,6 +383,16 @@ function unwatch(c) {
   room.players.forEach((p) => send(p, { t: "watchers", n: room.spectators.size }));
 }
 
+// ---------------------------------------------------------------- leagues
+/** The game exists and runs in the player's league (EuroLeague: only the games built on clubs and careers). */
+const playable = (c, game) => GAMES.includes(game) && !c.room && gameInLeague(game, c.league);
+/** Run once the player's league is loaded (the first match in a league loads its data). */
+function withKit(c, fn) {
+  if (getKit(c.league)) return fn();
+  kitFor(c.league).then(fn, (e) => { console.error("[league] loading", c.league, "failed:", e.message); send(c, { t: "error", code: "league", msg: "Online play for this league isn't available right now." }); });
+}
+kitFor("wl").catch((e) => console.error("[league] loading wl failed:", e.message)); // the default league is ready at once
+
 // ---------------------------------------------------------------- messages
 function onMessage(c, m) {
   switch (m.t) {
@@ -388,7 +408,7 @@ function onMessage(c, m) {
       send(c, recordMsg(c.rec));
       return;
     }
-    case "stats": return send(c, stats());
+    case "stats": return send(c, stats(c.league));
     case "leaders": {
       const game = GAMES.includes(m.game) ? m.game : "all";
       if (m.period === "week" || m.period === "month") {
@@ -432,36 +452,44 @@ function onMessage(c, m) {
       historyFor(c.sid).then((list) => send(c, { t: "history", list }), (e) => { console.error("[db] history failed:", e.message); send(c, { t: "history", list: null }); });
       return;
     case "queue": {
-      if (!GAMES.includes(m.game) || c.room) return;
-      leaveLobby(c); unwatch(c);
-      queues.get(m.game).push({ c, at: Date.now() });
-      send(c, { t: "queued", game: m.game });
-      matchQueue(m.game);
-      return pushStats();
+      if (!playable(c, m.game)) return;
+      return withKit(c, () => {
+        if (c.room) return;
+        leaveLobby(c); unwatch(c);
+        const key = qKey(m.game, c.league);
+        queues.get(key).push({ c, at: Date.now() });
+        send(c, { t: "queued", game: m.game });
+        matchQueue(key);
+        pushStats();
+      });
     }
     case "bot": { // nobody around: play the computer (not rated)
-      if (!GAMES.includes(m.game) || c.room) return;
-      leaveLobby(c);
-      const bot = createBot(BOT_LEVELS[m.level] ? m.level : "normal");
-      return createRoom(m.game, c, bot, "bot");
+      if (!playable(c, m.game)) return;
+      return withKit(c, () => {
+        if (c.room) return;
+        leaveLobby(c);
+        createRoom(m.game, c, createBot(BOT_LEVELS[m.level] ? m.level : "normal"), "bot", c.league);
+      });
     }
     case "invite": {
-      if (!GAMES.includes(m.game) || c.room) return;
+      if (!playable(c, m.game)) return;
+      withKit(c, () => {}); // load the league's data while the friend joins
       leaveLobby(c);
       const code = newCode();
-      invites.set(code, { host: c, game: m.game, at: Date.now() });
+      invites.set(code, { host: c, game: m.game, league: c.league, at: Date.now() });
       return send(c, { t: "invited", code, game: m.game });
     }
     case "invite:friend": { // invite someone by player code; they get a pop-up wherever they are in the arcade
       const to = onlineByCode(cleanCode(m.code));
-      if (!GAMES.includes(m.game) || c.room) return;
+      if (!playable(c, m.game)) return;
+      withKit(c, () => {});
       if (!to || to === c) return send(c, { t: "error", code: "friend-offline", msg: "That player isn't online right now." });
       if (to.room && !to.room.over) return send(c, { t: "error", code: "friend-busy", msg: `${to.profile.name} is in a match right now.` });
       leaveLobby(c);
       const code = newCode();
-      invites.set(code, { host: c, game: m.game, at: Date.now(), to });
+      invites.set(code, { host: c, game: m.game, league: c.league, at: Date.now(), to });
       send(c, { t: "invited", code, game: m.game, to: to.profile.name });
-      return send(to, { t: "invite:incoming", code, game: m.game, from: publicProfile(c, m.game) });
+      return send(to, { t: "invite:incoming", code, game: m.game, league: c.league, from: publicProfile(c, m.game) });
     }
     case "invite:decline": {
       const inv = invites.get(cleanCode(m.code));
@@ -476,8 +504,9 @@ function onMessage(c, m) {
       if (inv.host === c) return send(c, { t: "error", code: "own-code", msg: "That's your own invite. Send it to a friend." });
       if (inv.host.room) return send(c, { t: "error", code: "bad-code", msg: "Your friend already started another match." });
       if (c.room) { if (!c.room.over) return; closeRoom(c.room, c); }
+      if (inv.league !== c.league) return send(c, { t: "error", code: "other-league", league: inv.league, msg: `That invite is for ${LEAGUES[inv.league].name}. Switch to ${LEAGUES[inv.league].name} to join.` });
       invites.delete(code);
-      return createRoom(inv.game, inv.host, c, "friendly");
+      return withKit(c, () => { if (inv.host.ws && !inv.host.room) createRoom(inv.game, inv.host, c, "friendly", inv.league); });
     }
     case "friends": { // status of the player's friends (codes kept in their browser)
       const codes = Array.isArray(m.codes) ? m.codes.slice(0, 100).map(cleanCode) : [];
@@ -529,6 +558,7 @@ function onMessage(c, m) {
       if (c.room) return;
       if (!room || room.over) return send(c, { t: "error", code: "no-match", msg: "That player isn't in a match right now." });
       if (room.spectators.size >= 20) return send(c, { t: "error", code: "full", msg: "This match already has the most spectators allowed." });
+      if (room.league !== c.league) return send(c, { t: "error", code: "other-league", league: room.league, msg: `That match is in ${LEAGUES[room.league].name}. Switch to ${LEAGUES[room.league].name} to watch.` });
       leaveLobby(c);
       unwatch(c);
       c.watching = room;
@@ -595,9 +625,10 @@ wss.on("connection", (ws, req) => {
   if (c?.ws && c.ws !== ws) { try { c.ws.close(4000, "replaced"); } catch {} }
   if (!c) { c = { sid, ws: null, profile: { name: "Guest", icon: "ball", color: "#ff7a1a", frame: "none", level: 1 }, rec: null, room: null, goneTimer: null }; clients.set(sid, c); }
   c.ws = ws;
+  c.league = cleanLeague(url.searchParams.get("league")); // the league the arcade is set to (changing it reloads the page)
   ws.alive = true;
   clearTimeout(c.goneTimer);
-  send(c, { ...stats(), t: "welcome", sid, code: friendCode(sid) });
+  send(c, { ...stats(c.league), t: "welcome", sid, code: friendCode(sid) });
 
   // back after a dropped connection: a finished match is closed, a running one resumes
   if (c.room?.over) closeRoom(c.room, c);

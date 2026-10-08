@@ -1,8 +1,7 @@
 // Bot opponent for when nobody else is online. It sits in a room like a real player and answers
 // through the same engine calls, with human-like delays and mistakes per difficulty.
-import { namedPlayers, psKey } from "../game/js/data.js";
+import { psKey } from "../game/js/dataApi.js";
 import { SLOT_WEIGHT, slotValue } from "../game/js/shared/draftLogic.js";
-import { answersFor, criterionById } from "../game/js/shared/leagueFacts.js";
 
 export const BOT_LEVELS = {
   easy: { name: "Rookie Bot", icon: "whistle", color: "#199e70", level: 3, frame: "none",
@@ -31,6 +30,7 @@ export function createBot(levelKey) {
       if (!room) return;
       const seat = room.players.indexOf(bot);
       const eng = () => room.engine;
+      const { namedPlayers } = room.kit.D, { answersFor, criterionById } = room.kit.facts; // the room's league
       const act = (msg) => { if (bot.room === room && !room.over) room.engine.onMessage(seat, msg); };
 
       if (m.t === "hl:round") {

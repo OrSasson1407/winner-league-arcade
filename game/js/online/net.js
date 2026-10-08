@@ -4,6 +4,7 @@
 import { store } from "../ui.js";
 import { getMe, myName } from "../lib/me.js";
 import { levelInfo } from "../lib/progress.js";
+import { activeLeague } from "../leagueChoice.js";
 
 const listeners = new Set();
 let ws = null, status = "idle", retry = 0, retryTimer = null, wanted = false, persistent = false, outbox = [];
@@ -56,7 +57,7 @@ export function connect({ quiet = false } = {}) {
   if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
   clearTimeout(retryTimer);
   setStatus(retry ? "reconnecting" : "connecting");
-  const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?sid=${encodeURIComponent(sid())}`;
+  const url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?sid=${encodeURIComponent(sid())}&league=${activeLeague()}`; // matched only within your league
   let opened = false;
   try { ws = new WebSocket(url); } catch { return fail(); }
   ws.onopen = () => {

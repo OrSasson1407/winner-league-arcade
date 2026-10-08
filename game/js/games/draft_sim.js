@@ -7,7 +7,7 @@ import { H, isPlayable, playersById, seededRng } from "../data.js";
 import { DEFAULT_TACTICS, profileFromSeason, simulateGame } from "../shared/gameSim.js";
 
 
-/** Real rosters and team strength over one dataset ({ H, isPlayable }): the chosen league's, or wl.js for My Career. */
+/** Real rosters, team strength and games over one dataset ({ H, isPlayable, playersById }): the chosen league's, wl.js for My Career, or a room's league on the server. */
 export function rosterTools(D) {
   function realRoster(season, teamId) {
     const best = new Map();
@@ -25,34 +25,33 @@ export function rosterTools(D) {
     const five = roster.slice(0, 5), bench = roster.slice(5, 8);
     return bench.length ? 0.8 * avg(five) + 0.2 * avg(bench) : avg(five);
   }
-  return { realRoster, realTeamStrength };
+  /** A team for the game engine: its players (real per-game numbers), strength, game plan and minutes plan. */
+  function simTeam(t) {
+    if (t._sim) return t._sim;
+    const players = (t.roster || []).filter(Boolean).slice(0, 10).map((ps) => profileFromSeason(ps, D.playersById.get(ps.player_id)?.name ?? ps.player_id));
+    // the same person drafted twice (different seasons) needs distinct ids in the box score
+    const seen = new Map();
+    players.forEach((p) => { const n = seen.get(p.id) || 0; seen.set(p.id, n + 1); if (n) p.id = `${p.id}#${n}`; });
+    return (t._sim = { name: t.name, id: t.id, strength: t.strength, players, tactics: { ...DEFAULT_TACTICS, ...(t.tactics || {}) }, minutes: t.minutes || null });
+  }
+  /** A real team-season as a side for the engine: the server and the browser build it the same way, so a seed replays the same game. */
+  function teamSeasonSide(season, teamId, name, tactics) {
+    return { name, id: teamId, strength: realTeamStrength(season, teamId), roster: realRoster(season, teamId).slice(0, 9), drafted: false, tactics: tactics || undefined };
+  }
+  /** Run (or re-run) a game through the engine. The same seed and teams always give the same game. */
+  function runGame(home, away, seed, neutral, events = false) {
+    return simulateGame(simTeam(home), simTeam(away), { rnd: seededRng("g-" + seed), neutral, events });
+  }
+  function playGame(home, away, rnd, neutral = false) {
+    const seed = Math.floor(rnd() * 1e9);
+    const r = runGame(home, away, seed, neutral);
+    const [hs, as] = r.score;
+    return { id: ++gameSeq, seed, home, away, hs, as, neutral, winner: hs > as ? home : away, ot: r.ot, quarters: r.quarters };
+  }
+  return { realRoster, realTeamStrength, simTeam, teamSeasonSide, runGame, playGame };
 }
-export const { realRoster, realTeamStrength } = rosterTools({ H, isPlayable });
-
 let gameSeq = 0;
-/** A team for the game engine: its players (real per-game numbers), strength, game plan and minutes plan. */
-export function simTeam(t) {
-  if (t._sim) return t._sim;
-  const players = (t.roster || []).filter(Boolean).slice(0, 10).map((ps) => profileFromSeason(ps, playersById.get(ps.player_id)?.name ?? ps.player_id));
-  // the same person drafted twice (different seasons) needs distinct ids in the box score
-  const seen = new Map();
-  players.forEach((p) => { const n = seen.get(p.id) || 0; seen.set(p.id, n + 1); if (n) p.id = `${p.id}#${n}`; });
-  return (t._sim = { name: t.name, id: t.id, strength: t.strength, players, tactics: { ...DEFAULT_TACTICS, ...(t.tactics || {}) }, minutes: t.minutes || null });
-}
-/** A real team-season as a side for the engine: the server and the browser build it the same way, so a seed replays the same game. */
-export function teamSeasonSide(season, teamId, name, tactics) {
-  return { name, id: teamId, strength: realTeamStrength(season, teamId), roster: realRoster(season, teamId).slice(0, 9), drafted: false, tactics: tactics || undefined };
-}
-/** Run (or re-run) a game through the engine. The same seed and teams always give the same game. */
-export function runGame(home, away, seed, neutral, events = false) {
-  return simulateGame(simTeam(home), simTeam(away), { rnd: seededRng("g-" + seed), neutral, events });
-}
-export function playGame(home, away, rnd, neutral = false) {
-  const seed = Math.floor(rnd() * 1e9);
-  const r = runGame(home, away, seed, neutral);
-  const [hs, as] = r.score;
-  return { id: ++gameSeq, seed, home, away, hs, as, neutral, winner: hs > as ? home : away, ot: r.ot, quarters: r.quarters };
-}
+export const { realRoster, realTeamStrength, simTeam, teamSeasonSide, runGame, playGame } = rosterTools({ H, isPlayable, playersById });
 /** The full game (events, box score, momentum) for the game screen. */
 export const simOf = (game) => runGame(game.home, game.away, game.seed, game.neutral, true);
 

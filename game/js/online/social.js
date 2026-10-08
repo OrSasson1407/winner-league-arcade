@@ -1,6 +1,7 @@
 // Online social layer: friends list, match history, and the invite pop-up that shows anywhere in
 // the arcade when a friend invites you. Friends and history live in this browser.
 import { esc, store, toast } from "../ui.js";
+import { LEAGUES, activeLeague, setLeague } from "../leagueChoice.js";
 import { icon } from "../lib/icons.js";
 import { avatarHtml } from "../lib/me.js";
 import { sound } from "../lib/fx.js";
@@ -63,6 +64,7 @@ let box = null;
 function closeInvite() { box?.remove(); box = null; }
 
 function showInvite(m) {
+  const other = m.league && m.league !== activeLeague() && LEAGUES[m.league] ? m.league : null; // the invite is for another league
   closeInvite();
   box = document.createElement("div");
   box.className = "invite-pop card pop";
@@ -70,12 +72,13 @@ function showInvite(m) {
   box.setAttribute("aria-label", "Game invite");
   box.innerHTML = `${avatarHtml(m.from, 44)}
     <div class="ip-body"><small>GAME INVITE${isFriend(m.from.code) ? " · FRIEND" : ""}</small>
-      <b>${esc(m.from.name)}</b><span>${icon(GAME_ICONS[m.game], { size: 14 })} ${GAME_NAMES[m.game]}</span></div>
+      <b>${esc(m.from.name)}</b><span>${icon(GAME_ICONS[m.game], { size: 14 })} ${GAME_NAMES[m.game]}${other ? ` · ${esc(LEAGUES[other].name)}` : ""}</span></div>
     <div class="ip-actions"><button class="btn primary" data-a="yes">${icon("play", { size: 15 })} Play</button><button class="btn ghost" data-a="no">Not now</button></div>`;
   box.addEventListener("click", (e) => {
     const a = e.target.closest("[data-a]")?.dataset.a;
     if (!a) return;
-    if (a === "yes") location.hash = `#/online/join/${m.code}`;
+    if (a === "yes" && other) setLeague(other, `#/online/join/${m.code}`); // reloads on the invite's league, then joins
+    else if (a === "yes") location.hash = `#/online/join/${m.code}`;
     else send({ t: "invite:decline", code: m.code });
     closeInvite();
   });

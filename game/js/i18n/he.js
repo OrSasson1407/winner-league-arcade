@@ -3786,4 +3786,12 @@ export const HE = {
   "In {0}, {1} had the Winner League's best efficiency with {2} VAL per game for {3}.": "ב־{0}, {1} היה עם מדד היעילות הטוב בליגת ווינר: {2} VAL למשחק ב{3}.",
   "Play it in All mixed": "לשחק בו במצב מעורבב",
   "Switch to All mixed and play": "לעבור למצב מעורבב ולשחק",
+  "Playing on": "משחקים על",
+  "you're matched with players in the same league. Change it on the Games page.": "משחקים מול שחקנים מאותה ליגה. אפשר לשנות בעמוד המשחקים.",
+  "Switch to {0}": "לעבור ל{0}",
+  "Switch to All mixed": "לעבור למצב מעורבב",
+  "That invite is for {0}. Switch to {1} to join.": "ההזמנה הזו היא ל{0}. צריך לעבור ל{1} כדי להצטרף.",
+  "That match is in {0}. Switch to {1} to watch.": "המשחק הזה ב{0}. צריך לעבור ל{1} כדי לצפות.",
+  "That match was played in {0}. Switch league to watch the replay.": "המשחק הזה שוחק ב{0}. צריך להחליף ליגה כדי לצפות בשידור החוזר.",
+  "Online play for this league isn't available right now.": "משחק אונליין בליגה הזו לא זמין כרגע.",
 };

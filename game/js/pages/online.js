@@ -30,6 +30,7 @@ import { bindGamePlan, gamePlanHtml, readGamePlan } from "../lib/gamePlan.js";
 import { arrowGrid, gameKeys, press } from "../lib/shortcuts.js";
 import { dateLocale } from "../i18n/index.js";
 import { ITEMS, ownedStickers } from "../lib/shop.js";
+import { LEAGUES, activeLeague, gameAvailable, setLeague } from "../leagueChoice.js";
 import { equipped } from "../lib/wallet.js";
 import { owns } from "../lib/wallet.js";
 import { openReplay } from "../online/replay.js";
@@ -39,19 +40,19 @@ const LEAGUE_COLORS = ["#e4002b", "#ffc629", "#0a3e8c", "#00843d", "#6d28d9", "#
 const LEAGUE_ICONS = ["trophy", "crown", "flame", "star", "shield", "rocket", "medal", "ball"];
 
 export const ONLINE_GAMES = {
-  hl: { name: "Higher or Lower", ic: "chart", short: "Speed duel",
+  hl: { name: "Higher or Lower", route: "higher-lower", ic: "chart", short: "Speed duel",
     rules: "15 rounds, 10 seconds each. A right answer is worth 100 points plus up to 50 for speed." },
-  guess: { name: "Guess the Player", ic: "search", short: "Race to the answer",
+  guess: { name: "Guess the Player", route: "guess", ic: "search", short: "Race to the answer",
     rules: "Same mystery player for both of you. 8 tries, 3 minutes. Fewer tries wins; a tie goes to the faster player. You see your opponent's colors, not their guesses." },
-  career: { name: "Career Path", ic: "arrowRight", short: "Buzzer quiz",
+  career: { name: "Career Path", route: "career", ic: "arrowRight", short: "Buzzer quiz",
     rules: "10 careers, 20 seconds each. The first correct answer takes 3 points. A wrong answer locks you out of that round." },
-  draft: { name: "All-Time Draft", ic: "trophy", short: "Head-to-head draft",
+  draft: { name: "All-Time Draft", route: "draft", ic: "trophy", short: "Head-to-head draft",
     rules: "Snake draft from shared spins: 6 picks each (PG to C plus a sixth man), 30 seconds per pick. Then your two teams play a simulated game." },
-  conn: { name: "Connections", ic: "link", short: "Group race",
+  conn: { name: "Connections", route: "connections", ic: "link", short: "Group race",
     rules: "The same 16 players for both of you. Find the four groups; four mistakes and you're out. 4 minutes. More groups wins, then fewer mistakes, then the faster finish." },
-  grid: { name: "The Grid", ic: "games", short: "Rarity duel",
+  grid: { name: "The Grid", route: "grid", ic: "games", short: "Rarity duel",
     rules: "The same 3×3 board for both. 9 guesses and 3 minutes each; every right answer scores its rarity (0–100). Highest total wins." },
-  coach: { name: "Single game", ic: "whistle", short: "Coach duel",
+  coach: { name: "Single game", route: "matchup", ic: "whistle", short: "Coach duel",
     rules: "Four real team-seasons. A coin toss decides who picks first; the second pick plays at home. Both of you set a game plan, then the game engine plays it out: watch it live." },
 };
 const HL_CATS = {
@@ -84,7 +85,10 @@ function addRecord(game, result) {
 }
 
 export function renderOnline(root, signal, params = []) {
-  let game = ONLINE_GAMES[store.get("online:game")] ? store.get("online:game") : "hl";
+  // the games that run on this league's data (you're matched with players of the same league)
+  const LEAGUE_GAMES = Object.keys(ONLINE_GAMES).filter((k) => gameAvailable(ONLINE_GAMES[k].route));
+  let game = LEAGUE_GAMES.includes(store.get("online:game")) ? store.get("online:game") : LEAGUE_GAMES[0];
+  let switchTo = null; // an invite or a match in another league: offer to switch
   let phase = "lobby"; // lobby | searching | inviting | match | end
   let invite = null, searchStart = 0, lobbyMsg = "", autoBotSent = false;
   // nobody else searching this game: offer the bot right away; otherwise after a short wait
@@ -142,6 +146,7 @@ export function renderOnline(root, signal, params = []) {
       case "history": serverHistory = m.list || []; if (phase === "lobby" && tab === "history") drawLobby(); return;
       case "replay":
         if (m.missing) return toast("That replay isn't available");
+        if ((m.replay?.league || "wl") !== activeLeague()) return toast(`That match was played in ${LEAGUES[m.replay?.league || "wl"].name}. Switch league to watch the replay.`);
         return openReplay({ game: m.game, seat: m.seat, names: [m.players[m.seat]?.name || "You", m.players[1 - m.seat]?.name || "?"], replay: m.replay, scores: m.scores });
       case "whois": {
         if (!m.found) { const el = root.querySelector("#fr-msg"); if (el) el.textContent = "No player with that code. They need to open the arcade online once."; return; }
@@ -162,7 +167,7 @@ export function renderOnline(root, signal, params = []) {
       case "watchers": if (M) { M.watchers = m.n; const w = root.querySelector("#watchers"); if (w) w.textContent = m.n ? `👁 ${m.n} watching` : ""; } return;
       case "spectate:end": if (M?.spectator && phase === "match") { M = null; G = null; phase = "lobby"; toast("The match ended"); drawLobby(); } return;
       case "cancelled": if (phase === "searching" || phase === "inviting") { phase = "lobby"; invite = null; drawLobby(); } return;
-      case "error": lobbyMsg = m.msg; phase = "lobby"; if (joinCode) history.replaceState(null, "", "#/online"); return drawLobby();
+      case "error": lobbyMsg = m.msg; switchTo = m.code === "other-league" && LEAGUES[m.league] ? m.league : null; phase = "lobby"; if (joinCode) history.replaceState(null, "", "#/online"); return drawLobby();
       case "match":
         if (m.resumed && M && M.seq === m.seq) { M.seat = m.seat; drawConnBadge(); return; }
         M = { game: m.game, mode: m.mode, rated: m.rated, seat: m.seat, you: m.you, opp: m.opp, seq: m.seq, scores: [0, 0], oppAway: false, oppRematch: false, sentRematch: false,
@@ -221,7 +226,7 @@ export function renderOnline(root, signal, params = []) {
       ${s === "unavailable" ? html`<div class="card pad warn-card">${icon("info", { size: 20 })}<div><b>Online play needs the arcade's Node server.</b>
         <p class="muted" style="margin:4px 0 0">This page is being served without it (for example by the Python server). Start the arcade with <code>start_game.bat</code> after installing Node.js, or run <code>npm install</code> and <code>npm start</code> in the project folder.</p></div></div>` : ""}
       ${s === "replaced" ? html`<div class="card pad warn-card">${icon("info", { size: 20 })}<div><b>Online play is open in another tab.</b> <button class="btn" id="reconnect">Use this tab</button></div></div>` : ""}
-      ${lobbyMsg ? `<div class="card pad warn-card">${icon("x", { size: 20 })}<div>${esc(lobbyMsg)}</div></div>` : ""}
+      ${lobbyMsg ? `<div class="card pad warn-card">${icon("x", { size: 20 })}<div>${esc(lobbyMsg)}${switchTo ? ` <button class="btn primary" id="switch-league" style="margin-top:8px">Switch to ${esc(LEAGUES[switchTo].name)}</button>` : ""}</div></div>` : ""}
       <div class="seg og-tabs" id="og-tabs" role="tablist">${TABS.map(([k, ic, l]) => `<button role="tab" aria-selected="${k === tab}" class="${k === tab ? "on" : ""}" data-tab="${k}" ${busy && k !== "play" ? "disabled" : ""}>${icon(ic, { size: 15 })} ${l}</button>`).join("")}</div>
       <div id="og-body"></div>`;
     root.querySelector("#og-tabs").addEventListener("click", (e) => {
@@ -229,6 +234,7 @@ export function renderOnline(root, signal, params = []) {
       tab = b.dataset.tab; store.set("online:tab", tab); lobbyMsg = ""; drawLobby();
     }, { signal });
     root.querySelector("#reconnect")?.addEventListener("click", () => connect(), { signal });
+    root.querySelector("#switch-league")?.addEventListener("click", () => setLeague(switchTo, joinCode ? `#/online/join/${joinCode}` : "#/online"), { signal });
     const body = root.querySelector("#og-body");
     ({ play: drawPlay, friends: drawFriends, leagues: drawLeagues, leaders: drawLeaders, history: drawHistory })[tab](body, s, busy);
     drawLobbyStats();
@@ -240,7 +246,8 @@ export function renderOnline(root, signal, params = []) {
     body.innerHTML = html`<div class="online-grid">
         <div class="card pad setup">
           <h3>${icon("games")} Choose a game</h3>
-          <div class="ch-games" id="og-games">${Object.entries(ONLINE_GAMES).map(([k, g]) => `<button class="ch-game ${k === game ? "on" : ""}" data-g="${k}" ${busy ? "disabled" : ""} aria-pressed="${k === game}">${icon(g.ic, { size: 22 })}<b>${g.name} <span class="muted og-short">· ${g.short}</span> ${rankBadge(rec?.elo?.[k] ?? 1000, { small: true })}</b><small>${g.rules}</small></button>`).join("")}</div>
+          <p class="muted" style="margin:0 0 8px;font-size:13px">${icon("globe", { size: 13 })} <span>Playing on</span> <b>${esc(LEAGUES[activeLeague()].name)}</b>: <span>you're matched with players in the same league. Change it on the Games page.</span></p>
+          <div class="ch-games" id="og-games">${Object.entries(ONLINE_GAMES).filter(([k]) => LEAGUE_GAMES.includes(k)).map(([k, g]) => `<button class="ch-game ${k === game ? "on" : ""}" data-g="${k}" ${busy ? "disabled" : ""} aria-pressed="${k === game}">${icon(g.ic, { size: 22 })}<b>${g.name} <span class="muted og-short">· ${g.short}</span> ${rankBadge(rec?.elo?.[k] ?? 1000, { small: true })}</b><small>${g.rules}</small></button>`).join("")}</div>
         </div>
         <div style="display:grid;gap:18px;align-content:start">
           <div class="card pad og-me ${equipped("card") ? `card-skin-${equipped("card").split(":")[1]}` : ""}">
@@ -295,7 +302,7 @@ export function renderOnline(root, signal, params = []) {
     const $ = (q) => body.querySelector(q);
     $("#og-games").addEventListener("click", (e) => {
       const b = e.target.closest("[data-g]"); if (!b || busy) return;
-      game = b.dataset.g; store.set("online:game", game); lobbyMsg = ""; drawLobby();
+      game = b.dataset.g; store.set("online:game", game); lobbyMsg = ""; switchTo = null; drawLobby();
     }, { signal });
     $("#find")?.addEventListener("click", () => { lobbyMsg = ""; send({ t: "queue", game }); }, { signal });
     $("#invite")?.addEventListener("click", () => { lobbyMsg = ""; send({ t: "invite", game }); }, { signal });
