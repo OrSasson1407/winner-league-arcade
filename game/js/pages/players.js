@@ -5,7 +5,8 @@ import { icon } from "../lib/icons.js";
 import { copyLink, deferred, esc, html, initials, skeletonCards, store } from "../ui.js";
 import { EL_INDEX, EL_SEASONS, elTeamName, loadEuroleague } from "../euroleague.js";
 import { clubColors } from "../lib/clubs.js";
-import { playersById } from "../data.js";
+import { LEAGUE } from "../data.js";
+import { playersById as wlPlayers } from "../wl.js"; // Winner League details (EuroLeague details are mostly placeholders)
 
 const STEP = 48;
 const SORTS = { rating: "Best rating", name: "Name A–Z", seasons: "Most seasons", ppg: "Career PPG", height: "Tallest" };
@@ -33,7 +34,7 @@ function allElRows(E) {
   elRows = E.db.players.map((p) => {
     const career = E.careerOf(p.player_id);
     const last = career[career.length - 1];
-    return { el: true, id: p.player_id, name: p.name, wl: playersById.get(p.player_id) || null, career, last,
+    return { el: true, id: p.player_id, name: p.name, wl: wlPlayers.get(p.player_id) || null, career, last,
       seasons: new Set(career.map((r) => r.season)).size, teams: [...new Set(career.map((r) => r.team_id))],
       nameKey: p.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() };
   });
@@ -56,15 +57,17 @@ export function renderPlayers(root, signal, params = [], query = {}) {
   // a shared link (#/players?club=…&season=…) wins over the filters remembered on this device
   const fromLink = Object.keys(query).some((k) => k in DEFAULTS);
   const f = fromLink ? { ...DEFAULTS, ...Object.fromEntries(Object.entries(query).filter(([k]) => k in DEFAULTS)) } : { ...DEFAULTS, ...store.get("players:filters", {}) };
+  // the competition filter is the Winner League's (with the EuroLeague beside it); other league choices show their own data
+  if (LEAGUE !== "wl") f.lg = LEAGUE === "el" ? "el" : "wl";
   let shown = STEP;
   const clubs = [...db.teams].sort((a, b) => a.canonical_name.localeCompare(b.canonical_name));
   const heights = Array.from({ length: 13 }, (_, i) => 175 + i * 5);
 
   root.innerHTML = html`
     <div class="game-head"><div><h1>${icon("players", { size: 30 })} Players</h1>
-      <p>Every Winner League player since 2010-11, and EuroLeague players since 2000-01. Click a card for the full career.</p></div>
+      <p>${{ wl: "Every Winner League player since 2010-11, and EuroLeague players since 2000-01. Click a card for the full career.", nba: "Every NBA player since 2010-11. Click a card for the full career.", el: "EuroLeague players since 2000-01: clubs and seasons (its stats are placeholder data).", all: "Winner League and NBA players since 2010-11 and EuroLeague players since 2000-01, one card per person. Click a card for the full career." }[LEAGUE]}</p></div>
       <a class="btn" href="#/find">${icon("filter", { size: 15 })} Smart search</a></div>
-    <div class="row" style="margin-bottom:12px"><div class="seg" id="f-lg" role="radiogroup" aria-label="Competition">${LEAGUES.map(([v, l]) => `<button role="radio" aria-checked="${f.lg === v}" data-v="${v}" class="${f.lg === v ? "on" : ""}">${l}</button>`).join("")}</div>
+    <div class="row" style="margin-bottom:12px">${LEAGUE === "wl" ? `<div class="seg" id="f-lg" role="radiogroup" aria-label="Competition">${LEAGUES.map(([v, l]) => `<button role="radio" aria-checked="${f.lg === v}" data-v="${v}" class="${f.lg === v ? "on" : ""}">${l}</button>`).join("")}</div>` : ""}
       <span class="muted" id="lg-note" style="font-size:13px;flex:1;min-width:220px"></span></div>
     <div class="card pad filters" role="search">
       <div class="guess-input search"><input id="f-q" class="input" placeholder="Search by name…" value="${esc(f.q)}" aria-label="Search by name"></div>
@@ -87,7 +90,7 @@ export function renderPlayers(root, signal, params = [], query = {}) {
   let E = null;
   /** Club and season choices for the chosen competition(s). */
   function fillSelects() {
-    const wlClubs = clubs.map((t) => [t.team_id, t.canonical_name]);
+    const wlClubs = clubs.map((t) => [t.team_id, teamName(t.team_id)]); // the mix: "<club> (EuroLeague)" for its EuroLeague side
     const elClubs = Object.entries(EL_INDEX.teams).sort((a, b) => a[1].localeCompare(b[1]));
     const list = f.lg === "wl" ? wlClubs : f.lg === "el" ? elClubs : [...new Map([...wlClubs, ...elClubs]).entries()].sort((a, b) => a[1].localeCompare(b[1]));
     const seasons = f.lg === "wl" ? db.metadata.season_list : f.lg === "el" ? EL_SEASONS : [...new Set([...EL_SEASONS, ...db.metadata.season_list])].sort();
@@ -178,7 +181,7 @@ export function renderPlayers(root, signal, params = [], query = {}) {
     root.querySelector("#more").hidden = shown >= list.length;
   }
 
-  root.querySelector("#f-lg").addEventListener("click", (e) => {
+  root.querySelector("#f-lg")?.addEventListener("click", (e) => {
     const b = e.target.closest("[data-v]"); if (!b || b.dataset.v === f.lg) return;
     f.lg = b.dataset.v; shown = STEP;
     if (f.lg === "el" && !["name", "seasons"].includes(f.sort)) f.sort = "seasons";

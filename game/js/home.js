@@ -24,7 +24,7 @@ function boardSlides(potd, potdSeason) {
   const lv = levelInfo();
   const fact = factOfTheDay(0);
   const slides = [
-    { tag: "PLAYER OF THE DAY", ic: "star", text: `${potd.name}: ${potdSeason.season}, ${teamName(potdSeason.team_id)}, rating ${potdSeason.rating_mock}`, profile: potd.player_id },
+    { tag: "PLAYER OF THE DAY", ic: "star", text: potdSeason.mock ? `${potd.name}: ${potdSeason.season}, ${teamName(potdSeason.team_id)}` : `${potd.name}: ${potdSeason.season}, ${teamName(potdSeason.team_id)}, rating ${potdSeason.rating_mock}`, profile: potd.player_id },
     { tag: "DAILY CHALLENGES", ic: "calendar", text: done >= DAILY_COUNT ? `Full house today! All ${DAILY_COUNT} dailies done.` : `${done}/${DAILY_COUNT} done today${streak ? ` · 🔥 ${streak}-day streak` : " · start a streak"}`, href: "#/daily" },
     { tag: "TODAY IN THE LEAGUE", ic: "whistle", text: born.length ? `Happy birthday ${born.slice(0, 2).map((x) => x.p.name).join(" & ")}${born.length > 2 ? ` + ${born.length - 2} more` : ""}` : "Season flashbacks: 5, 10 and 15 years ago", href: "#/today" },
     { tag: "FACT OF THE DAY", ic: "bulb", text: fact.text, href: fact.pid ? null : "#/today", profile: fact.pid },
@@ -93,7 +93,9 @@ export function renderGames(root, signal) {
 }
 
 function playerOfTheDay() {
-  const pool = namedPlayers.filter((p) => { const s = careerSummary(p.player_id); return s.seasonsPlayed >= 3 && s.bestRating >= 90; });
+  let pool = namedPlayers.filter((p) => { const s = careerSummary(p.player_id); return s.seasonsPlayed >= 3 && s.bestRating >= 90; });
+  // the EuroLeague choice has no real ratings: long careers instead
+  if (!pool.length) pool = namedPlayers.filter((p) => careerSummary(p.player_id).seasonsPlayed >= 10);
   return pool[Math.floor(seededRng("potd-" + localDate())() * pool.length)];
 }
 
@@ -127,9 +129,9 @@ export function renderHome(root, signal) {
     </section>
     <section class="bc-hero">
       <div>
-        <p class="bc-kicker"><b>Winner League Arcade</b><span>${db.metadata.season_list.length} seasons · official league records</span></p>
+        <p class="bc-kicker"><b>Winner League Arcade</b><span>${activeLeague() === "wl" ? `${db.metadata.season_list.length} seasons · official league records` : `${db.metadata.season_list.length} seasons · ${LEAGUES[activeLeague()].name}`}</span></p>
         <h1>${db.metadata.season_list.length} seasons. <br><em>Your</em> move.</h1>
-        <p class="bc-sub">Welcome back, <b>${esc(myName("Guest"))}</b>. ${namedPlayers.length.toLocaleString()} players and ${db.teams.length} clubs of ${LEAGUES[activeLeague()].phrase}, every season since 2010-11. Pick a game or look up any player.</p>
+        <p class="bc-sub">Welcome back, <b>${esc(myName("Guest"))}</b>. ${namedPlayers.length.toLocaleString()} players and ${db.teams.length} clubs of ${LEAGUES[activeLeague()].phrase}, every season since ${activeLeague() === "el" ? "2000-01" : "2010-11"}. Pick a game or look up any player.</p>
         <div class="search guess-input">${icon("search", { size: 18, cls: "search-ic" })}<input id="search" class="input" placeholder="Search any player…" autocomplete="off" aria-label="Search players"></div>
         <div class="row hero-actions">
           ${last && GAMES[last] ? `<a class="btn jump" href="${GAMES[last].href}">${icon("play", { size: 14 })} Jump back into ${GAMES[last].title}</a>` : ""}
@@ -140,9 +142,10 @@ export function renderHome(root, signal) {
         </div>
       </div>
       ${(() => {
-        const st = potdSeason.stats || {};
-        return html`<button class="lower3" data-profile="${potd.player_id}" aria-label="Player of the day: ${esc(potd.name)}, rating ${potdSeason.rating_mock}. Open the career.">
-          <span class="l3-rt"><small>RATING</small><b>${potdSeason.rating_mock}</b></span>
+        const st = potdSeason.mock ? {} : potdSeason.stats || {}; // EuroLeague numbers aren't real yet
+        const rt = potdSeason.mock ? "–" : potdSeason.rating_mock;
+        return html`<button class="lower3" data-profile="${potd.player_id}" aria-label="Player of the day: ${esc(potd.name)}, rating ${rt}. Open the career.">
+          <span class="l3-rt"><small>RATING</small><b>${rt}</b></span>
           <span class="l3-main"><span class="l3-kick">Player of the day</span><span class="l3-name">${esc(potd.name)}</span>
             <span class="l3-meta">${esc(potdSeason.position || potd.primary_position || "")} · ${esc(teamName(potdSeason.team_id))} · ${potdSeason.season}</span>
             <span class="l3-stats"><span><b>${fmt1(st.ppg)}</b><small>PPG</small></span><span><b>${fmt1(st.rpg)}</b><small>RPG</small></span><span><b>${fmt1(st.apg)}</b><small>APG</small></span><span><b>${st.games ?? "–"}</b><small>GAMES</small></span></span></span>

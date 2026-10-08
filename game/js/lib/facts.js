@@ -37,7 +37,7 @@ function build() {
   for (const p of namedPlayers) {
     const cs = careerSummary(p.player_id);
     if (cs.seasonsPlayed >= 11) out.push({ pid: p.player_id, text: `${p.name} has played ${cs.seasonsPlayed} regular seasons${IN_LG} since ${PLAYED_SEASONS[0]}, across ${cs.teams.length} club${cs.teams.length === 1 ? "" : "s"}.` });
-    if (cs.teams.length >= 6) out.push({ pid: p.player_id, text: `Journeyman alert: ${p.name} has played for ${cs.teams.length} different clubs in the league: ${cs.teams.map(teamName).join(", ")}.` });
+    if (cs.teams.length >= 6) out.push({ pid: p.player_id, text: `Journeyman alert: ${p.name} has played for ${cs.teams.length} different clubs${IN_LG}: ${cs.teams.map(teamName).join(", ")}.` });
     const perClub = new Map();
     for (const r of cs.played) perClub.set(r.team_id, (perClub.get(r.team_id) || new Set()).add(r.season));
     for (const [tid, set] of perClub) if (set.size >= 8) out.push({ pid: p.player_id, text: `${p.name} spent ${set.size} seasons with ${teamName(tid)}, one of the most loyal careers since ${PLAYED_SEASONS[0]}.` });

@@ -13,7 +13,7 @@ const SAVED_KEY = "compare:saved";
 function series(pid) {
   const by = new Map();
   for (const r of H.getPlayerCareer(pid)) {
-    if (!r.stats || !r.appeared_in_regular_season) continue;
+    if (!r.stats || !r.appeared_in_regular_season || r.mock) continue; // EuroLeague numbers aren't real yet
     const e = by.get(r.season) || { season: r.season, games: 0, rating: 0, ppg: 0, rpg: 0, apg: 0, age: r.age };
     for (const k of ["ppg", "rpg", "apg"]) e[k] += (r.stats[k] ?? 0) * r.stats.games;
     e.games += r.stats.games;
@@ -26,9 +26,10 @@ function series(pid) {
 
 function facts(pid) {
   const p = playersById.get(pid), cs = careerSummary(pid);
-  const games = cs.played.reduce((a, r) => a + r.stats.games, 0);
-  const w = (k) => (games ? cs.played.reduce((a, r) => a + (r.stats[k] ?? 0) * r.stats.games, 0) / games : null);
-  return { seasons: cs.seasonsPlayed, games, ppg: w("ppg"), rpg: w("rpg"), apg: w("apg"), best: cs.bestRating, height: p.height_cm, clubs: cs.teams.length, born: birthYear(p) };
+  const real = cs.played.filter((r) => !r.mock); // numbers only where they're real
+  const games = real.reduce((a, r) => a + r.stats.games, 0);
+  const w = (k) => (games ? real.reduce((a, r) => a + (r.stats[k] ?? 0) * r.stats.games, 0) / games : null);
+  return { seasons: cs.seasonsPlayed, games, ppg: w("ppg"), rpg: w("rpg"), apg: w("apg"), best: cs.bestRating || null, height: p._mockBio ? null : p.height_cm, clubs: cs.teams.length, born: birthYear(p) };
 }
 
 const ROWS = [

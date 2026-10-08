@@ -155,6 +155,11 @@ async function renderRoute() {
   const [path, qs = ""] = location.hash.replace(/^#\/?/, "").split("?");
   const [key = "", ...params] = path.split("/");
   const query = Object.fromEntries(new URLSearchParams(qs));
+  // the EuroLeague choice: its numbers and most personal details are placeholders, so the stats pages lead
+  // to the EuroLeague pages (rosters, clubs and seasons). Players and records handle it themselves.
+  const elPage = activeLeague() === "el" && { clubs: "euroleague", seasons: "euroleague", today: "euroleague", compare: "euroleague", find: "players",
+    club: params[0] ? `euroleague/club/${params[0]}` : "euroleague", season: params[0] ? `euroleague/season/${params[0]}` : "euroleague" }[key];
+  if (elPage) return void location.replace(`#/${elPage}`);
   const view = document.getElementById("view");
   const seq = ++navSeq;
   navAt = Date.now(); navKey = key;

@@ -1,7 +1,8 @@
 // EuroLeague pages: #/euroleague (seasons, clubs, Israeli clubs), #/euroleague/season/<s>,
 // #/euroleague/club/<id>[/<season>], #/euroleague/player/<id>. Names, clubs and seasons come from the
 // EuroLeague data; its stats and most bios are placeholder (mock), so these pages show rosters, not numbers.
-import { playersById, teamName } from "../data.js";
+import { LEAGUE, teamName } from "../data.js";
+import { playersById } from "../wl.js"; // "also in the Winner League": the Winner League data, whatever the league choice
 import { EL_INDEX, EL_SEASONS, MOCK_NOTE, elTeamName, isWLClub, loadEuroleague } from "../euroleague.js";
 import { nameLink } from "../components/playerCard.js";
 import { crestSvg, icon } from "../lib/icons.js";
@@ -10,9 +11,11 @@ import { copyLink, esc, html } from "../ui.js";
 import { skeletonHtml } from "../lib/ux.js";
 
 const isWL = (pid) => playersById.has(pid);
+// Winner League profiles and club pages exist in the Winner League and the mixed choices
+const WL_LINKS = LEAGUE === "wl" || LEAGUE === "all";
 const WL_CHIP = `<span class="wl-chip" title="Also played in the Winner League">WL</span>`;
 /** A player's name: Winner League players open their full profile; others their EuroLeague page. */
-const who = (pid, name) => (isWL(pid) ? `${nameLink(pid, name)} ${WL_CHIP}` : `<a class="link-name" href="#/euroleague/player/${esc(pid)}">${esc(name)}</a>`);
+const who = (pid, name) => (isWL(pid) && WL_LINKS ? `${nameLink(pid, name)} ${WL_CHIP}` : isWL(pid) ? `<a class="link-name" href="#/euroleague/player/${esc(pid)}">${esc(name)}</a> ${WL_CHIP}` : `<a class="link-name" href="#/euroleague/player/${esc(pid)}">${esc(name)}</a>`);
 const note = `<p class="muted el-note">${icon("info", { size: 14 })}<span>Names, clubs and seasons are from the EuroLeague data. ${MOCK_NOTE} Players marked ${WL_CHIP} also played in the Winner League.</span></p>`;
 
 export async function renderEuroleague(root, signal, params = []) {
@@ -86,7 +89,7 @@ function drawClub(root, signal, E, tid, wanted) {
   const allPlayers = new Set(seasons.flatMap((s) => E.roster(s, tid).map((r) => r.player_id)));
   const wlPlayers = [...allPlayers].filter(isWL);
   root.innerHTML = html`
-    <div class="row"><span class="spacer"></span>${isWLClub(tid) ? `<a class="btn" href="#/club/${tid}">${icon("shield", { size: 15 })} Winner League page</a>` : ""}<button class="btn ghost" id="share">${icon("link", { size: 15 })} Copy link</button></div>
+    <div class="row"><span class="spacer"></span>${isWLClub(tid) && WL_LINKS ? `<a class="btn" href="#/club/${tid}">${icon("shield", { size: 15 })} Winner League page</a>` : ""}<button class="btn ghost" id="share">${icon("link", { size: 15 })} Copy link</button></div>
     <div class="card club-hero" style="--club:${c1};--club2:${c2}">
       ${crestSvg(tid, elTeamName(tid), 100)}
       <div><div class="muted" style="font-weight:700;letter-spacing:2px;font-size:12px">EUROLEAGUE CLUB</div><h1>${esc(elTeamName(tid))}</h1>
@@ -121,7 +124,7 @@ function drawPlayer(root, E, pid) {
   root.innerHTML = html`
     <div class="game-head"><div><div class="muted" style="font-weight:700;letter-spacing:2px;font-size:12px">EUROLEAGUE PLAYER</div><h1>${esc(p.name)}</h1>
       <p>${rows.length} EuroLeague season${rows.length === 1 ? "" : "s"} · ${clubs.length} club${clubs.length === 1 ? "" : "s"}</p></div>
-      ${isWL(pid) ? `<button class="btn primary" data-profile="${esc(pid)}">${icon("user", { size: 15 })} Winner League profile</button>` : ""}</div>
+      ${isWL(pid) && WL_LINKS ? `<button class="btn primary" data-profile="${esc(pid)}">${icon("user", { size: 15 })} Winner League profile</button>` : ""}</div>
     ${note}
     <div class="card pad"><h2>${icon("clock")} EuroLeague career</h2>
       <table class="stat-table"><thead><tr><th>Season</th><th>Club</th></tr></thead><tbody>

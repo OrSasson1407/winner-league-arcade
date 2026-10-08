@@ -1,6 +1,6 @@
 // Smart player search: turns a plain question ("Israeli point guards born after 1995", "גבוהים מ-2.05
 // ששיחקו בחולון") into filters over the real data. Pure: parse() reads text, run() reads the database.
-import { careerSummary, isPlayable, namedPlayers, teamName } from "../data.js";
+import { careerSummary, db, isPlayable, namedPlayers, teamName } from "../data.js";
 
 // ---------------------------------------------------------------- vocabulary
 // [alias, team ids]: a club name, its city, or its Hebrew name. Longer aliases are tried first.
@@ -22,7 +22,25 @@ const CLUBS = [
   ["ness ziona", "ironi_ness_ziona"], ["נס ציונה", "ironi_ness_ziona"], ["ashkelon", "ironi_ashkelon"], ["אשקלון", "ironi_ashkelon"],
   ["kiryat gat", "maccabi_kiryat_gat"], ["קריית גת", "maccabi_kiryat_gat"], ["קרית גת", "maccabi_kiryat_gat"],
   ["ra'anana", "maccabi_raanana"], ["raanana", "maccabi_raanana"], ["רעננה", "maccabi_raanana"],
-].sort((a, b) => b[0].length - a[0].length);
+];
+// Other leagues' teams (the NBA): full name, nickname and city from the data ("los angeles lakers", "lakers",
+// "los angeles"), matched as whole words. Cities with two teams name both.
+const WL_IDS = new Set(CLUBS.flatMap(([, ids]) => ids.split(" ")));
+const TWO_WORD_NICKS = ["trail blazers"];
+{
+  const byCity = new Map();
+  for (const t of db.teams) {
+    if (String(t.team_id).startsWith("el:") || WL_IDS.has(t.team_id) || !t.canonical_name) continue;
+    const name = t.canonical_name.toLowerCase();
+    const nick = TWO_WORD_NICKS.find((n) => name.endsWith(" " + n)) || name.split(" ").pop();
+    const city = name.slice(0, name.length - nick.length).trim();
+    CLUBS.push([name, t.team_id, true], [nick, t.team_id, true]);
+    if (city) byCity.set(city, [...(byCity.get(city) || []), t.team_id]);
+  }
+  if (byCity.has("la")) byCity.set("los angeles", [...(byCity.get("los angeles") || []), ...byCity.get("la")]); // "LA Clippers"
+  for (const [city, ids] of byCity) if (!CLUBS.some(([a]) => a === city)) CLUBS.push([city, ids.join(" "), true]);
+}
+CLUBS.sort((a, b) => b[0].length - a[0].length);
 
 // [regex, positions]: English with word edges; Hebrew as whole words (a prefix letter is fine).
 const HE = (w) => new RegExp(`(^|[\\s,])[והבלמש]?(${w})(?=[\\s,.]|$)`, "g");
@@ -117,9 +135,11 @@ export function parse(text) {
     else { f.season = season; chips.push({ label: `Season ${season}`, src }); }
   });
   // clubs (each one named must be in the career)
-  for (const [alias, ids] of CLUBS) {
-    let i;
-    while ((i = s.indexOf(alias)) >= 0) {
+  for (const [alias, ids, whole] of CLUBS) {
+    let i, from = 0;
+    while ((i = s.indexOf(alias, from)) >= 0) {
+      // generated names count only as whole words ("kings" isn't in "rankings")
+      if (whole && (/[a-z]/.test(s[i - 1] || "") || /[a-z]/.test(s[i + alias.length] || ""))) { from = i + 1; continue; }
       const src = take(null, i, alias.length);
       const list = ids.split(" ");
       (f.clubs ||= []).push(list);

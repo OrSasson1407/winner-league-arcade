@@ -5,7 +5,7 @@ import { PLAYED_SEASONS, careerSummary, isPlayable, namedPlayers, playersById, t
 import { bestSeason, nameLink, playerCard } from "../components/playerCard.js";
 import { icon } from "../lib/icons.js";
 import { deferred, esc, fmt1, html } from "../ui.js";
-import { db } from "../data.js";
+import { LEAGUE, db } from "../data.js";
 import { EL_INDEX, EL_SEASONS } from "../euroleague.js";
 import { crestSvg } from "../lib/icons.js";
 
@@ -15,7 +15,7 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 
 /** Players born on a month-day (MM-DD), best careers first. */
 export function bornOn(mmdd) {
-  return namedPlayers.filter((p) => p.birth_date?.slice(5) === mmdd)
+  return namedPlayers.filter((p) => !p._mockBio && p.birth_date?.slice(5) === mmdd) // EuroLeague birth dates are placeholders
     .map((p) => ({ p, s: careerSummary(p.player_id) }))
     .filter((x) => x.s.played.length)
     .sort((a, b) => b.s.bestRating - a.s.bestRating || b.s.totalGames - a.s.totalGames);
@@ -27,7 +27,7 @@ const seasonAgo = (yearsAgo, now) => {
 };
 /** The EuroLeague that season: Israeli clubs and how many Winner League players took part (from the EuroLeague data). */
 function elFlash(season) {
-  if (!EL_SEASONS.includes(season)) return null;
+  if (LEAGUE === "nba" || !EL_SEASONS.includes(season)) return null; // the NBA choice: no EuroLeague asides
   return { season, clubs: (EL_INDEX.seasonTeams[season] || []).length, israeli: EL_INDEX.israeli[season] || [], wl: EL_INDEX.wlCount[season] || 0 };
 }
 const elLine = (e) => e ? `<div class="flash-el"><small class="muted">IN THE EUROLEAGUE</small>
@@ -92,6 +92,6 @@ export function renderToday(root, signal) {
           ${elLine(x.el)}
         </div>`).join("")}
       </div>
-      <p class="muted" style="font-size:12px">Birth dates and stats come from the official league site (regular season, minimum 10 games for season leaders).</p>`;
+      <p class="muted" style="font-size:12px">${LEAGUE === "wl" ? "Birth dates and stats come from the official league site (regular season, minimum 10 games for season leaders)." : "Regular-season stats, minimum 10 games for season leaders."}</p>`;
   });
 }

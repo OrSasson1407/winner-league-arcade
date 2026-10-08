@@ -82,7 +82,7 @@ function keepSafe() {
 
 // Each league keeps its own game progress, records and daily results (Winner League keys stay as they were).
 const LEAGUE_NOW = activeLeague();
-const SCOPED = /^(career:|draft:|hl:|guess:|conn:|grid:|matchup|daily:)/;
+const SCOPED = /^(career:|draft:|hl:|guess:|conn:|grid:|matchup|daily:|players:|compare:)/;
 const scoped = (key) => (LEAGUE_NOW !== "wl" && SCOPED.test(key) ? `${key}@${LEAGUE_NOW}` : key);
 
 export const store = {

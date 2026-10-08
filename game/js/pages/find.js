@@ -1,7 +1,7 @@
 // Smart player search page (#/find/<question>): ask in plain English or Hebrew, see the filters it
 // understood as chips (each one removable), and the players that match.
 import { esc, html } from "../ui.js";
-import { teamName } from "../data.js";
+import { LEAGUE, teamName } from "../data.js";
 import { icon, crestSvg } from "../lib/icons.js";
 import { nameLink } from "../components/playerCard.js";
 import { fmtHeight } from "../lib/units.js";
@@ -15,6 +15,12 @@ const EXAMPLES = {
   he: ["גבוהים מ-2.05 ששיחקו בחולון", "רכזים ישראלים שנולדו אחרי 1995", "סנטרים עם 8 ריבאונדים מאז 2018", "שיחקו בירושלים ובאילת",
     "גארדים זרים עם 300 משחקים", "15 נקודות במכבי תל אביב", "נמוכים מ-1.85", "מספר 23"],
 };
+// the NBA choice: questions about its teams (the mix keeps the Winner League examples, which also work there)
+if (LEAGUE === "nba") {
+  EXAMPLES.en = ["Taller than 2.10 who played for the Lakers", "Point guards born after 1998", "Centers with 10+ rebounds since 2018", "Played for Boston and Miami",
+    "Guards with 500+ games", "25+ points for Golden State", "Shorter than 1.85", "Number 23"];
+  EXAMPLES.he = ["גבוהים מ-2.10", "רכזים שנולדו אחרי 1998", "סנטרים עם 10 ריבאונדים מאז 2018", "גארדים עם 500 משחקים", "נמוכים מ-1.85", "מספר 23"];
+}
 const LIMIT = 200;
 
 export function renderFind(root, signal, params = []) {

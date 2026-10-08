@@ -1,5 +1,5 @@
 // Clubs: list of every club (#/clubs) and a page per club (#/club/<id>[/<season>]).
-import { H, db, playersById, teamName } from "../data.js";
+import { H, LEAGUE, db, playersById, teamName } from "../data.js";
 import { nameLink, playerCard } from "../components/playerCard.js";
 import { crestSvg, icon, posPill } from "../lib/icons.js";
 import { clubColors } from "../lib/clubs.js";
@@ -31,8 +31,8 @@ function drawClubs(root) {
     .sort((a, b) => b.d.seasons.length - a.d.seasons.length || a.t.canonical_name.localeCompare(b.t.canonical_name));
   root.innerHTML = html`
     <div class="game-head"><div><h1>${icon("shield", { size: 30 })} Clubs</h1>
-      <p>${clubs.length} clubs have played in the Premier League since 2010-11.</p></div>
-      <div class="row"><a class="btn" href="#/euroleague">${icon("globe", { size: 15 })} EuroLeague clubs</a><a class="btn" href="#/nt">${icon("flag", { size: 15 })} National teams</a></div></div>
+      <p>${LEAGUE === "nba" ? `${clubs.length} NBA teams since 2010-11.` : LEAGUE === "all" ? `${clubs.length} Winner League and NBA clubs since 2010-11. EuroLeague clubs have their own pages.` : `${clubs.length} clubs have played in the Premier League since 2010-11.`}</p></div>
+      <div class="row">${LEAGUE === "nba" ? "" : `<a class="btn" href="#/euroleague">${icon("globe", { size: 15 })} EuroLeague clubs</a>`}<a class="btn" href="#/nt">${icon("flag", { size: 15 })} National teams</a></div></div>
     <div class="club-grid">${clubs.map(({ t, d }) => {
       const best = [...d.bestByPlayer.values()].sort((a, b) => b.rating_mock - a.rating_mock)[0];
       const [c1] = clubColors(t.team_id);

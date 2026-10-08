@@ -1,7 +1,8 @@
 // All-time records (#/records?cat=…&il=1&club=…&pos=…): career totals, career averages and
 // single-season bests since 2010-11. Regular season only. Totals are per-game averages × games
 // played (the data has per-game averages, not game logs), rounded.
-import { POSITIONS, db, playersById, teamName } from "../data.js";
+import { LEAGUE, POSITIONS, db, playersById, teamName } from "../data.js";
+import { playersById as wlPlayers } from "../wl.js"; // nationality is only reliable from the Winner League data
 import { nameLink } from "../components/playerCard.js";
 import { icon, posPill } from "../lib/icons.js";
 import { copyLink, deferred, esc, fmt1, html, skeletonCards } from "../ui.js";
@@ -50,12 +51,13 @@ export function leaders(catKey, { il = false, club = "", pos = "" } = {}, limit 
   // src: another competition's data ({ player_seasons, players }); default: the Winner League
   const rowsOf = src ? src.player_seasons : db.player_seasons;
   const people = src ? src.players : playersById;
-  const played = rowsOf.filter((r) => r.appeared_in_regular_season && r.stats && (st(r, "games") ?? 0) > 0);
+  // the mixed data's EuroLeague rows have placeholder numbers: records count real numbers only
+  const played = rowsOf.filter((r) => r.appeared_in_regular_season && r.stats && (st(r, "games") ?? 0) > 0 && (src || !r.mock));
   const ok = (r) => {
     const p = people.get(r.player_id);
     if (!p) return false;
     // nationality is only reliable from the Winner League data
-    if (il && !isIsraeli(src ? playersById.get(r.player_id) : p)) return false;
+    if (il && !isIsraeli(src ? wlPlayers.get(r.player_id) : p)) return false;
     if (club && r.team_id !== club) return false;
     if (pos && (r.position || p.primary_position) !== pos) return false;
     return true;
@@ -78,10 +80,17 @@ export function leaders(catKey, { il = false, club = "", pos = "" } = {}, limit 
 
 export function renderRecords(root, signal, params, query = {}) {
   let cat = CATS[query.cat] ? query.cat : "pts";
-  let lg = query.lg === "el" ? "el" : "wl", E = null;
+  // "wl" here is the arcade's own data (the chosen league); the EuroLeague's records come from its separate data.
+  // The Winner League offers both; the EuroLeague choice shows its own, the NBA and the mix theirs
+  let lg = LEAGUE === "el" || (LEAGUE === "wl" && query.lg === "el") ? "el" : "wl", E = null;
+  // categories this data has numbers for (the NBA data has no valuation)
+  const hasVal = db.player_seasons.some((r) => r.stats?.valuation_per_game != null);
+  const CAT_KEYS = Object.keys(CATS).filter((k) => hasVal || !["cval", "sval"].includes(k));
+  if (!CAT_KEYS.includes(cat)) cat = "pts";
   let il = query.il === "1", club = query.club || "", pos = POSITIONS.includes(query.pos) ? query.pos : "";
   root.innerHTML = html`<div class="game-head"><div><h1>${icon("trophy", { size: 30 })} All-time records</h1><p>Counting…</p></div></div><div class="card-grid">${skeletonCards(6)}</div>`;
-  const wlClubs = [...db.teams].sort((a, b) => a.canonical_name.localeCompare(b.canonical_name)).map((t) => [t.team_id, t.canonical_name]);
+  // the mix's EuroLeague clubs have no real numbers, so no records
+  const wlClubs = db.teams.filter((t) => !String(t.team_id).startsWith("el:")).sort((a, b) => a.canonical_name.localeCompare(b.canonical_name)).map((t) => [t.team_id, t.canonical_name]);
   const elClubs = Object.entries(EL_INDEX.teams).sort((a, b) => a[1].localeCompare(b[1]));
   const sync = () => {
     const q = new URLSearchParams({ cat, ...(lg === "el" ? { lg } : {}), ...(il ? { il: "1" } : {}), ...(club ? { club } : {}), ...(pos ? { pos } : {}) });
@@ -94,17 +103,18 @@ export function renderRecords(root, signal, params, query = {}) {
     const rows = leaders(cat, { il, club, pos }, 25, src);
     const clubs = lg === "el" ? elClubs : wlClubs;
     const nm = (pid) => (lg === "el" ? E.players.get(pid).name : playersById.get(pid).name);
-    const link = (pid) => (lg === "el" && !playersById.has(pid) ? `<a class="link-name" href="#/euroleague/player/${esc(pid)}">${esc(nm(pid))}</a>` : nameLink(pid, nm(pid)));
-    const groups = [...new Set(Object.values(CATS).map((x) => x.group))];
+    const link = (pid) => (lg === "el" && !wlPlayers.has(pid) ? `<a class="link-name" href="#/euroleague/player/${esc(pid)}">${esc(nm(pid))}</a>` : nameLink(pid, nm(pid)));
+    const groups = [...new Set(CAT_KEYS.map((k) => CATS[k].group))];
+    const intro = lg === "el" ? `EuroLeague since ${EL_SEASONS[0]}.` : { wl: "Winner League regular season since 2010-11.", nba: "NBA regular season since 2010-11.", all: "Winner League and NBA regular seasons since 2010-11, added up per player (EuroLeague numbers aren't real yet, so they're left out)." }[LEAGUE];
     root.innerHTML = html`
       <div class="game-head"><div><a class="back" href="#/players">← Players</a><h1>${icon("trophy", { size: 30 })} All-time records</h1>
-        <p>${lg === "el" ? `EuroLeague since ${EL_SEASONS[0]}.` : "Winner League regular season since 2010-11."} ${club ? `Only games for <b>${esc(teamName(club))}</b>.` : ""}</p>
-        <div class="seg" id="lg" role="radiogroup" aria-label="Competition" style="margin-top:10px"><button role="radio" data-lg="wl" class="${lg === "wl" ? "on" : ""}" aria-checked="${lg === "wl"}">Winner League</button><button role="radio" data-lg="el" class="${lg === "el" ? "on" : ""}" aria-checked="${lg === "el"}">EuroLeague</button></div></div>
+        <p>${intro} ${club ? `Only games for <b>${esc(teamName(club))}</b>.` : ""}</p>
+        ${LEAGUE === "wl" ? `<div class="seg" id="lg" role="radiogroup" aria-label="Competition" style="margin-top:10px"><button role="radio" data-lg="wl" class="${lg === "wl" ? "on" : ""}" aria-checked="${lg === "wl"}">Winner League</button><button role="radio" data-lg="el" class="${lg === "el" ? "on" : ""}" aria-checked="${lg === "el"}">EuroLeague</button></div>` : ""}</div>
         <button class="btn ghost" id="share">${icon("link", { size: 15 })} Copy link</button></div>
       ${lg === "el" ? `<div class="card pad mock-warn" role="note">${icon("info", { size: 18 })}<div><b>Placeholder numbers</b><p>${esc(MOCK_NOTE)} These EuroLeague "records" show how the page will work once real data is in, so don't quote them. The "Israelis only" filter uses nationality from the Winner League data, so it only includes players who also played there.</p></div></div>` : ""}
       <div class="rec-layout">
         <nav class="card pad rec-cats" aria-label="Record categories">${groups.map((g) => html`<div class="rec-group"><small>${g}</small>
-          ${Object.entries(CATS).filter(([, x]) => x.group === g).map(([k, x]) => `<button class="${k === cat ? "on" : ""}" data-cat="${k}" aria-pressed="${k === cat}">${x.label}</button>`).join("")}</div>`).join("")}</nav>
+          ${CAT_KEYS.map((k) => [k, CATS[k]]).filter(([, x]) => x.group === g).map(([k, x]) => `<button class="${k === cat ? "on" : ""}" data-cat="${k}" aria-pressed="${k === cat}">${x.label}</button>`).join("")}</div>`).join("")}</nav>
         <div style="display:grid;gap:14px;align-content:start;min-width:0">
           <div class="card pad rec-filters">
             <label class="chk"><input type="checkbox" id="il" ${il ? "checked" : ""}> Israelis only</label>
@@ -119,11 +129,11 @@ export function renderRecords(root, signal, params, query = {}) {
               <b class="rec-val led">${c.fmt(r.value)}</b>
               <span class="rec-bar" style="--w:${(r.value / rows[0].value) * 100}%"></span></li>`).join("")}</ol>`
               : `<p class="muted">Nobody matches these filters.</p>`}
-            <p class="muted" style="font-size:12px;margin:10px 0 0">${c.est ? "Totals are estimated from per-game averages × games played (the data has per-game averages, not game logs). " : ""}${lg === "el" ? esc(MOCK_NOTE) : "Regular season only, from the official league site. Playoffs and cups aren't included."}</p>
+            <p class="muted" style="font-size:12px;margin:10px 0 0">${c.est ? "Totals are estimated from per-game averages × games played (the data has per-game averages, not game logs). " : ""}${lg === "el" ? esc(MOCK_NOTE) : LEAGUE === "wl" ? "Regular season only, from the official league site. Playoffs and cups aren't included." : "Regular season only. Playoffs and cups aren't included."}</p>
           </div>
         </div>
       </div>`;
-    root.querySelector("#lg").addEventListener("click", (e) => { const b = e.target.closest("[data-lg]"); if (b && b.dataset.lg !== lg) { lg = b.dataset.lg; club = ""; sync(); draw(); } }, { signal });
+    root.querySelector("#lg")?.addEventListener("click", (e) => { const b = e.target.closest("[data-lg]"); if (b && b.dataset.lg !== lg) { lg = b.dataset.lg; club = ""; sync(); draw(); } }, { signal });
     root.querySelector(".rec-cats").addEventListener("click", (e) => { const b = e.target.closest("[data-cat]"); if (b) { cat = b.dataset.cat; sync(); draw(); } }, { signal });
     root.querySelector("#il").addEventListener("change", (e) => { il = e.target.checked; sync(); draw(); }, { signal });
     root.querySelector("#club").addEventListener("change", (e) => { club = e.target.value; sync(); draw(); }, { signal });

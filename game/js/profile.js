@@ -2,7 +2,9 @@
 import { MOCK_NOTE, elCareer } from "./euroleague.js";
 import { ntOfWl } from "./national.js";
 import { fmtHeight } from "./lib/units.js";
-import { H, db, playersById, teamName } from "./data.js";
+import { H, LEAGUE, db, playersById, teamName } from "./data.js";
+import { playersById as wlPlayers } from "./wl.js";
+import { LEAGUES, setLeague } from "./leagueChoice.js";
 import { bestSeason, playerCard } from "./components/playerCard.js";
 import { clubColors } from "./lib/clubs.js";
 import { esc, fmt1, html } from "./ui.js";
@@ -24,7 +26,7 @@ const METRICS = {
 function seasonSeries(records) {
   const by = new Map();
   for (const r of records) {
-    if (!r.stats || !r.appeared_in_regular_season) continue;
+    if (!r.stats || !r.appeared_in_regular_season || r.mock) continue; // EuroLeague numbers aren't real yet
     const e = by.get(r.season) || { season: r.season, games: 0, rating: 0, ppg: 0, rpg: 0, apg: 0, teams: [] };
     const g = r.stats.games;
     for (const k of ["ppg", "rpg", "apg"]) e[k] += (r.stats[k] ?? 0) * g;
@@ -103,13 +105,19 @@ function chartSvg(series, metric, first, last) {
 
 export function profileHtml(pid) {
   const p = playersById.get(pid);
+  // a Winner League player (a link from the national teams, say) while the arcade is on another league
+  if (!p && wlPlayers.has(pid)) return html`<div class="profile"><h1>${esc(wlPlayers.get(pid).name)}</h1>
+    <p class="muted">This player's career is in the Winner League data, and the arcade is set to ${esc(LEAGUES[LEAGUE].name)}.</p>
+    <button class="btn primary" data-wl-profile="${esc(pid)}">${icon("user", { size: 15 })} Open in Winner League mode</button></div>`;
   if (!p) return `<div class="profile"><h1>Player not found</h1></div>`;
   const records = H.getPlayerCareer(pid);
   const played = records.filter((r) => r.stats && r.appeared_in_regular_season);
+  const real = played.filter((r) => !r.mock); // the EuroLeague's numbers are placeholders: they don't count
   const best = bestSeason(records);
-  const games = played.reduce((s, r) => s + r.stats.games, 0);
-  const cPPG = games ? played.reduce((s, r) => s + (r.stats.ppg ?? 0) * r.stats.games, 0) / games : null;
-  const a = age(p.birth_date);
+  const games = real.reduce((s, r) => s + r.stats.games, 0);
+  const cPPG = games ? real.reduce((s, r) => s + (r.stats.ppg ?? 0) * r.stats.games, 0) / games : null;
+  const bio = !p._mockBio; // EuroLeague-only players: personal details aren't real yet
+  const a = bio ? age(p.birth_date) : null;
   const bestKey = best ? `${best.season}|${best.team_id}` : "";
   return html`<div class="profile">
     <div class="profile-head">
@@ -119,20 +127,20 @@ export function profileHtml(pid) {
         <h1>${esc(p.name || p.name_he || pid)}</h1>
         ${p.name_he && p.name ? `<div class="muted" dir="rtl" lang="he">${esc(p.name_he)}</div>` : ""}
         <div class="facts">
-          <div class="fact"><small>Position</small><b>${p.primary_position ? posPill(p.primary_position) : "–"}</b></div>
-          <div class="fact"><small>Height</small><b>${fmtHeight(p.height_cm)}</b></div>
-          <div class="fact"><small>Born</small><b>${p.birth_date ? `${p.birth_date.slice(0, 4)}${a !== null ? ` (age ${a})` : ""}` : "–"}</b></div>
-          <div class="fact"><small>Nationality</small><b>${esc((p.nationalities || []).join(", ") || "–")}</b></div>
+          <div class="fact"><small>Position</small><b>${bio && p.primary_position ? posPill(p.primary_position) : "–"}</b></div>
+          <div class="fact"><small>Height</small><b>${bio ? fmtHeight(p.height_cm) : "–"}</b></div>
+          <div class="fact"><small>Born</small><b>${bio && p.birth_date ? `${p.birth_date.slice(0, 4)}${a !== null ? ` (age ${a})` : ""}` : "–"}</b></div>
+          <div class="fact"><small>Nationality</small><b>${esc((bio && (p.nationalities || []).join(", ")) || "–")}</b></div>
           <div class="fact"><small>Seasons</small><b>${new Set(played.map((r) => r.season)).size}</b></div>
           <div class="fact"><small>Clubs</small><b>${new Set(records.map((r) => r.team_id)).size}</b></div>
           <div class="fact"><small>Games</small><b>${games}</b></div>
           <div class="fact"><small>Career PPG</small><b>${fmt1(cPPG)}</b></div>
-          <div class="fact"><small>Best rating</small><b>${best?.rating_mock ?? "–"} <span class="muted" style="font-size:12px">${best?.season ?? ""}</span></b></div>
+          <div class="fact"><small>Best rating</small><b>${best && !best.mock ? best.rating_mock : "–"} <span class="muted" style="font-size:12px">${best && !best.mock ? best.season : ""}</span></b></div>
         </div>
       </div>
     </div>
     <div class="card pad"><h3>Career timeline</h3>${timelineHtml(records)}${stintsHtml(records)}</div>
-    ${played.length ? html`<div class="card pad">
+    ${real.length ? html`<div class="card pad">
       <div class="row"><h3 id="chart-title">${METRICS.rating.label}</h3><span class="spacer"></span>
         <div class="seg sm" id="metric" role="radiogroup" aria-label="Chart metric">${Object.entries(METRICS).map(([k, m], i) => `<button role="radio" aria-checked="${i === 0}" data-m="${k}" class="${i === 0 ? "on" : ""}">${k === "rating" ? "Rating" : k.toUpperCase()}</button>`).join("")}</div></div>
       <div class="chart-box" id="chart"></div>
@@ -145,11 +153,12 @@ export function profileHtml(pid) {
           const s = r.stats;
           return `<tr class="${`${r.season}|${r.team_id}` === bestKey ? "best" : ""}"><td>${r.season}</td>
             <td><i class="dot" style="background:${clubColors(r.team_id)[0]}"></i>${esc(teamName(r.team_id))}</td>
-            <td class="hide-sm">${r.age ?? "–"}</td><td>${posPill(r.position)}</td>
-            ${s ? `<td>${s.games}</td><td class="hide-sm">${fmt1(s.mpg)}</td><td>${fmt1(s.ppg)}</td><td>${fmt1(s.rpg)}</td><td>${fmt1(s.apg)}</td>
+            <td class="hide-sm">${p._mockBio ? "–" : r.age ?? "–"}</td><td>${posPill(r.position)}</td>
+            ${s && r.mock ? `<td colspan="9" class="muted" style="text-align:left">EuroLeague · numbers not in the data yet</td>`
+              : s ? `<td>${s.games}</td><td class="hide-sm">${fmt1(s.mpg)}</td><td>${fmt1(s.ppg)}</td><td>${fmt1(s.rpg)}</td><td>${fmt1(s.apg)}</td>
               <td class="hide-sm">${fmt1(s.fg_pct)}</td><td class="hide-sm">${fmt1(s.fg3_pct)}</td><td class="hide-sm">${fmt1(s.ft_pct)}</td><td class="hide-sm">${fmt1(s.valuation_per_game)}</td>`
               : `<td colspan="9" class="muted" style="text-align:left">${r.season === db.metadata.current_season ? "season not started" : "no regular-season games"}</td>`}
-            <td class="rating">${s ? r.rating_mock : "–"}</td></tr>`;
+            <td class="rating">${s && !r.mock ? r.rating_mock : "–"}</td></tr>`;
         }).join("")}</tbody></table></div>
     </div>
     ${nationalHtml(pid)}
@@ -167,18 +176,20 @@ function nationalHtml(pid) {
 
 /** The player's EuroLeague years (separate competition data), if any. */
 function euroleagueHtml(pid) {
+  if (LEAGUE === "el" || LEAGUE === "all") return ""; // there the EuroLeague seasons are in the career above
   const rows = elCareer(pid);
   if (!rows.length) return "";
   const clubs = [...new Set(rows.map(([, t]) => t))];
   return html`<div class="card pad el-career"><div class="row"><h3 style="margin:0">${icon("globe")} EuroLeague career</h3><span class="spacer"></span>
       <a class="btn ghost sm" href="#/euroleague/player/${esc(pid)}">EuroLeague page ${icon("arrowRight", { size: 13 })}</a></div>
-    <p class="muted" style="margin:6px 0 10px">${rows.length} season${rows.length === 1 ? "" : "s"} with ${clubs.length} club${clubs.length === 1 ? "" : "s"} in the EuroLeague, alongside the Winner League above.</p>
+    <p class="muted" style="margin:6px 0 10px">${rows.length} season${rows.length === 1 ? "" : "s"} with ${clubs.length} club${clubs.length === 1 ? "" : "s"} in the EuroLeague, alongside the seasons above.</p>
     <div class="el-years">${rows.map(([season, tid]) => `<a class="el-year" href="#/euroleague/club/${tid}/${season}" style="--club:${clubColors(tid)[0]}">${crestSvg(tid, teamName(tid), 22)}<span><b>${season}</b><small>${esc(teamName(tid))}</small></span></a>`).join("")}</div>
     <p class="muted" style="font-size:12px;margin:8px 0 0">${esc(MOCK_NOTE)} Only seasons and clubs are shown here.</p></div>`;
 }
 
 /** Wires the chart (metric switch, hover crosshair + tooltip) inside a rendered profile. */
 export function wireProfile(root, pid) {
+  root.querySelector("[data-wl-profile]")?.addEventListener("click", () => setLeague("wl", `#/player/${pid}`));
   const box = root.querySelector("#chart");
   if (!box) return;
   const records = H.getPlayerCareer(pid);

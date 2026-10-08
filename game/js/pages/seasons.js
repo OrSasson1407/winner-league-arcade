@@ -1,9 +1,12 @@
 // Seasons: list (#/seasons) and a page per season (#/season/<season>) with teams and stat leaders.
-import { CURRENT, H, db, isPlayable, playersById } from "../data.js";
+import { CURRENT, H, LEAGUE, db, isPlayable, playersById } from "../data.js";
 import { nameLink } from "../components/playerCard.js";
 import { crestSvg, icon, posPill } from "../lib/icons.js";
 import { copyLink, deferred, esc, fmt1, html, skeletonTiles } from "../ui.js";
 
+// the NBA data has no valuation
+let _hasVal;
+const hasVal = () => (_hasVal ??= db.player_seasons.some((r) => r.stats?.valuation_per_game != null));
 const LEADERS = [
   { key: "ppg", label: "Points per game", get: (r) => r.stats.ppg, dec: 1 },
   { key: "rpg", label: "Rebounds per game", get: (r) => r.stats.rpg, dec: 1 },
@@ -27,8 +30,8 @@ function drawSeasons(root) {
   const seasons = [...db.seasons].reverse();
   root.innerHTML = html`
     <div class="game-head"><div><h1>${icon("calendar", { size: 30 })} Seasons</h1>
-      <p>17 seasons from 2010-11 to today. Regular-season stats, from the official league records.</p></div>
-      <a class="btn" href="#/euroleague">${icon("globe", { size: 15 })} EuroLeague seasons</a></div>
+      <p>${{ wl: "17 seasons from 2010-11 to today. Regular-season stats, from the official league records.", nba: "17 NBA seasons from 2010-11 to today. Regular-season stats.", all: "17 seasons from 2010-11 to today: Winner League and NBA teams side by side. Regular-season stats." }[LEAGUE]}</p></div>
+      ${LEAGUE === "nba" ? "" : `<a class="btn" href="#/euroleague">${icon("globe", { size: 15 })} EuroLeague seasons</a>`}</div>
     <div class="club-grid">${seasons.map((s) => {
       const recs = seasonRecords(s.season);
       const scorer = topBy(recs, (r) => r.stats.ppg)[0];
@@ -81,7 +84,7 @@ function drawSeason(root, signal, params) {
       ${crestSvg(t.team_id, t.team_name, 46)}
       <div class="ct-body"><h2>${esc(t.team_name)}</h2><div class="muted">${size} players${best ? ` · best: ${esc(playersById.get(best.player_id).name)} (${best.rating_mock})` : ""}</div></div></a>`).join("")}</div>
     ${recs.length ? html`<h2 style="margin:26px 0 12px">${icon("trophy", { size: 22 })} Season leaders</h2>
-      <div class="leaders-grid">${LEADERS.map(board).join("")}</div>
+      <div class="leaders-grid">${LEADERS.filter((l) => l.key !== "val" || hasVal()).map(board).join("")}</div>
       <div class="card pad" style="margin-top:18px"><h3>Top 15 by game rating</h3>
         <div class="grid-wrap"><table class="stat-table"><thead><tr><th>Player</th><th>Team</th><th>Pos</th><th>GP</th><th>MPG</th><th>PPG</th><th>RPG</th><th>APG</th><th>VAL</th><th>Rating</th></tr></thead>
         <tbody>${topBy(recs, (r) => r.rating_mock).slice(0, 15).map((r) => `<tr><td>${nameLink(r.player_id)}</td><td>${esc(r.team_name)}</td><td>${posPill(r.position)}</td><td>${r.stats.games}</td><td>${fmt1(r.stats.mpg)}</td><td>${fmt1(r.stats.ppg)}</td><td>${fmt1(r.stats.rpg)}</td><td>${fmt1(r.stats.apg)}</td><td>${fmt1(r.stats.valuation_per_game)}</td><td class="rating">${r.rating_mock}</td></tr>`).join("")}</tbody></table></div>
