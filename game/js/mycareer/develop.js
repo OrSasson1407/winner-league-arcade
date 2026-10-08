@@ -3,7 +3,7 @@
 // real roster, the coach's trust, your own staff, work ethic, health and the miles on your legs. Each
 // player also has a hidden talent ceiling per attribute (capped by the body), revealed slowly by scouts.
 // The yearly report says how much each factor gave or took, so the system can be understood and planned for.
-import { playersById, seededRng } from "../data.js";
+import { playersById, seededRng } from "../wl.js";
 
 // ---------------------------------------------------------------- constants
 export const STAFF = {

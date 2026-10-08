@@ -3,7 +3,9 @@
 // EuroLeague ratings are placeholder (mock) data on their own scale, so they are mapped onto the
 // Winner League scale through the clubs that appear in both (Maccabi Tel Aviv most seasons).
 import { EL_LAST, EL_SEASONS, elLoaded, elTeamName } from "../euroleague.js";
-import { realTeamStrength } from "../games/draft_sim.js";
+import { rosterTools } from "../games/draft_sim.js";
+import * as WLD from "../wl.js";
+const { realTeamStrength } = rosterTools(WLD); // My Career is always in the Winner League
 
 const r1 = (v) => Math.round(v * 10) / 10;
 export const elReady = () => !!elLoaded();

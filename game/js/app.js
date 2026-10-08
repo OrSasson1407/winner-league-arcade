@@ -20,6 +20,7 @@ import { initReminders } from "./lib/notify.js";
 import { initTour } from "./lib/tutorial.js";
 import { getLang, startHebrew } from "./i18n/index.js";
 import { coins, equipped } from "./lib/wallet.js";
+import { LEAGUES, activeLeague, gameAvailable, setLeague } from "./leagueChoice.js";
 
 // Hebrew: the dictionary is in before the first screen draws (the page direction is set in index.html)
 const langReady = getLang() === "he" ? startHebrew().catch((e) => console.error("Hebrew", e)) : Promise.resolve();
@@ -184,6 +185,7 @@ async function renderRoute() {
   if (!vtActive) { void view.offsetWidth; view.classList.add("enter"); } // the view transition animates instead
   try {
     if (!render) problemScreen(view, { title: "Page not found", message: "This link doesn't match any page in the arcade." });
+    else if (!gameAvailable(key)) leagueBlocked(view, key); // e.g. a stats game while the arcade is set to the EuroLeague
     else render(view, controller.signal, params.map(decodeURIComponent), query);
     pageChanged(view);
     initTour(key, view);
@@ -199,6 +201,17 @@ async function renderRoute() {
     if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   });
   window.scrollTo(0, 0);
+}
+
+/** A game that needs real stats, while the arcade is set to a league without them (the EuroLeague). */
+function leagueBlocked(view, key) {
+  const ok = Object.keys(LEAGUES).filter((l) => gameAvailable(key, l));
+  view.innerHTML = `<div class="card pad empty-state league-blocked">${icon("chart", { size: 30 })}
+    <b>This game isn't available in ${esc(LEAGUES[activeLeague()].name)} mode</b>
+    <p class="muted">It's built on statistics, and the EuroLeague numbers in the arcade aren't real yet. Career Path, Connections and The Grid work on EuroLeague clubs and careers.</p>
+    <div class="row" style="justify-content:center;flex-wrap:wrap">${ok.map((l) => `<button class="btn ${l === "wl" ? "primary" : ""}" data-league="${l}">Play it in ${esc(LEAGUES[l].name)}</button>`).join("")}
+      <a class="btn ghost" href="#/games">${icon("games", { size: 15 })} Other games</a></div></div>`;
+  view.querySelectorAll("[data-league]").forEach((b) => b.addEventListener("click", () => setLeague(b.dataset.league)));
 }
 
 // errors after a page has rendered (clicks, timers): tell the player instead of failing silently.

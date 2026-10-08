@@ -14,6 +14,7 @@ import { lastStats } from "./online/net.js";
 import { reducedMotion } from "./lib/settings.js";
 import { missionText, missions } from "./lib/missions.js";
 import { coins } from "./lib/wallet.js";
+import { LEAGUES, LEAGUE_IDS, activeLeague, gameAvailable, setLeague } from "./leagueChoice.js";
 
 /** Slides for the home page's LED board (each links somewhere). */
 function boardSlides(potd, potdSeason) {
@@ -39,7 +40,7 @@ export const GAMES = {
       const names = ["Maccabi Tel Aviv", "Hapoel Jerusalem", "Hapoel Tel Aviv", "Bnei Herzliya", "Hapoel Holon", "Maccabi Haifa", "Maccabi Tel Aviv"];
       return `<div class="pv-reel"><div>${names.map((n) => `<div>${n}</div>`).join("")}</div></div><span class="pv-caption">SPINNING…</span>`;
     } },
-  guess: { href: "#/guess", title: "Guess the Player", text: "A mystery player from 2010 to today. Every guess reveals clues about team, position, height, age and nationality. 8 tries.",
+  guess: { href: "#/guess", title: "Guess the Player", text: "A mystery player. Every guess reveals clues about team, position, height, age and nationality. 8 tries.",
     preview: () => `<div class="pv-tiles">${"<i></i>".repeat(12)}</div>` },
   "higher-lower": { href: "#/higher-lower", title: "Higher or Lower", text: "Two real player-seasons. More points? More rebounds? Higher rating? Keep the streak alive.",
     preview: () => `<div class="pv-hl"><span>14.2</span><span class="q">?</span></div><span class="pv-caption">▲ HIGHER · ▼ LOWER</span>` },
@@ -65,16 +66,30 @@ export function gameTilesHtml() {
     "higher-lower": store.get("hl:best:mixed") && `Best streak ${store.get("hl:best:mixed")}`,
     career: store.get("career:best") && `Best ${store.get("career:best")}/30`,
   };
-  return `<section class="games">${Object.entries(GAMES).map(([key, g]) => html`<a class="card game-card" href="${g.href}">
+  return `<section class="games">${Object.entries(GAMES).map(([key, g]) => { const off = !gameAvailable(key); return html`<a class="card game-card ${off ? "off" : ""}" href="${g.href}">
       <div class="body"><h2><span class="gc-ic">${icon(GAME_ICONS[key], { size: 20 })}</span>${g.title}</h2><p>${g.text}</p>
-        <div class="foot-line"><span class="muted">${bestLine[key] || "Not played yet"}</span><span class="play">Play ${icon("arrowRight", { size: 14 })}</span></div></div>
+        <div class="foot-line"><span class="muted">${off ? `Not in ${LEAGUES[activeLeague()].name} mode` : key === "mycareer" && activeLeague() !== "wl" ? "Winner League career" : bestLine[key] || "Not played yet"}</span><span class="play">Play ${icon("arrowRight", { size: 14 })}</span></div></div>
       <div class="preview" aria-hidden="true">${g.preview()}</div>
-    </a>`).join("")}</section>`;
+    </a>`; }).join("")}</section>`;
 }
 
-export function renderGames(root) {
-  root.innerHTML = html`<div class="game-head"><div><h1>${icon("games", { size: 30 })} Games</h1><p>Seven games built on 17 seasons of real league data.</p></div><a class="btn primary" href="#/quick">${icon("dice", { size: 15 })} Quick game</a></div>${gameTilesHtml()}
+/** Which league the games play on: four choices, each with a line about what it means. */
+export function leaguePickerHtml() {
+  const cur = activeLeague();
+  return html`<div class="card pad league-pick" role="group" aria-label="League">
+    <div class="league-pick-head"><b>${icon("globe", { size: 16 })} <span>Play on</span></b><small class="muted">${esc(LEAGUES[cur].desc)}</small></div>
+    <div class="seg league-seg" role="radiogroup">${LEAGUE_IDS.map((l) => `<button role="radio" data-league="${l}" aria-checked="${l === cur}" class="${l === cur ? "on" : ""}">${LEAGUES[l].name}</button>`).join("")}</div>
+  </div>`;
+}
+export function bindLeaguePicker(root, signal) {
+  root.querySelector(".league-pick")?.addEventListener("click", (e) => { const b = e.target.closest("[data-league]"); if (b && b.dataset.league !== activeLeague()) setLeague(b.dataset.league); }, { signal });
+}
+
+export function renderGames(root, signal) {
+  root.innerHTML = html`<div class="game-head"><div><h1>${icon("games", { size: 30 })} Games</h1><p>Seven games built on real basketball data.</p></div><a class="btn primary" href="#/quick">${icon("dice", { size: 15 })} Quick game</a></div>
+    ${leaguePickerHtml()}${gameTilesHtml()}
     <a class="card pad ch-banner og-promo" href="#/online">${icon("globe", { size: 22 })}<span><b>Online 1v1</b> · play any of these games against a random opponent or a friend with an invite code.</span><span class="spacer"></span><span class="btn primary">Play online</span></a>`;
+  bindLeaguePicker(root, signal);
 }
 
 function playerOfTheDay() {
@@ -114,7 +129,7 @@ export function renderHome(root, signal) {
       <div>
         <p class="bc-kicker"><b>Winner League Arcade</b><span>${db.metadata.season_list.length} seasons · official league records</span></p>
         <h1>${db.metadata.season_list.length} seasons. <br><em>Your</em> move.</h1>
-        <p class="bc-sub">Welcome back, <b>${esc(myName("Guest"))}</b>. ${namedPlayers.length.toLocaleString()} players and ${db.teams.length} clubs of the Israeli Premier League, every season since 2010-11. Pick a game or look up any player.</p>
+        <p class="bc-sub">Welcome back, <b>${esc(myName("Guest"))}</b>. ${namedPlayers.length.toLocaleString()} players and ${db.teams.length} clubs of ${LEAGUES[activeLeague()].phrase}, every season since 2010-11. Pick a game or look up any player.</p>
         <div class="search guess-input">${icon("search", { size: 18, cls: "search-ic" })}<input id="search" class="input" placeholder="Search any player…" autocomplete="off" aria-label="Search players"></div>
         <div class="row hero-actions">
           ${last && GAMES[last] ? `<a class="btn jump" href="${GAMES[last].href}">${icon("play", { size: 14 })} Jump back into ${GAMES[last].title}</a>` : ""}

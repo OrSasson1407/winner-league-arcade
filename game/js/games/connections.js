@@ -1,6 +1,6 @@
 // Connections: 16 players, four hidden groups of four (a club, a team-season, a stat, a birth year…).
 // Pick four that belong together. Four mistakes allowed. Daily puzzle (same for everyone) or Unlimited.
-import { playersById, seededRng, shuffle } from "../data.js";
+import { LEAGUE, playersById, seededRng, shuffle } from "../data.js";
 import { esc, html, localDate, store, toast, track } from "../ui.js";
 import { icon } from "../lib/icons.js";
 import { confetti, sound } from "../lib/fx.js";
@@ -88,7 +88,7 @@ export function renderConnections(root, signal, params, query = {}) {
     const st = store.get(STATS_KEY, { played: 0, wins: 0, streak: 0, best: 0, perfect: 0 });
     root.innerHTML = html`
       <div class="game-head"><div><a class="back" href="#/">← Home</a><h1>Connections</h1>
-        <p>Find four groups of four players who share something: a club, a team-season, a stat, a birth year… Every player fits exactly one group.</p></div>
+        <p>${LEAGUE === "el" ? "Find four groups of four players who share something: a club, a team-season, a long career… Every player fits exactly one group." : "Find four groups of four players who share something: a club, a team-season, a stat, a birth year… Every player fits exactly one group."}</p></div>
         <div class="row"><div class="seg" id="mode" role="radiogroup" aria-label="Puzzle">
           <button role="radio" data-m="daily" aria-checked="${mode === "daily"}" class="${mode === "daily" ? "on" : ""}">Daily</button>
           <button role="radio" data-m="free" aria-checked="${mode === "free"}" class="${mode === "free" ? "on" : ""}">Unlimited</button></div></div>

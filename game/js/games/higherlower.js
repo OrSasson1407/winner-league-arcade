@@ -37,6 +37,9 @@ export function renderHigherLower(root, signal, params, query) {
   const byPlayer = new Map();
   for (const ps of pool) (byPlayer.get(ps.player_id) || byPlayer.set(ps.player_id, []).get(ps.player_id)).push(ps);
   const multi = [...byPlayer.values()].filter((list) => new Set(list.map((x) => x.season)).size >= 2);
+  // stats this league's data actually has (the NBA data has no VAL): the others sit out
+  const hasCat = (cat) => pool.some((ps) => { const v = CATS[cat].get(ps); return v !== null && v !== undefined; });
+  const CAT_KEYS = Object.keys(CATS).filter(hasCat);
 
   const SAVE_KEY = "hl:save";
   const saved = ch ? null : store.get(SAVE_KEY);
@@ -50,14 +53,16 @@ export function renderHigherLower(root, signal, params, query) {
   let tick = null;
   signal.addEventListener("abort", () => clearInterval(tick));
 
-  const nextCat = () => (mode === "mixed" ? pick(Object.keys(CATS), rnd) : mode);
+  if (mode !== "mixed" && !CAT_KEYS.includes(mode)) mode = "mixed";
+  const nextCat = () => (mode === "mixed" ? pick(CAT_KEYS, rnd) : mode);
   const valid = (ps, cat) => { const v = CATS[cat].get(ps); return v !== null && v !== undefined; };
 
   function drawOne(cat, avoid) {
-    for (;;) {
+    for (let i = 0; i < 5000; i++) {
       const ps = pick(pool, rnd);
       if (ps.player_id !== avoid?.player_id && valid(ps, cat)) return ps;
     }
+    return pool.find((ps) => ps.player_id !== avoid?.player_id && valid(ps, cat)) || pool[0]; // never hang
   }
   /** Same player, two different seasons (both with a value for the stat). */
   function drawSame(cat) {

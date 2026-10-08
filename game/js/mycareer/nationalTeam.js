@@ -3,7 +3,7 @@
 // years it was (or is scheduled to be) held, otherwise a summer window of qualifiers and friendlies. Teammates are real where the
 // data has them. Team strengths come from the 2026 world ranking (the only ranking in the data), so results are
 // a simulation, and the screens say so. Captaincy and personal national-team records build up over the years.
-import { PLAYED_SEASONS, db, isPlayable, playersById } from "../data.js";
+import { PLAYED_SEASONS, db, isPlayable, playersById } from "../wl.js";
 import { NT_TEAMS, ntForNationality, ntTeam } from "../national.js";
 import { bestOverall, dataSeason, isIsraeliPlayer, statLine } from "./engine.js";
 

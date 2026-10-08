@@ -23,6 +23,8 @@ import { openBoxScore, openLiveGame } from "./draft_live.js";
 import { drawTeamCard, shareOrDownload } from "./draft_card.js";
 import { hasMode } from "../lib/shop.js";
 import { tokens, useToken } from "../lib/wallet.js";
+import { LEAGUE } from "../data.js";
+import { LEAGUES } from "../leagueChoice.js";
 
 const SPINS_PER_TEAM = 2;
 const BUDGET = 75;
@@ -99,7 +101,7 @@ export function renderDraft(root, signal, params, query) {
     })();
     root.innerHTML = html`
       <div class="game-head"><div><a class="back" href="#/">← Home</a><h1>All-Time Draft</h1>
-        <p>Build the best starting five from 2010-11 to 2025-26.</p></div>
+        <p>Build the best starting five from ${LEAGUES[LEAGUE].phrase}, ${PLAYED_SEASONS[0]} to ${PLAYED_SEASONS[PLAYED_SEASONS.length - 1]}.</p></div>
         <button class="btn ghost" id="snd">${icon(sound.on ? "soundOn" : "soundOff")} ${sound.on ? "Sound on" : "Sound off"}</button></div>
       ${savedInfo ? html`<div class="card pad resume-banner">
         <div><b>${icon("pause", { size: 16 })} ${saved.phase === "results" ? "Your last draft" : "Unfinished draft"}</b><div class="muted" style="font-size:13px">${esc(savedInfo)}</div></div>

@@ -1,5 +1,5 @@
 // Watch one of your games live on a top-down court, and the momentum chart (lead over 40 minutes).
-import { seededRng, teamName } from "../data.js";
+import { seededRng, teamName } from "../wl.js";
 import { crestSvg, icon } from "../lib/icons.js";
 import { clubColors } from "../lib/clubs.js";
 import { closeModal, openModal } from "../lib/modal.js";

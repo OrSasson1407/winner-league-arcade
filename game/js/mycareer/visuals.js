@@ -1,6 +1,6 @@
 // My Career graphics: gauges, the skills radar, badge medallions, schedule calendar, standings with
 // movement, playoff bracket and the contract-signing ceremony. Plain SVG/HTML strings.
-import { teamName } from "../data.js";
+import { teamName } from "../wl.js";
 import { crestSvg, icon } from "../lib/icons.js";
 import { esc } from "../ui.js";
 import { ATTRS, BADGES, BADGE_TIERS, ROLE_NAMES, table } from "./engine.js";

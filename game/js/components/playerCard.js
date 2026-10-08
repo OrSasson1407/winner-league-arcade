@@ -24,7 +24,8 @@ const isIsraeli = (p) => p?.nationality === "Israel" || (p?.nationalities || [])
  *  classes: extra classes; badge: small text badge (e.g. cost); attrs: extra HTML attributes.
  */
 export function playerCard(ps, opts = {}) {
-  const { size = "md", hideRating = false, hideStats = false, info = true, classes = "", badge = "", attrs = "" } = opts;
+  // a EuroLeague row's numbers are placeholders: its card shows the player, club and season only
+  const { size = "md", hideRating = !!ps.mock, hideStats = !!ps.mock, info = true, classes = "", badge = "", attrs = "" } = opts;
   const p = playersById.get(ps.player_id);
   const [c1, c2] = clubColors(ps.team_id);
   const rating = ps.rating_mock;
@@ -53,7 +54,8 @@ export function playerCard(ps, opts = {}) {
 
 /** Best season record of a player (highest rating with games), used for profile/hero cards. */
 export function bestSeason(records) {
-  return records.filter((r) => r.stats && r.appeared_in_regular_season).sort((a, b) => b.rating_mock - a.rating_mock || b.stats.games - a.stats.games)[0] || records[records.length - 1];
+  // real numbers first: a EuroLeague placeholder season is only "best" when there's nothing else
+  return records.filter((r) => r.stats && r.appeared_in_regular_season && !r.mock).sort((a, b) => b.rating_mock - a.rating_mock || b.stats.games - a.stats.games)[0] || records[records.length - 1];
 }
 
 /** Player name that opens the profile when clicked. */

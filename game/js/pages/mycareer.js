@@ -2,7 +2,7 @@
 // in the Winner League against the real teams of each season.
 import { skeletonHtml, undoToast } from "../lib/ux.js";
 import { fmtHeight, fmtMoney } from "../lib/units.js";
-import { PLAYED_SEASONS, db, playersById, teamName } from "../data.js";
+import { PLAYED_SEASONS, db, playersById, teamName } from "../wl.js";
 import { countUp, esc, fmt1, html, store, toast } from "../ui.js";
 import { crestSvg, icon } from "../lib/icons.js";
 import { avatarHtml, getMe } from "../lib/me.js";
@@ -866,7 +866,7 @@ export async function renderMyCareer(root, signal) {
 
   // ---------------------------------------------------------------- career & legacy
   function recordRank(cat, mine) {
-    const list = leaders(cat, {}, 5000);
+    const list = leaders(cat, {}, 5000, { player_seasons: db.player_seasons, players: playersById }); // the Winner League's records, whatever league is chosen
     const rank = list.filter((r) => r.value > mine).length + 1;
     return { rank, top: list[0] };
   }

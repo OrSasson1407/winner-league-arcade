@@ -118,7 +118,7 @@ export function renderCareer(root, signal, params, query) {
           <h3>The journey</h3>
           <div class="path">${s.records.map((r, i) => html`
             <div class="stop" style="--club:${clubColors(r.team_id)[0]};animation-delay:${i * 0.07}s"><span class="season">${r.season}</span><span class="team">${esc(teamName(r.team_id))}</span>
-              <span class="line">${r.stats ? `${r.stats.games} GP · ${fmt1(r.stats.ppg)} PPG` : "no games"}${r.age ? ` · age ${r.age}` : ""}</span></div>`).join("")}
+              <span class="line">${r.mock ? (r.league === "el" ? "EuroLeague" : "") : r.stats ? `${r.stats.games} GP · ${fmt1(r.stats.ppg)} PPG` : "no games"}${r.age && !target._mockBio ? ` · age ${r.age}` : ""}</span></div>`).join("")}
           </div>
         </div>
         <div class="card pad" style="display:grid;gap:16px;align-content:start">
@@ -130,10 +130,10 @@ export function renderCareer(root, signal, params, query) {
           }).join("")}</div>
           <div class="hint-box">
             ${state.hint || state.answered ? html`
-              ${posPill(target.primary_position)}
+              ${target._mockBio ? `<span class="pill">${s.stints.length} clubs</span><span class="pill">${s.seasonsPlayed} seasons</span><span class="pill">first season ${esc(s.firstSeason)}</span>` : html`${posPill(target.primary_position)}
               ${target.height_cm ? `<span class="pill">${fmtHeight(target.height_cm)}</span>` : ""}
               ${target.nationality ? `<span class="pill">${esc(target.nationality)}</span>` : ""}
-              ${target.birth_date ? `<span class="pill">born ${target.birth_date.slice(0, 4)}</span>` : ""}`
+              ${target.birth_date ? `<span class="pill">born ${target.birth_date.slice(0, 4)}</span>` : ""}`}`
               : `<button class="btn" id="hint">${icon("bulb", { size: 16 })} ${!ch && tokens("hint") > 0 ? `Free hint (${tokens("hint")} left)` : "Hint (−1 point)"}</button>`}
           </div>
           ${state.answered ? html`<div class="answer-card pop">${playerCard(bestSeason(s.records), { size: "sm" })}

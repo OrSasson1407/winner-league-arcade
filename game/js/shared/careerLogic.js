@@ -6,7 +6,8 @@ export function eligible() {
   return namedPlayers.filter((p) => {
     const s = careerSummary(p.player_id);
     const playedTeams = new Set(s.played.map((r) => r.team_id));
-    return s.played.length >= 3 && playedTeams.size >= 2 && s.totalGames >= 40;
+    const long = s.totalGames >= 40 || (s.played.every((r) => r.mock) && s.played.length >= 4); // EuroLeague: no real games counts
+    return s.played.length >= 3 && playedTeams.size >= 2 && long;
   });
 }
 

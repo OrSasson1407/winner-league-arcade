@@ -8,6 +8,7 @@ import { icon } from "./icons.js";
 import { applyClubTheme } from "./clubTheme.js";
 import { db } from "../data.js";
 import { installRowHtml, onInstallChange, promptInstall } from "./install.js";
+import { LEAGUES, LEAGUE_IDS, activeLeague, setLeague } from "../leagueChoice.js";
 
 const DEFAULTS = { theme: "dark", cb: false, size: "md", motion: "system", club: "", contrast: "system", lang: "en" };
 
@@ -54,6 +55,7 @@ export function initSettingsButton(btn) {
     pop.innerHTML = `
       <div class="row"><h3>Settings</h3><span class="spacer"></span><button class="icon-btn" data-close aria-label="Close settings">${icon("close", { size: 18 })}</button></div>
       <div class="field"><label>Language · שפה</label><div data-no-tr>${seg("lang", Object.entries(LANGS), s.lang)}</div></div>
+      <div class="field"><label>League <small class="muted">(games and pages; My Career stays in the Winner League)</small></label>${seg("league", LEAGUE_IDS.map((l) => [l, LEAGUES[l].short]), activeLeague())}</div>
       <div class="field"><label>Theme</label>${seg("theme", [["dark", `${icon("moon", { size: 14 })} Dark`], ["light", `${icon("sun", { size: 14 })} Light`], ["auto", "Auto"]], s.theme)}</div>
       <div class="field"><label for="club-theme">Accent colour</label>
         <div class="club-pick"><span class="club-sw" style="background:var(--accent)"></span>
@@ -101,6 +103,7 @@ export function initSettingsButton(btn) {
       const raw = b.dataset.v;
       const val = raw === "true" ? true : raw === "false" ? false : raw;
       if (key === "notify-online") { (val ? enableOnlineAlerts() : Promise.resolve(disableOnlineAlerts())).then(() => pop && render()); return; }
+      if (key === "league") { if (val !== activeLeague()) setLeague(val); return; } // the whole arcade reloads on the new data
       if (key === "remind") { (val ? enableReminders() : disableReminders()).then(() => pop && render()); return; }
       if (key === "sound") sound.on = val;
       else if (key === "haptics") { haptics.on = val; if (val) navigator.vibrate?.(15); }

@@ -2,8 +2,10 @@
 // plays full seasons against the real teams of each season (real rosters and team strengths), signs
 // contracts, wins awards and is compared with the real records since 2010-11.
 // Seasons after the last season in the data are simulated from the most recent rosters (labelled as such).
-import { H, PLAYED_SEASONS, db, isPlayable, playersById, seededRng, teamName } from "../data.js";
-import { realTeamStrength } from "../games/draft_sim.js";
+import { H, PLAYED_SEASONS, db, isPlayable, playersById, seededRng, teamName } from "../wl.js";
+import { rosterTools } from "../games/draft_sim.js";
+import * as WLD from "../wl.js";
+const { realTeamStrength } = rosterTools(WLD); // My Career is always in the Winner League
 import { elPlayerName, elReady, elRoster, elSeasonFor, elTeams, inElSeason } from "./europe.js";
 import { profile, profileFromSeason, simulateGame } from "../shared/gameSim.js";
 import { applyBody, bodyEffects, ensureDev, findMentor, gameTrainingPoints, moveEffects, newSeasonLog, planInjury, seasonDevelopment, staffCost, trackGame, trainLimit } from "./develop.js";

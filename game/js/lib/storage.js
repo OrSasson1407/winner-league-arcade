@@ -1,3 +1,4 @@
+import { activeLeague } from "../leagueChoice.js";
 // Saved data. Small things (settings, records) live in localStorage; big saves (a career, a draft in
 // progress, long logs) live in IndexedDB, which has far more room than localStorage's ~5 MB. A full
 // localStorage also falls back to IndexedDB instead of silently dropping the save.
@@ -79,14 +80,21 @@ function keepSafe() {
   navigator.storage?.persisted?.().then((yes) => { if (!yes) navigator.storage.persist?.().catch(() => {}); }).catch(() => {});
 }
 
+// Each league keeps its own game progress, records and daily results (Winner League keys stay as they were).
+const LEAGUE_NOW = activeLeague();
+const SCOPED = /^(career:|draft:|hl:|guess:|conn:|grid:|matchup|daily:)/;
+const scoped = (key) => (LEAGUE_NOW !== "wl" && SCOPED.test(key) ? `${key}@${LEAGUE_NOW}` : key);
+
 export const store = {
   get(key, fallback = null) {
+    key = scoped(key);
     const s = mem.has(key) ? mem.get(key) : lsGet(key);
     if (s === null || s === undefined) return fallback;
     try { return JSON.parse(s); } catch { return fallback; }
   },
   /** Returns false if the value couldn't be saved anywhere. */
   set(key, value) {
+    key = scoped(key);
     let s;
     try { s = JSON.stringify(value) ?? "null"; } catch { return false; }
     if (idb && (BIG.has(key) || s.length > BIG_CHARS)) return toDb(key, s);
@@ -98,6 +106,7 @@ export const store = {
     }
   },
   remove(key) {
+    key = scoped(key);
     lsDel(key);
     if (mem.delete(key)) { del(key); chan?.postMessage({ k: key }); }
   },

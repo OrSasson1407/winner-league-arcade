@@ -3,7 +3,7 @@
 // Rosters come from FIBA's public 2025 roster reports. There are no statistics, and the player ratings in the
 // source file are placeholders, so the app never shows them as facts.
 import { nationalIndex as IX } from "../data/national_index.js";
-import { playersById } from "./data.js";
+import { playersById } from "./wl.js"; // national-team links point at Winner League players
 
 export const NT_RANKING_DATE = IX.ranking_date;
 export const NT_NOTE = "National-team rosters come from FIBA's public roster reports for 2025 (finals and qualifiers). There are no national-team statistics here.";

@@ -7,23 +7,27 @@ import { H, isPlayable, playersById, seededRng } from "../data.js";
 import { DEFAULT_TACTICS, profileFromSeason, simulateGame } from "../shared/gameSim.js";
 
 
-export function realRoster(season, teamId) {
-  const best = new Map();
-  for (const ps of H.getPlayersByTeam(teamId, season)) {
-    if (!isPlayable(ps, 8)) continue;
-    const cur = best.get(ps.player_id);
-    if (!cur || ps.stats.games > cur.stats.games) best.set(ps.player_id, ps);
+/** Real rosters and team strength over one dataset ({ H, isPlayable }): the chosen league's, or wl.js for My Career. */
+export function rosterTools(D) {
+  function realRoster(season, teamId) {
+    const best = new Map();
+    for (const ps of D.H.getPlayersByTeam(teamId, season)) {
+      if (!D.isPlayable(ps, 8)) continue;
+      const cur = best.get(ps.player_id);
+      if (!cur || ps.stats.games > cur.stats.games) best.set(ps.player_id, ps);
+    }
+    return [...best.values()].sort((a, b) => (b.stats.mpg ?? 0) - (a.stats.mpg ?? 0));
   }
-  return [...best.values()].sort((a, b) => (b.stats.mpg ?? 0) - (a.stats.mpg ?? 0));
+  /** Strength of a real team-season: 80% starting five (top 5 by minutes) + 20% next three. */
+  function realTeamStrength(season, teamId, roster = realRoster(season, teamId)) {
+    if (!roster.length) return 70;
+    const avg = (xs) => xs.reduce((s, x) => s + x.rating_mock, 0) / xs.length;
+    const five = roster.slice(0, 5), bench = roster.slice(5, 8);
+    return bench.length ? 0.8 * avg(five) + 0.2 * avg(bench) : avg(five);
+  }
+  return { realRoster, realTeamStrength };
 }
-
-/** Strength of a real team-season: 80% starting five (top 5 by minutes) + 20% next three. */
-export function realTeamStrength(season, teamId, roster = realRoster(season, teamId)) {
-  if (!roster.length) return 70;
-  const avg = (xs) => xs.reduce((s, x) => s + x.rating_mock, 0) / xs.length;
-  const five = roster.slice(0, 5), bench = roster.slice(5, 8);
-  return bench.length ? 0.8 * avg(five) + 0.2 * avg(bench) : avg(five);
-}
+export const { realRoster, realTeamStrength } = rosterTools({ H, isPlayable });
 
 let gameSeq = 0;
 /** A team for the game engine: its players (real per-game numbers), strength, game plan and minutes plan. */

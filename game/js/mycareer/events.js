@@ -1,6 +1,6 @@
 // My Career: events between games (media, the coach, teammates, the community). Each event offers
 // choices with consequences for coach trust, popularity, money, attributes or injury risk.
-import { teamName } from "../data.js";
+import { teamName } from "../wl.js";
 import { lifestyle } from "./develop.js";
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

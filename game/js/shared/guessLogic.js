@@ -7,15 +7,16 @@ const fmt1 = (v) => (v === null || v === undefined ? "–" : Number(v).toFixed(1
 export function pool(level) {
   return namedPlayers.filter((p) => {
     const s = careerSummary(p.player_id);
-    if (!p.height_cm || !p.birth_date || !p.primary_position) return false;
+    if (!p.height_cm || !p.birth_date || !p.primary_position || p._mockBio) return false; // real personal details only
     if (level === "easy") return s.seasonsPlayed >= 3 && s.bestRating >= 88 && s.totalGames >= 80;
     return s.seasonsPlayed >= 2 && s.totalGames >= 50;
   });
 }
 
 function careerPPG(s) {
-  const games = s.played.reduce((a, r) => a + r.stats.games, 0);
-  return games ? s.played.reduce((a, r) => a + (r.stats.ppg ?? 0) * r.stats.games, 0) / games : null;
+  const real = s.played.filter((r) => !r.mock); // the EuroLeague's numbers aren't real
+  const games = real.reduce((a, r) => a + r.stats.games, 0);
+  return games ? real.reduce((a, r) => a + (r.stats.ppg ?? 0) * r.stats.games, 0) / games : null;
 }
 
 export function attrs(p) {

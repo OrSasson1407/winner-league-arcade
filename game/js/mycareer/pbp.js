@@ -1,7 +1,7 @@
 // Play-by-play for one of your games, rebuilt deterministically from what the engine already decided:
 // the quarter scores, your stat line and the game's seed. Used by the live view and the momentum chart.
 // Court units: 10 per metre on a 28 x 15 m floor (0..280 x 0..150). Your team attacks the right basket.
-import { seededRng } from "../data.js";
+import { seededRng } from "../wl.js";
 
 export const COURT = { w: 280, h: 150, hoopR: [264.25, 75], hoopL: [15.75, 75] };
 export const QUARTER = 600; // seconds

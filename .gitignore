@@ -4,3 +4,6 @@ game/tools/ui_strings.json
 
 # logos set aside for a check (not published)
 game/crests/_review/
+
+# raw NBA build sources: pages saved from other sites and another project's keys (never publish)
+game/data/_nba_build/

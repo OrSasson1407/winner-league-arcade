@@ -4,8 +4,10 @@
 import { localDate, store, toast } from "../ui.js";
 import { parseCode } from "./challenge.js";
 import { emit } from "./achievements.js";
+import { LEAGUE_LETTER, activeLeague, gameAvailable } from "../leagueChoice.js";
 
-export const DAILY_GAMES = {
+// the chosen league's daily: games that can't run on its data (the EuroLeague's stats aren't real) sit out
+const ALL_DAILY = {
   draft: { letter: "D", name: "All-Time Draft", ic: "trophy", route: "draft", rules: "Same spins for everyone today." },
   guess: { letter: "G", name: "Guess the Player", ic: "search", route: "guess", rules: "Today's mystery player (Daily mode)." },
   hl: { letter: "H", name: "Higher or Lower", ic: "chart", route: "higher-lower", rules: "Same pairs in the same order for everyone." },
@@ -13,18 +15,19 @@ export const DAILY_GAMES = {
   connections: { letter: "N", name: "Connections", ic: "link", route: "connections", rules: "Today's 16 players, four groups.", own: true },
   grid: { letter: "R", name: "The Grid", ic: "games", route: "grid", rules: "Today's 3×3 board.", own: true },
 };
+export const DAILY_GAMES = Object.fromEntries(Object.entries(ALL_DAILY).filter(([, g]) => gameAvailable(g.route)));
 export const DAILY_COUNT = Object.keys(DAILY_GAMES).length;
-const BY_LETTER = Object.fromEntries(Object.entries(DAILY_GAMES).map(([k, g]) => [g.letter, k]));
+const BY_LETTER = Object.fromEntries(Object.entries(ALL_DAILY).map(([k, g]) => [g.letter, k]));
 
 function seed6(text) {
   let h1 = 2166136261, h2 = 52711;
   for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 ^ c, 2246822519) >>> 0; }
   return ((h1 % 46656) * 46656 + (h2 % 46656)).toString(36).toUpperCase().padStart(6, "0").slice(-6);
 }
-export const dailyCode = (gameKey, date = localDate()) => `WLA-${DAILY_GAMES[gameKey].letter}${seed6(`daily-${date}-${gameKey}`)}`;
+export const dailyCode = (gameKey, date = localDate()) => `WLA-${ALL_DAILY[gameKey].letter}${seed6(`daily-${date}-${gameKey}`)}${LEAGUE_LETTER[activeLeague()] ? `-${LEAGUE_LETTER[activeLeague()]}` : ""}`;
 export function dailyLink(gameKey) {
   // games with their own Daily mode link to it; the others use a date-based challenge code
-  return gameKey === "guess" || DAILY_GAMES[gameKey].own ? `#/${DAILY_GAMES[gameKey].route}?mode=daily` : `#/${DAILY_GAMES[gameKey].route}?challenge=${dailyCode(gameKey)}`;
+  return gameKey === "guess" || ALL_DAILY[gameKey].own ? `#/${ALL_DAILY[gameKey].route}?mode=daily` : `#/${ALL_DAILY[gameKey].route}?challenge=${dailyCode(gameKey)}`;
 }
 /** If this challenge code is today's daily, which game it is. */
 export function dailyGameOf(code) {

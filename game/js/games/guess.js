@@ -14,6 +14,8 @@ import { shot } from "../lib/shot.js";
 import { markDaily } from "../lib/daily.js";
 import { challengeBanner, challengeShareText, recordChallenge } from "../pages/challenge.js";
 import { tokens, useToken } from "../lib/wallet.js";
+import { LEAGUE, PLAYED_SEASONS } from "../data.js";
+import { LEAGUES } from "../leagueChoice.js";
 
 const MAX_GUESSES = 8;
 const STATS_KEY = "guess:stats";
@@ -214,7 +216,7 @@ export function renderGuess(root, signal, params, query) {
     const left = allowed() - state.guesses.length;
     root.innerHTML = html`${ch ? challengeBanner(ch) : ""}
       <div class="game-head"><div><a class="back" href="#/">← Home</a><h1>Guess the Player</h1>
-        <p>A mystery Winner League player (2010-11 to 2026-27). ${MAX_GUESSES} tries; hints cost one each.</p></div>
+        <p>A mystery player from ${LEAGUES[LEAGUE].phrase} (${PLAYED_SEASONS[0]} to ${PLAYED_SEASONS[PLAYED_SEASONS.length - 1]}). ${MAX_GUESSES} tries; hints cost one each.</p></div>
         <div class="row" ${ch ? "hidden" : ""}>
           <div class="seg" id="mode"><button data-m="daily" class="${mode === "daily" ? "on" : ""}">Daily</button><button data-m="free" class="${mode === "free" ? "on" : ""}">Unlimited</button></div>
           <div class="seg" id="level"><button data-l="easy" class="${level === "easy" ? "on" : ""}">Stars</button><button data-l="normal" class="${level === "normal" ? "on" : ""}">All players</button></div>
@@ -237,7 +239,7 @@ export function renderGuess(root, signal, params, query) {
         ${hintsHtml()}
         <div class="legend"><span><i style="background:var(--good)"></i>Match</span><span><i style="background:var(--close)"></i>Close (height ±4 cm, born ±2, jersey ±2, PPG ±2, peak ±3, ±1 club or season, adjacent position, shared nationality, played for that team)</span><span>↑ ↓ the answer is higher / lower</span></div>
         <div class="grid-wrap"><table class="gtable wide"><thead><tr><th><span class="sr-only">Player</span></th>${COLS.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>
-        <p class="muted" style="font-size:12px;margin:0">*First season in the database (it starts in 2010-11). Jersey = most-worn number. Peak = best game rating in one season.</p>
+        <p class="muted" style="font-size:12px;margin:0">*First season in the database (it starts in ${PLAYED_SEASONS[0]}). Jersey = most-worn number. Peak = best game rating in one season.</p>
       </div>`;
     root.querySelector("#mode").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { mode = b.dataset.m; start(); } }, { signal });
     root.querySelector("#level").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { level = b.dataset.l; start(); } }, { signal });

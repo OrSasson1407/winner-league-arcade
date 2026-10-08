@@ -1,5 +1,5 @@
 // "Share career card": a 1080×1350 broadcast-style image of a My Career player, made on a canvas.
-import { teamName } from "../data.js";
+import { teamName } from "../wl.js";
 import { clubColors } from "../lib/clubs.js";
 
 const NAVY = "#061532", NAVY2 = "#0e2552", RED = "#e4002b", GOLD = "#ffc629";
