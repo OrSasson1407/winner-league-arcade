@@ -4041,4 +4041,6 @@ export const HE = {
   "Your best three, then the three you know least.": "שלוש הטובות שלך, ואז שלוש שאתה מכיר הכי פחות.",
   "My stats": "הסטטיסטיקה שלי",
   "Season pass": "כרטיס עונה",
+  "(high: glow and floor reflections; ultra: WebGPU, reflections and soft shadows everywhere)": "(גבוהה: זוהר והשתקפויות ברצפה; אולטרה: WebGPU, השתקפויות והצללות רכות בכל מקום)",
+  "Ultra": "אולטרה",
 };

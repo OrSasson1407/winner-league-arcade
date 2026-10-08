@@ -1,24 +1,46 @@
 // 3D stages for My Career (the locker room, the trophy cabinet, the signing, the court). Three.js loads
-// only when a 3D view opens (game/vendor/three.min.js, about 190 KB compressed). Without WebGL, or with
-// 3D turned off, every screen keeps its 2D version. The loop renders only while the view is on screen
+// only when a 3D view opens (game/vendor/three/, about 200 KB compressed). Without WebGL, or with
+// 3D turned off, every screen keeps its 2D version. Ultra quality renders with WebGPU (about 110 KB more):
+// ambient occlusion, reflections in every glossy surface, temporal anti-aliasing and bloom; without WebGPU
+// it falls back to High. The loop renders only while the view is on screen
 // and the tab is visible; with reduced motion nothing moves on its own (dragging still turns the view).
 import { store } from "../ui.js";
 import { reducedMotion } from "../lib/settings.js";
 
-let threeP = null, addonsP = null;
-export const loadThree = () => (threeP ||= import("../../vendor/three.min.js"));
-/** Loaders, post-processing and the reflective floor (game/vendor/three-addons.min.js). */
-export const loadAddons = () => (addonsP ||= import("../../vendor/three-addons.min.js"));
+let threeP = null, addonsP = null, gpuP = null, gpuAddonsP = null;
+export const loadThree = () => (threeP ||= import("../../vendor/three/three.js"));
+/** Loaders, post-processing and the reflective floor (game/vendor/three/addons.js). */
+export const loadAddons = () => (addonsP ||= import("../../vendor/three/addons.js"));
+/** The WebGPU renderer and TSL (Ultra), and Ultra's effects. Same core classes as loadThree(). */
+const loadGPU = () => (gpuP ||= import("../../vendor/three/webgpu.js"));
+const loadGPUAddons = () => (gpuAddonsP ||= import("../../vendor/three/addons-gpu.js"));
 
 /**
- * Picture quality: "high" (glow, reflections, soft shadows), "medium" (shadows), "low" (simple light).
- * Auto: phones and small machines get medium; the player can choose in Settings.
+ * Picture quality: "ultra" (WebGPU: ambient occlusion, reflections everywhere, temporal anti-aliasing),
+ * "high" (glow, mirror floors, soft shadows), "medium" (shadows), "low" (simple light).
+ * Auto: phones and small machines get medium, computers with a graphics card and WebGPU get ultra;
+ * the player can choose in Settings.
  */
 export function quality() {
   const q = store.get("3d:quality", "auto");
+  if (q === "ultra" && !gpuWorks()) return "high";
   if (q !== "auto") return q;
   const coarse = matchMedia?.("(pointer: coarse)").matches;
-  return coarse || (navigator.hardwareConcurrency || 4) <= 4 || integratedGpu() ? "medium" : "high";
+  if (coarse || (navigator.hardwareConcurrency || 4) <= 4 || integratedGpu()) return "medium";
+  return gpuWorks() ? "ultra" : "high";
+}
+/** WebGPU is there (and didn't fail to start earlier in this visit). */
+let gpuFailed = false;
+export const gpuWorks = () => !gpuFailed && typeof navigator !== "undefined" && "gpu" in navigator;
+/** A started WebGPU renderer, or null (no adapter, or it fell back to WebGL: then High is better). */
+async function gpuRenderer() {
+  try {
+    const W = await loadGPU();
+    const r = new W.WebGPURenderer({ antialias: false, alpha: true, powerPreference: "high-performance" });
+    await r.init();
+    if (!r.backend?.isWebGPUBackend) { r.dispose(); gpuFailed = true; return null; }
+    return { W, renderer: r };
+  } catch (e) { console.warn("WebGPU:", e); gpuFailed = true; return null; }
 }
 let gpuGuess = null;
 /** Built-in graphics (Intel, phones): they get medium quality on auto. */
@@ -51,13 +73,15 @@ export const set3D = (on) => store.set("mc:3d", !!on);
  * Returns { T, scene, camera, renderer, pivot, onFrame(fn(t, dt)), render(), dispose() }.
  */
 export async function stage(container, opts = {}) {
-  const T = await loadThree();
   const { signal, fov = 35, camera: cam = [0, 1.6, 6], target = [0, 1, 0], drag = true, label = "", bloom = 0.22, exposure = 0.9 } = opts;
-  if (signal?.aborted) return null;
-  const Q = quality();
+  let Q = quality();
+  const gpu = Q === "ultra" ? await gpuRenderer() : null;
+  if (Q === "ultra" && !gpu) Q = "high";
+  const T = gpu ? gpu.W : await loadThree();
+  if (signal?.aborted) { gpu?.renderer.dispose(); return null; }
   const shadows = !!opts.shadows && Q !== "low";
-  const renderer = new T.WebGLRenderer({ antialias: Q !== "high", alpha: true, powerPreference: Q === "high" ? "high-performance" : "low-power" });
-  let pr = Math.min(devicePixelRatio || 1, Q === "high" ? 2 : Q === "medium" ? 1.25 : 1);
+  const renderer = gpu ? gpu.renderer : new T.WebGLRenderer({ antialias: Q !== "high", alpha: true, powerPreference: Q === "high" ? "high-performance" : "low-power" });
+  let pr = Math.min(devicePixelRatio || 1, Q === "ultra" || Q === "high" ? 2 : Q === "medium" ? 1.25 : 1);
   renderer.setPixelRatio(pr);
   renderer.outputColorSpace = T.SRGBColorSpace;
   renderer.toneMapping = T.ACESFilmicToneMapping; // film-like colour: bright lights roll off instead of clipping
@@ -74,9 +98,9 @@ export async function stage(container, opts = {}) {
   const A = await loadAddons();
   if (signal?.aborted) { renderer.dispose(); return null; }
   const pmrem = new T.PMREMGenerator(renderer);
-  const envRT = pmrem.fromScene(new A.RoomEnvironment(), 0.04);
+  const envRT = pmrem.fromScene(gpu ? arenaEnvironment(T) : new A.RoomEnvironment(), 0.04);
   scene.environment = envRT.texture;
-  scene.environmentIntensity = 0.55;
+  scene.environmentIntensity = gpu ? 0.7 : 0.55;
   pmrem.dispose();
   const camera = new T.PerspectiveCamera(fov, 1, 0.05, 200);
   camera.position.set(...cam);
@@ -85,8 +109,9 @@ export async function stage(container, opts = {}) {
   scene.add(pivot);
 
   // glow around the brightest parts (lights, metal, white lines): high quality only
-  let composer = null;
-  if (Q === "high" && bloom > 0) {
+  let composer = null, pipeline = null;
+  if (gpu) pipeline = await ultraPipeline(T, renderer, scene, camera, bloom);
+  else if (Q === "high" && bloom > 0) {
     composer = new A.EffectComposer(renderer);
     composer.addPass(new A.RenderPass(scene, camera));
     composer.addPass(new A.UnrealBloomPass(new T.Vector2(256, 256), bloom, 0.4, 1.15));
@@ -106,7 +131,7 @@ export async function stage(container, opts = {}) {
   const frames = [];
   const still = reducedMotion();
   let raf = 0, last = 0, t0 = 0, visible = true, alive = true;
-  const render = () => (composer ? composer.render() : renderer.render(scene, camera));
+  const render = () => (pipeline ? pipeline.render() : composer ? composer.render() : renderer.render(scene, camera));
   // adaptive resolution: if frames get slow, render fewer pixels (a sharp picture isn't worth a stutter)
   let fpsT = 0, fpsN = 0;
   const adapt = (dtRaw) => {
@@ -160,12 +185,13 @@ export async function stage(container, opts = {}) {
     });
     envRT.dispose();
     composer?.dispose?.();
+    pipeline?.dispose?.();
     renderer.dispose();
     canvas.remove();
   };
   signal?.addEventListener("abort", dispose);
   kick();
-  return { T, A, Q, scene, camera, renderer, pivot, canvas, onFrame: (f) => { frames.push(f); kick(); }, render, kick, dispose, still };
+  return { T, A, Q, gpu: !!gpu, pipeline, scene, camera, renderer, pivot, canvas, onFrame: (f) => { frames.push(f); kick(); }, render, kick, dispose, still };
 }
 
 /** Soft studio light: a sky/ground fill, a key light (with shadows if asked) and a rim light. */
@@ -173,7 +199,7 @@ export function studioLights(T, scene, { shadows = false, warm = "#fff4e6", rim 
   scene.add(new T.HemisphereLight("#ffffff", "#3a3f4a", 0.45));
   const key = new T.DirectionalLight(warm, 2.4);
   key.position.set(3, 6, 4);
-  if (shadows) { key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.camera.near = 1; key.shadow.camera.far = 20; key.shadow.camera.left = key.shadow.camera.bottom = -4; key.shadow.camera.right = key.shadow.camera.top = 4; key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02; key.shadow.radius = 4; }
+  if (shadows) { key.castShadow = true; key.shadow.mapSize.setScalar(T.WebGPURenderer ? 4096 : 2048); key.shadow.camera.near = 1; key.shadow.camera.far = 20; key.shadow.camera.left = key.shadow.camera.bottom = -4; key.shadow.camera.right = key.shadow.camera.top = 4; key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02; key.shadow.radius = 4; }
   scene.add(key);
   const back = new T.DirectionalLight(rim, 1.2);
   back.position.set(-4, 3, -5);
@@ -243,6 +269,21 @@ export function drawWood(g, w, h, planks = 16, base = [201, 143, 85]) {
 export function polishedFloor(S, { size = [8, 8], map, roughness = 0.32, mirror = 0.22, reflect = true } = {}) {
   const { T, A, Q, scene } = S;
   const g = new T.Group();
+  if (S.gpu) { // ultra: a WebGPU mirror (soft, from its blurred mip levels) under lit boards; glossy surfaces get screen-space reflections too
+    const P = T.TSL;
+    const R = P.reflector({ resolutionScale: 0.5, generateMipmaps: true, bounces: false });
+    R.target.rotateX(-Math.PI / 2);
+    g.add(R.target);
+    const mat = new T.MeshStandardNodeMaterial({ map, roughness, metalness: 0 });
+    mat.color.setScalar(1 - mirror * 0.8);
+    mat.emissiveNode = R.bias(1.2).rgb.mul(mirror * (reflect ? 1.15 : 0.7));
+    const top = new T.Mesh(new T.PlaneGeometry(...size), mat);
+    top.rotation.x = -Math.PI / 2;
+    top.receiveShadow = true;
+    g.add(top);
+    scene.add(g);
+    return g;
+  }
   const real = Q === "high" && reflect; // a real mirror renders the scene twice: not on a crowded court
   const top = new T.Mesh(new T.PlaneGeometry(...size), new T.MeshStandardMaterial({ map, roughness, metalness: 0, transparent: real, opacity: real ? 1 - mirror : 1 }));
   top.rotation.x = -Math.PI / 2;
@@ -256,4 +297,65 @@ export function polishedFloor(S, { size = [8, 8], map, roughness = 0.32, mirror 
   }
   scene.add(g);
   return g;
+}
+
+/**
+ * Ultra's picture (WebGPU, TSL): a pre-pass for depth, normals, velocity and how glossy each pixel is; ambient
+ * occlusion (GTAO, half resolution) darkening only the ambient light in the creases; screen-space reflections
+ * in every glossy surface (the polished floor, metal, trophies); bloom; temporal anti-aliasing for clean edges.
+ */
+async function ultraPipeline(T, renderer, scene, camera, bloomStrength) {
+  const P = T.TSL, G = await loadGPUAddons();
+  const pipe = new T.RenderPipeline(renderer);
+  const pre = P.pass(scene, camera);
+  pre.transparent = false;
+  pre.setMRT(P.mrt({ output: P.packNormalToRGB(P.normalView), metalrough: P.vec2(P.metalness, P.roughness), velocity: P.velocity }));
+  pre.getTexture("output").type = T.UnsignedByteType;
+  pre.getTexture("metalrough").type = T.UnsignedByteType;
+  const preNormal = pre.getTextureNode(), depth = pre.getTextureNode("depth"), vel = pre.getTextureNode("velocity"), mr = pre.getTextureNode("metalrough");
+  const normal = P.sample((uv) => P.unpackRGBToNormal(preNormal.sample(uv)));
+  const aoPass = G.ao(depth, normal, camera);
+  aoPass.resolutionScale = 0.5;
+  const beauty = P.pass(scene, camera);
+  beauty.contextNode = P.builtinAOContext(aoPass.getTextureNode().sample(P.screenUV).r);
+  const color = beauty.getTextureNode("output");
+  const refl = G.ssr(color, depth, normal, { metalnessNode: mr.r, roughnessNode: mr.g, reflectNonMetals: true, camera });
+  refl.intensity.value = 0.9;
+  refl.thickness.value = 0.02;
+  refl.maxDistance.value = 6;
+  let out = color.add(refl.rgb);
+  if (bloomStrength > 0) out = out.add(G.bloom(out, bloomStrength, 0.4, 1.0));
+  pipe.outputNode = G.traa(out, depth, vel, camera);
+  pipe.nodes = { color, refl, aoPass, out, depth, vel, normal, mr }; // for tuning in the console
+  return pipe;
+}
+
+/**
+ * An indoor arena for reflections and soft light (built in code, no files): a dark hall, rows of bright light
+ * panels across the roof, warm boards along the sides and a glow from the court below.
+ */
+function arenaEnvironment(T) {
+  const env = new T.Scene();
+  const hall = new T.Mesh(new T.BoxGeometry(40, 16, 40), new T.MeshBasicMaterial({ color: "#1a1d24", side: T.BackSide }));
+  hall.position.y = 6;
+  env.add(hall);
+  const glow = (color, k) => new T.MeshBasicMaterial({ color: new T.Color(color).multiplyScalar(k) });
+  const panel = new T.BoxGeometry(1, 1, 1);
+  for (let i = -2; i <= 2; i++) for (let j = -1; j <= 1; j++) { // the roof lights
+    const m = new T.Mesh(panel, glow("#fff6e8", 14));
+    m.scale.set(4.5, 0.2, 1.2); m.position.set(i * 6.5, 13.6, j * 7);
+    env.add(m);
+  }
+  for (const side of [-1, 1]) { // ribbon boards along the stands
+    const b = new T.Mesh(panel, glow("#ff9a4a", 2.2));
+    b.scale.set(30, 0.8, 0.2); b.position.set(0, 4.5, side * 19.5);
+    env.add(b);
+    const w = new T.Mesh(panel, glow("#cfe2ff", 3));
+    w.scale.set(0.2, 4, 14); w.position.set(side * 19.5, 7, 0);
+    env.add(w);
+  }
+  const floor = new T.Mesh(new T.PlaneGeometry(26, 15), glow("#c98f55", 0.6));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -1.9;
+  env.add(floor);
+  return env;
 }

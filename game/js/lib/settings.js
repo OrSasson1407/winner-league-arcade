@@ -66,7 +66,7 @@ export function initSettingsButton(btn) {
       <div class="field"><label>Text size</label>${seg("size", [["sm", "S"], ["md", "M"], ["lg", "L"], ["xl", "XL"]], s.size)}</div>
       <div class="field"><label>Animations</label>${seg("motion", [["system", "System"], ["full", "Full"], ["reduced", "Reduced"]], s.motion)}</div>
       ${webglOk() ? `<div class="field"><label>3D views <small class="muted">(My Career and the live court)</small></label>${seg("3d", [[true, "On"], [false, "Off"]], want3D())}</div>
-      <div class="field"><label>3D quality <small class="muted">(high: glow and floor reflections)</small></label>${seg("3dq", [["auto", "Auto"], ["low", "Low"], ["medium", "Medium"], ["high", "High"]], store.get("3d:quality", "auto"))}</div>` : ""}
+      <div class="field"><label>3D quality <small class="muted">(high: glow and floor reflections; ultra: WebGPU, reflections and soft shadows everywhere)</small></label>${seg("3dq", [["auto", "Auto"], ["low", "Low"], ["medium", "Medium"], ["high", "High"], ["ultra", "Ultra"]], store.get("3d:quality", "auto"))}</div>` : ""}
       <div class="field"><label>Sound</label>${seg("sound", [[true, `${icon("soundOn", { size: 14 })} On`], [false, `${icon("soundOff", { size: 14 })} Off`]], sound.on)}</div>
       ${canVibrate() ? `<div class="field"><label>Vibration</label>${seg("haptics", [[true, "On"], [false, "Off"]], haptics.on)}</div>` : ""}
       <div class="field"><label>Height</label>${seg("u-height", [["m", "Metres"], ["ft", "Feet & inches"]], getUnits().height)}</div>

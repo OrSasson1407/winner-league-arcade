@@ -1,10 +1,18 @@
-// Bundles three.js for the browser: game/vendor/three.min.js (the core) and game/vendor/three-addons.min.js
-// (loaders, post-processing...; it imports the core from ./three.min.js so the core is downloaded once).
+// Bundles three.js for the browser into game/vendor/three/: three.js (the WebGL renderer), webgpu.js (the
+// WebGPU renderer and TSL, for Ultra quality), addons.js (loaders, post-processing, the mirror floor) and
+// addons-gpu.js (Ultra's effects). Code splitting puts the shared three.js core in one chunk, so it is
+// downloaded once and both renderers use the same classes.
 import { build } from "esbuild";
+import { rmSync } from "node:fs";
 
-await build({ entryPoints: ["node_modules/three/build/three.module.js"], bundle: true, minify: true, format: "esm", outfile: "game/vendor/three.min.js", logLevel: "warning" });
+rmSync("game/vendor/three", { recursive: true, force: true });
 await build({
-  entryPoints: ["game/tools/three_addons_entry.js"], bundle: true, minify: true, format: "esm", outfile: "game/vendor/three-addons.min.js", logLevel: "warning",
-  plugins: [{ name: "three-core", setup(b) { b.onResolve({ filter: /^three$/ }, () => ({ path: "./three.min.js", external: true })); } }],
+  entryPoints: {
+    three: "node_modules/three/build/three.module.js",
+    webgpu: "game/tools/three_webgpu_entry.js",
+    addons: "game/tools/three_addons_entry.js",
+    "addons-gpu": "game/tools/three_addons_gpu_entry.js",
+  },
+  bundle: true, splitting: true, minify: true, format: "esm", outdir: "game/vendor/three", chunkNames: "core-[hash]", logLevel: "warning",
 });
 console.log("three.js bundled");

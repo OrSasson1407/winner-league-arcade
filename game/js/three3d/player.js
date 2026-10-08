@@ -122,6 +122,7 @@ const DETAIL_GLSL = `
 
 /** The body's material: area colours with the club's design, over the model's texture detail. */
 function areaMaterial(T, base, colors, design, mapLum) {
+  if (T.TSL) return areaNodeMaterial(T, base, colors, design, mapLum);
   const m = new T.MeshStandardMaterial({ color: "#ffffff", map: base.map, normalMap: base.normalMap, roughness: 0.62, metalness: 0.02 });
   m.userData.colors = colors.map((c) => new T.Color(c));
   m.onBeforeCompile = (sh) => {
@@ -139,6 +140,7 @@ function areaMaterial(T, base, colors, design, mapLum) {
 }
 /** Hair and eyebrows: the avatar's hair colour over the hair texture's detail. */
 function hairMaterial(T, base, color, mapLum) {
+  if (T.TSL) return hairNodeMaterial(T, base, color, mapLum);
   const m = new T.MeshStandardMaterial({ color, map: base.map, normalMap: base.normalMap, roughness: 0.75, metalness: 0 });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.mapLum = { value: mapLum };
@@ -146,6 +148,36 @@ function hairMaterial(T, base, color, mapLum) {
       .replace("#include <map_fragment>", "#ifdef USE_MAP\n  diffuseColor.rgb *= clamp( dot( texture2D( map, vMapUv ).rgb, vec3( 0.2126, 0.7152, 0.0722 ) ) / mapLum, 0.35, 1.8 );\n#endif");
   };
   m.customProgramCacheKey = () => "hair-v1";
+  return m;
+}
+
+// The same two materials for the WebGPU renderer (Ultra), written in TSL: the same areas, designs and detail.
+function areaNodeMaterial(T, base, colors, design, mapLum) {
+  const { attribute, uniformArray, texture, uv, vec3, vec4, float, int, fract, abs, mix, clamp, dot, select } = T.TSL;
+  const m = new T.MeshStandardNodeMaterial({ normalMap: base.normalMap, roughness: 0.62, metalness: 0.02 });
+  const cols = uniformArray(colors.map((c) => new T.Color(c)), "color");
+  m.userData.colors = cols.array;
+  const area = attribute("area", "float"), rest = attribute("rest", "vec3");
+  const a = int(area.add(0.5)), x = rest.x, y = rest.y;
+  const trim = vec3(cols.element(int(2))), isJ = a.equal(1), isS = a.equal(3);
+  let c = vec3(cols.element(a));
+  // the club's design: jersey (area 1) and the shorts' hem (area 3)
+  if (design === 1) c = select(isJ.and(y.greaterThan(0.655)).and(y.lessThan(0.695)).or(isS.and(y.lessThan(0.345))), trim, c);
+  else if (design === 2) c = select(isJ.and(abs(x.sub(y.sub(0.6).mul(1.1)).add(0.02)).lessThan(0.022)).or(isS.and(y.lessThan(0.345))), trim, c);
+  else if (design === 3) c = select(isJ.or(isS).and(fract(x.mul(48)).lessThan(0.14)), mix(c, trim, 0.75), c);
+  else if (design === 4) c = select(isJ.and(y.greaterThan(0.735)), trim, c);
+  if (base.map) { // the model's own texture as detail: full on skin, faint on the uniform
+    const lum = dot(texture(base.map, uv()).rgb, vec3(0.2126, 0.7152, 0.0722)).div(mapLum);
+    c = c.mul(mix(float(1), clamp(lum, 0.6, 1.25), select(a.equal(0), float(1), float(0.25))));
+  }
+  m.colorNode = vec4(c, 1);
+  return m;
+}
+function hairNodeMaterial(T, base, color, mapLum) {
+  const { texture, uv, vec3, vec4, clamp, dot, color: col } = T.TSL;
+  const m = new T.MeshStandardNodeMaterial({ normalMap: base.normalMap, roughness: 0.75, metalness: 0 });
+  const tint = col(new T.Color(color));
+  m.colorNode = base.map ? vec4(tint.mul(clamp(dot(texture(base.map, uv()).rgb, vec3(0.2126, 0.7152, 0.0722)).div(mapLum), 0.35, 1.8)), 1) : vec4(tint, 1);
   return m;
 }
 

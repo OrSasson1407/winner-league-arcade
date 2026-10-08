@@ -194,8 +194,11 @@ export async function signingScene(el, { av, name, num, height, weight, colors =
     const c = document.createElement("canvas"); c.width = 1024; c.height = 512;
     const g = c.getContext("2d");
     g.fillStyle = c1; g.fillRect(0, 0, 1024, 512);
-    g.font = "800 46px 'Saira Condensed', 'Arial Narrow', Arial, sans-serif"; g.fillStyle = c2; g.globalAlpha = 0.85; g.textAlign = "center";
-    for (let y = 0; y < 6; y++) for (let x = 0; x < 3; x++) g.fillText(club.toUpperCase().slice(0, 18), 170 + x * 340 + (y % 2) * 170, 70 + y * 85);
+    const txt = club.toUpperCase().slice(0, 22);
+    g.font = "800 46px 'Saira Condensed', 'Arial Narrow', Arial, sans-serif";
+    const fs = Math.max(22, Math.min(46, Math.floor(46 * 300 / Math.max(1, g.measureText(txt).width)))); // a long name gets smaller, so the names don't run into each other
+    g.font = `800 ${fs}px 'Saira Condensed', 'Arial Narrow', Arial, sans-serif`; g.fillStyle = c2; g.globalAlpha = 0.85; g.textAlign = "center";
+    for (let y = 0; y < 6; y++) for (let x = -1; x < 4; x++) g.fillText(txt, 170 + x * 340 + (y % 2) * 170, 70 + y * 85);
     const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t;
   })();
   const wall = new T.Mesh(new T.PlaneGeometry(7, 3.5), new T.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
