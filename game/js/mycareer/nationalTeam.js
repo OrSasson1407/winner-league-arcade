@@ -5,7 +5,9 @@
 // a simulation, and the screens say so. Captaincy and personal national-team records build up over the years.
 import { PLAYED_SEASONS, db, isPlayable, playersById } from "../wl.js";
 import { NT_TEAMS, ntForNationality, ntTeam } from "../national.js";
-import { bestOverall, dataSeason, isIsraeliPlayer, statLine } from "./engine.js";
+import { bestOverall, dataSeason, isIsraeliPlayer, meSnapshot, statLine } from "./engine.js";
+import { profile, simulateGame } from "../shared/gameSim.js";
+import { seededRng } from "../wl.js";
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 /** The overall you need for a call-up: higher for the stronger national teams. */
@@ -107,6 +109,12 @@ export function playNationalSummer(C, call, rnd = Math.random) {
       }
     }
   }
+  return closeSummer(C, call, ev, games, finish);
+}
+
+/** Close a national-team summer: the record, caps, personal bests, medals, captaincy and the log. */
+function closeSummer(C, call, ev, games, finish) {
+  const me = ntTeam(call.team);
   const played = games.filter((g) => !g.line.dnp);
   const sum = (k) => played.reduce((s, g) => s + g.line[k], 0);
   const summer = { year: call.year, team: call.team, role: call.role, event: ev.name, kind: ev.kind, finish, captain: !!call.captain, games,
@@ -132,4 +140,111 @@ export function declineCallup(C, call) {
   (C.national ||= { team: call.team, caps: 0, pts: 0, reb: 0, ast: 0, summers: [] }).summers.push({ year: call.year, team: call.team, declined: true, event: call.event?.name });
   C.pop = clamp((C.pop || 0) - 2, 0, 100);
   C.log.unshift({ t: "national", text: `Turned down the ${ntTeam(call.team).name} call-up for summer ${call.year}.` });
+}
+
+// ---------------------------------------------------------------- a championship, game by game
+// A continental championship is played like the league: one game at a time through the game engine, with the
+// live view and a box score. The same rules as the simulated summer: a group of five (three wins go through),
+// knockout rounds against stronger teams each round, and a bronze-medal game after a semi-final loss.
+// There are no national-team statistics in the data, so players' numbers are estimates from the team's strength
+// and their position; names are real where the data has them (the 2025 rosters, Israel's league players).
+const NT_POS = ["PG", "SG", "SF", "PF", "C", "PG", "SG", "SF", "PF", "C"];
+const POS_OF = { G: "SG", F: "SF", PG: "PG", SG: "SG", SF: "SF", PF: "PF", C: "C" };
+/** Names (and positions) for a national team: the 2025 roster when the data has it. */
+function rosterNames(N, teamId, year) {
+  if (!N || year < 2025) return [];
+  return N.roster(teamId).slice(0, 12).map((r) => ({ name: N.name(r.p?.player_id), pos: POS_OF[r.pos] || "", num: r.jersey }));
+}
+/** Ten players for the game engine: estimated per-game numbers from the team's strength and each spot. */
+function ntPlayers(teamId, label, names, strength) {
+  const k = strength / 90;
+  return NT_POS.map((pos, i) => {
+    const n = names[i];
+    const mpg = [30, 29, 28, 27, 25, 16, 14, 12, 10, 9][i];
+    const f = mpg / 28;
+    return profile({ id: `${teamId}-${i}`, name: n?.name || `${label} #${[4, 5, 7, 8, 9, 10, 11, 12, 13, 14][i]}`, pos: n?.pos || pos,
+      rating: Math.round(strength + [4, 3, 2, 1, 0, -3, -4, -5, -6, -7][i]), mpg,
+      ppg: [15, 13, 12, 11, 10, 7, 6, 5, 4, 3][i] * k, rpg: { PG: 3, SG: 3.5, SF: 5, PF: 7, C: 8 }[pos] * f, apg: { PG: 6, SG: 3, SF: 2.5, PF: 1.8, C: 1.5 }[pos] * f,
+      spg: 0.8 * f, bpg: (pos === "C" ? 1.2 : pos === "PF" ? 0.8 : 0.3) * f, fg: 46, fg3: 35, ft: 75 });
+  });
+}
+
+/** Start a championship summer (the call-up was accepted). N: the national-teams data (names), or null. */
+export function startTournament(C, call, N) {
+  const me = ntTeam(call.team), ev = call.event || summerEvent(me.zone, call.year);
+  const rnd = seededRng(`nt-${C.seedBase}-${call.year}`);
+  const zone = NT_TEAMS.filter((t) => t.id !== me.id && t.zone === me.zone);
+  const near = zone.slice().sort((a, b) => Math.abs(a.rank - me.rank) - Math.abs(b.rank - me.rank));
+  const group = near.slice(0, 9).sort(() => rnd() - 0.5).slice(0, 5).map((t) => t.id);
+  const boost = clamp((bestOverall(C) - call.line) * 0.12, 0, 2.5) * { starter: 1, rotation: 0.5, bench: 0.2 }[call.role] + (call.captain ? 0.3 : 0);
+  // names: your teammates (without you) and the opponents
+  const mates = teammates(C, call, N).names.filter((n) => n !== C.name).map((name) => ({ name }));
+  const names = { [me.id]: mates.length ? mates : rosterNames(N, me.id, call.year) };
+  for (const t of zone) names[t.id] = rosterNames(N, t.id, call.year);
+  C.ntCur = { call, ev, group, games: [], stage: "group", ko: 0, used: [...group], boost, names, finish: null };
+  return C.ntCur;
+}
+
+/** The next game of the tournament: { opp, stage } or null when it's over. */
+export function ntNext(C) {
+  const T = C.ntCur;
+  if (!T || T.finish) return null;
+  if (T.stage === "group") return { opp: T.group[T.games.length], stage: "Group stage", n: T.games.length + 1, of: T.group.length };
+  if (T.stage === "bronze") return { opp: T.next, stage: "Bronze-medal game" };
+  return { opp: T.next, stage: T.ev.rounds[T.ko] };
+}
+
+/** The game itself through the engine (deterministic from the stored game, so it replays the same). */
+export function ntSim(T, myName, g, events = true) {
+  const me = ntTeam(T.call.team), op = ntTeam(g.opp);
+  const ms = strengthOf(me.rank) + T.boost, os = strengthOf(op.rank);
+  const mates = ntPlayers(me.id, me.name, T.names[me.id] || [], ms).slice(0, 8);
+  const meP = profile({ id: "me", name: myName, me: true, ...g.me });
+  const rest = mates.reduce((a, p) => a + p.mpg, 0) || 1;
+  const mine = { name: me.name, id: me.id, strength: ms, players: [meP, ...mates], minutes: { me: g.me.target, ...Object.fromEntries(mates.map((p) => [p.id, (p.mpg * (200 - g.me.target)) / rest])) } };
+  const theirs = { name: op.name, id: op.id, strength: os, players: ntPlayers(op.id, op.name, T.names[op.id] || [], os) };
+  return simulateGame(mine, theirs, { rnd: seededRng("nt-g-" + g.seed), neutral: true, events });
+}
+
+/** Play the next game. Returns { g, done, summary (when the tournament is over) }. */
+export function playNtGame(C) {
+  const T = C.ntCur, nx = ntNext(C);
+  if (!nx) return null;
+  const rnd = seededRng(`nt-${C.seedBase}-${T.call.year}-${T.games.length}`);
+  const g = { opp: nx.opp, stage: nx.stage, seed: Math.floor(rnd() * 1e9), me: meSnapshot(C, T.call.role, true, rnd) };
+  const r = ntSim(T, C.name, g, false);
+  const b = r.box[0].find((l) => l.id === "me");
+  g.my = r.score[0]; g.their = r.score[1]; g.won = g.my > g.their; g.ot = r.ot;
+  g.line = !b || b.min === 0 ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, dnp: true }
+    : { min: b.min, pts: b.pts, reb: b.reb, ast: b.ast, stl: b.stl, blk: b.blk, fgm: b.fgm, fga: b.fga, tpm: b.tpm, tpa: b.tpa, ftm: b.ftm, fta: b.fta, pf: b.pf, tov: b.tov };
+  T.games.push(g);
+  // what's next: the same rules as the simulated summer
+  const zone = NT_TEAMS.filter((t) => t.id !== T.call.team && t.zone === ntTeam(T.call.team).zone);
+  const pickKo = (i) => { // early rounds against the weaker teams left, the final against one of the best
+    const pool = zone.filter((t) => !T.used.includes(t.id)).sort((a, b) => a.rank - b.rank);
+    if (!pool.length) return zone[0].id;
+    const at = Math.round((pool.length - 1) * (1 - (i + 1) / T.ev.rounds.length) + rnd() * 2);
+    const o = pool[clamp(at, 0, pool.length - 1)];
+    T.used.push(o.id);
+    return o.id;
+  };
+  if (T.stage === "group") {
+    if (T.games.length === T.group.length) {
+      if (T.games.filter((x) => x.won).length < 3) T.finish = "Out in the group stage";
+      else { T.stage = "ko"; T.ko = 0; T.next = pickKo(0); }
+    }
+  } else if (T.stage === "bronze") T.finish = g.won ? "Bronze medal" : "Fourth place";
+  else {
+    const round = T.ev.rounds[T.ko];
+    if (!g.won) {
+      if (round === "Final") T.finish = "Silver medal";
+      else if (round === "Semi-final") { T.stage = "bronze"; const pool = zone.filter((t) => !T.used.includes(t.id)); T.next = (pool[Math.floor(rnd() * Math.min(4, pool.length))] || zone[0]).id; T.used.push(T.next); }
+      else T.finish = `Out in the ${round.toLowerCase()}`;
+    } else if (round === "Final") T.finish = "Gold medal";
+    else { T.ko++; T.next = pickKo(T.ko); }
+  }
+  if (!T.finish) return { g, done: false, T };
+  const summary = closeSummer(C, T.call, T.ev, T.games.map(({ me, ...x }) => x), T.finish);
+  C.ntCur = null;
+  return { g, done: true, summary, T };
 }

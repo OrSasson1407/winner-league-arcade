@@ -138,7 +138,7 @@ export function openGameView(opts) {
 
   function showLive() {
     const ev = (sim.events || []).filter((e) => ["2", "3", "ft", "miss", "tov", "timeout", "period", "period-end"].includes(e.type));
-    const [h1, h2] = clubColors(home.id || "x"), [a1, a2] = clubColors(away.id || "y");
+    const [h1, h2] = home.colors || clubColors(home.id || "x"), [a1, a2] = away.colors || clubColors(away.id || "y"); // colors: e.g. a national team's flag
     d.innerHTML = top() + html`
       <div class="lv-board-top">
         <div class="lv-team">${crest(home, 30)}<span>${esc(home.name)}</span><b class="led" id="gv-s0">0</b></div>

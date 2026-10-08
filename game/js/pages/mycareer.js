@@ -14,7 +14,7 @@ import { announce } from "../lib/a11y.js";
 import { clubColors } from "../lib/clubs.js";
 import { leaders } from "./records.js";
 import * as E from "../mycareer/engine.js";
-import { declineCallup, nationalCallup, playNationalSummer, teammates } from "../mycareer/nationalTeam.js";
+import { declineCallup, nationalCallup, ntNext, ntSim, playNationalSummer, playNtGame, startTournament, teammates } from "../mycareer/nationalTeam.js";
 import { loadNational, ntTeam } from "../national.js";
 import { ntBadge } from "./national.js";
 import { maybeEvent, resolveEvent } from "../mycareer/events.js";
@@ -114,6 +114,7 @@ export async function renderMyCareer(root, signal) {
   function draw() {
     clubTheme();
     if (!C) return drawCreate();
+    if (C.ntCur) return drawNational(); // a championship in progress, game by game
     if (C.phase === "academy") return drawAcademy();
     if (C.phase === "turnpro" || (C.phase === "offseason" && (!C.contract || C.contract.left <= 0))) return drawOffers();
     if (C.phase === "offseason") return drawOffseason();
@@ -194,7 +195,7 @@ export async function renderMyCareer(root, signal) {
     const nx = S ? nextOpp() : null;
     const chips = [
       S ? `<div class="hub-chip"><small>${esc(S.label)}</small><b>${rec.w}-${rec.l}</b><span>#${rank} in the ${S.league === "el" ? "EuroLeague" : S.league === "nba" ? "NBA" : "league"}</span></div>` : "",
-      nx && nx.opp ? `<div class="hub-chip"><small>Next game</small><span class="hub-opp">${crestSvg(nx.opp, teamName(nx.opp), 22)} ${nx.home === false ? "at" : "vs"} ${esc(teamName(nx.opp))}</span></div>` : "",
+      nx && nx.opp ? `<div class="hub-chip"><small>${nx.eu ? "Next game · EuroLeague" : "Next game"}</small><span class="hub-opp">${crestSvg(nx.opp, teamName(nx.opp), 22)} ${nx.home === false ? "at" : "vs"} ${esc(teamName(nx.opp))}</span></div>` : "",
       C.contract ? `<div class="hub-chip"><small>Contract</small><b>${money(C.contract.salary)}</b><span>${C.contract.left} season${C.contract.left === 1 ? "" : "s"} left</span></div>` : "",
       `<div class="hub-chip"><small>Bank</small><b>${money(C.money)}</b><span>${icon("bolt", { size: 12 })} ${C.tp} training points</span></div>`,
     ].filter(Boolean).join("");
@@ -717,6 +718,7 @@ export async function renderMyCareer(root, signal) {
   // ---------------------------------------------------------------- season
   function nextOpp() {
     const S = C.cur;
+    if (S.phase === "regular" && E.nextEuro(S)) return E.nextEuro(S); // a EuroLeague game comes first
     if (S.phase === "regular") {
       const g = S.schedule[S.round]?.find(([h, a]) => h === S.team || a === S.team);
       return g ? { opp: g[0] === S.team ? g[1] : g[0], home: g[0] === S.team, label: `Round ${S.round + 1} of ${S.schedule.length}` } : { bye: true, label: `Round ${S.round + 1}: no game (bye)` };
@@ -917,10 +919,88 @@ export async function renderMyCareer(root, signal) {
       <div class="mc-choices"><button class="btn primary" data-nt="go">${icon("flag", { size: 15 })} Join the national team</button>
         <button class="btn" data-nt="no">Rest this summer instead</button></div>
       <p class="muted" style="font-size:12px;margin:8px 0 0">Joining: popularity, and a development boost next summer, but more minutes on your legs. Saying no costs some popularity.</p></div>`;
-    d.querySelector('[data-nt="go"]').addEventListener("click", () => { const r = playNationalSummer(C, call); save(); sound.play(r.w >= r.l ? "win" : "place"); emit("mc:national", { caps: C.national.caps }); draw(); showNationalResults(r); });
+    d.querySelector('[data-nt="go"]').addEventListener("click", () => {
+      if (call.event?.kind === "championship") { startTournament(C, call, N); save(); closeModal(d); sound.play("win"); afterBack(() => draw()); return; }
+      const r = playNationalSummer(C, call); save(); sound.play(r.w >= r.l ? "win" : "place"); emit("mc:national", { caps: C.national.caps }); draw(); showNationalResults(r);
+    });
     d.querySelector('[data-nt="no"]').addEventListener("click", () => { declineCallup(C, call); save(); closeModal(d); toast("You stayed home this summer"); draw(); });
     openModal(d);
     d.querySelector('[data-nt="go"]').focus();
+  }
+  /** A national team's kit colours: the two main colours of its flag (cached). */
+  const flagCache = new Map();
+  function flagColors(t) {
+    if (!t.iso) return Promise.resolve(clubColors(t.id));
+    if (flagCache.has(t.iso)) return flagCache.get(t.iso);
+    const p = new Promise((res) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const c = document.createElement("canvas"); c.width = 48; c.height = 32;
+          const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(img, 0, 0, 48, 32);
+          const d = g.getImageData(0, 0, 48, 32).data, count = new Map();
+          for (let i = 0; i < d.length; i += 4) { const k = [d[i], d[i + 1], d[i + 2]].map((v) => Math.round(v / 32) * 32).join(","); count.set(k, (count.get(k) || 0) + 1); }
+          const top = [...count.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k.split(",").map(Number));
+          const far = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) > 120;
+          const first = top[0], second = top.find((x) => far(x, first)) || [255, 255, 255];
+          const hex = (x) => "#" + x.map((v) => Math.min(255, v).toString(16).padStart(2, "0")).join("");
+          res([hex(first), hex(second)]);
+        } catch { res(clubColors(t.id)); }
+      };
+      img.onerror = () => res(clubColors(t.id));
+      img.src = `flags/${t.iso}.svg`;
+    });
+    flagCache.set(t.iso, p);
+    return p;
+  }
+  /** A championship with the national team, game by game (like the league). */
+  function drawNational() {
+    const T = C.ntCur, t = ntTeam(T.call.team), nx = ntNext(C), o = nx ? ntTeam(nx.opp) : null;
+    const w = T.games.filter((g) => g.won).length, l = T.games.length - w;
+    root.innerHTML = html`${header()}
+      <div class="mc-grid">
+        <div class="card pad mc-next nt-tourney">
+          <small class="muted">NATIONAL TEAM · SUMMER ${T.call.year}</small>
+          <h2 class="nt-title">${ntBadge(t, 40)} ${esc(t.name)} · ${esc(T.ev.name)}</h2>
+          <p class="muted">${T.stage === "group" ? "Group stage: three wins in five games go through." : T.stage === "bronze" ? "The bronze-medal game." : "Knockout: lose and you're out."} <span>${w}-${l} so far.</span></p>
+          ${nx ? html`<small class="muted">${esc(nx.stage)}${nx.n ? ` · game ${nx.n} of ${nx.of}` : ""}</small>
+            <div class="mc-vs">${ntBadge(t, 40)}<b>${esc(t.name)}</b><span class="muted">vs</span><b>${esc(o.name)}</b>${ntBadge(o, 40)}</div>
+            <div class="row" style="justify-content:center;flex-wrap:wrap">
+              <button class="btn primary big-btn" id="nt-play">${icon("play", { size: 16 })} Play the game</button>
+              <button class="btn" id="nt-sim">${icon("skip", { size: 15 })} Simulate the rest</button>
+              <label class="mc-live-tg"><input type="checkbox" id="nt-live" ${liveOn() ? "checked" : ""}> Watch games live</label>
+            </div>` : ""}
+          <p class="muted" style="font-size:12px"><span>There are no national-team statistics in the data: players' numbers in these games are estimates from each team's strength (the 2026 FIBA world ranking) and their position. Names are real where the data has them.</span></p>
+        </div>
+        <div class="card pad"><h3>${icon("calendar")} Games</h3>
+          ${T.games.length ? html`<div class="grid-wrap"><table class="stat-table"><thead><tr><th>Stage</th><th>Opponent</th><th>Score</th><th>Min</th><th>Pts</th><th>Reb</th><th>Ast</th></tr></thead>
+            <tbody>${T.games.map((g) => { const ot = ntTeam(g.opp); return `<tr><td><small>${esc(g.stage)}</small></td><td><span class="nt-team">${ntBadge(ot, 22)} ${esc(ot.name)}</span></td><td><b class="${g.won ? "good-text" : "bad-text"}">${g.won ? "W" : "L"}</b> ${g.my}-${g.their}</td>${g.line.dnp ? `<td colspan="4" class="muted">Did not play</td>` : `<td>${g.line.min}</td><td>${g.line.pts}</td><td>${g.line.reb}</td><td>${g.line.ast}</td>`}</tr>`; }).join("")}</tbody></table></div>`
+            : `<p class="muted">The tournament starts with the group stage: five games.</p>`}
+        </div>
+      </div>`;
+    const done = (r) => {
+      sound.play(/Gold|Silver|Bronze/.test(r.summary.finish || "") ? "victory" : r.summary.w >= r.summary.l ? "win" : "place");
+      if (/Gold/.test(r.summary.finish || "")) confetti(4000);
+      emit("mc:national", { caps: C.national.caps });
+      save(); draw(); showNationalResults(r.summary);
+    };
+    root.querySelector("#nt-live")?.addEventListener("change", (e) => store.set("mc:live", e.target.checked), { signal });
+    root.querySelector("#nt-play")?.addEventListener("click", async () => {
+      const r = playNtGame(C);
+      if (!r) return;
+      save();
+      const after = () => (r.done ? done(r) : drawNational());
+      if (!liveOn()) { toast(`${r.g.won ? "Win" : "Loss"} ${r.g.my}-${r.g.their} · ${r.g.line.pts} pts`); return after(); }
+      const ot = ntTeam(r.g.opp);
+      const [mc, oc] = await Promise.all([flagColors(t), flagColors(ot)]);
+      openGameView({ home: { name: t.name, color: mc[0], colors: mc }, away: { name: ot.name, color: oc[0], colors: oc }, sim: ntSim(r.T, C.name, r.g, true),
+        label: `${T.ev.name} · ${r.g.stage}`, start: "live", meId: "me", celebrate: r.g.won ? 0 : null, onClose: () => afterBack(after) });
+    }, { signal });
+    root.querySelector("#nt-sim")?.addEventListener("click", () => {
+      let r = null, guard = 0;
+      while (C.ntCur && guard++ < 20) r = playNtGame(C);
+      if (r?.done) done(r); else drawNational();
+    }, { signal });
   }
   function showNationalResults(r) {
     const t = ntTeam(r.team);
@@ -980,7 +1060,7 @@ export async function renderMyCareer(root, signal) {
     root.querySelector("#mc-rest")?.addEventListener("click", () => { play(() => E.playRound(C, { rest: true })); toast("You sat this one out: fresher legs for the next few games"); }, { signal });
     root.querySelector("#mc-live")?.addEventListener("change", (e) => store.set("mc:live", e.target.checked), { signal });
     bindMomentum(root.querySelector(".mc-led .mc-momentum"), lastGame, signal);
-    root.querySelector("#mc-sim")?.addEventListener("click", () => play(() => { const all = { games: [] }; let guard = 0; while (C.cur.phase === "regular" && guard++ < 60) { const o = E.playRound(C); all.games.push(...o.games); if (o.cup) all.cup = o.cup; if (o.allStar) all.allStar = o.allStar; if (C.injury?.pending) E.treatInjury(C, false); } return all; }), { signal });
+    root.querySelector("#mc-sim")?.addEventListener("click", () => play(() => { const all = { games: [] }; let guard = 0; while (C.cur.phase === "regular" && guard++ < 120) { const o = E.playRound(C); all.games.push(...o.games); if (o.cup) all.cup = o.cup; if (o.allStar) all.allStar = o.allStar; if (C.injury?.pending) E.treatInjury(C, false); } return all; }), { signal });
     root.querySelector("#mc-po")?.addEventListener("click", () => play(() => ({ games: E.playPlayoffDay(C) }), { live: true }), { signal });
     root.querySelector("#mc-finish")?.addEventListener("click", () => { E.simPlayoffs(C); finishSeason(); }, { signal });
     root.querySelector("#mc-box")?.addEventListener("click", () => openBox(lastGame), { signal });

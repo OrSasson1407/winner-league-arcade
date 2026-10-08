@@ -298,7 +298,7 @@ function playScore(home, away, rnd, neutral = false) {
 }
 
 /** Your player for the game engine: per-36 numbers from your attributes and badges (the same formulas as the season lines). */
-function meSnapshot(C, role, big, rnd) {
+export function meSnapshot(C, role, big, rnd) {
   const a = effective(C), mv = moveEffects(C);
   const offense = (a.sht + a.thr + a.fin) / 3 + (C.arch === "scorer" ? 4 : 0);
   const chem = (C.chem?.[C.cur?.team] || 0) / 100;
@@ -458,12 +458,34 @@ function euroCampaign(label, team, myStrength, rnd) {
   const rr = roundRobin(teams.map((t) => t.id), rnd);
   return { season: elSeasonFor(label), teams, schedule: rr.slice(0, rr.length / 2), round: 0, standings: Object.fromEntries(teams.map((t) => [t.id, { w: 0, l: 0, pf: 0, pa: 0 }])), f4: null, champion: null };
 }
+/** A EuroLeague game (or the Final Four) is due before the next league round. */
+export function euroDue(S) {
+  const el = S?.el;
+  if (!el || el.f4) return false;
+  const due = S.round >= S.schedule.length ? el.schedule.length : Math.floor((S.round * el.schedule.length) / S.schedule.length);
+  return el.round < due || (S.round >= S.schedule.length && el.round >= el.schedule.length);
+}
+/** The next EuroLeague fixture for the season screen: { opp, home, label, eu } or { bye, label, eu } (null: none due). */
+export function nextEuro(S) {
+  if (!euroDue(S)) return null;
+  const el = S.el;
+  if (el.round < el.schedule.length) {
+    const g = el.schedule[el.round].find(([h, a]) => h === S.team || a === S.team);
+    return g ? { opp: g[0] === S.team ? g[1] : g[0], home: g[0] === S.team, label: `EuroLeague round ${el.round + 1} of ${el.schedule.length}`, eu: true }
+      : { bye: true, label: `EuroLeague round ${el.round + 1}: no game`, eu: true };
+  }
+  const top = el.ff?.teams || euroTable(el).slice(0, 4).map((t) => t.id);
+  if (!top.includes(S.team)) return { bye: true, label: "EuroLeague Final Four (without you)", eu: true };
+  if (!el.ff) { const i = top.indexOf(S.team); return { opp: top[3 - i], home: false, neutral: true, label: "EuroLeague Final Four semi-final", eu: true }; }
+  if (el.ff.final.includes(S.team)) return { opp: el.ff.final.find((x) => x !== S.team), home: false, neutral: true, label: "EuroLeague Final Four final", eu: true };
+  return { bye: true, label: "EuroLeague Final Four final (without you)", eu: true };
+}
 export const euroTable = (el) => Object.entries(el.standings).map(([id, r]) => ({ id, name: teamName(id), ...r, diff: r.pf - r.pa })).sort((a, b) => b.w - a.w || b.diff - a.diff);
-function playEuroRound(C, rnd, out) {
+function playEuroRound(C, rnd, out, rest = false) {
   const S = C.cur, el = S.el;
   for (const [h, a] of el.schedule[el.round]) {
     if (h === S.team || a === S.team) {
-      const g = playGame(C, S, h === S.team ? a : h, h === S.team, rnd, { teams: el.teams, eu: true, big: true, label: `EuroLeague round ${el.round + 1}` });
+      const g = playGame(C, S, h === S.team ? a : h, h === S.team, rnd, { teams: el.teams, eu: true, big: true, rest: rest && canRest(C), label: `EuroLeague round ${el.round + 1} of ${el.schedule.length}` });
       S.games.push({ ...g, round: S.round });
       out.games.push(g);
       record(el, h, a, g.home ? g.my : g.their, g.home ? g.their : g.my);
@@ -476,10 +498,13 @@ function playEuroRound(C, rnd, out) {
   }
   el.round++;
 }
-/** EuroLeague Final Four: the top four, one-game semi-finals and final on neutral ground. */
+/**
+ * EuroLeague Final Four: the top four, one-game semi-finals and final on neutral ground, played in two steps
+ * (the semi-finals, then the final) when you're in it, so you play each game; in one go when you're not.
+ */
 function euroFinalFour(C, rnd, out) {
   const S = C.cur, el = S.el;
-  const top = euroTable(el).slice(0, 4).map((t) => t.id);
+  const top = el.ff?.teams || euroTable(el).slice(0, 4).map((t) => t.id);
   const one = (a, b, stage) => {
     if (a === S.team || b === S.team) {
       const g = playGame(C, S, a === S.team ? b : a, true, rnd, { teams: el.teams, eu: true, neutral: true, big: true, label: `EuroLeague Final Four ${stage}` });
@@ -492,7 +517,12 @@ function euroFinalFour(C, rnd, out) {
     const [x, y] = playScore({ s: A.strength }, { s: B.strength }, rnd, true);
     return x > y ? a : b;
   };
-  const f1 = one(top[0], top[3], "semi-final"), f2 = one(top[1], top[2], "semi-final");
+  if (!el.ff) { // the semi-finals
+    const f1 = one(top[0], top[3], "semi-final"), f2 = one(top[1], top[2], "semi-final");
+    el.ff = { teams: top, final: [f1, f2] };
+    if ([f1, f2].includes(S.team)) return; // you're in the final: it's the next game
+  }
+  const [f1, f2] = el.ff.final;
   const champ = one(f1, f2, "final");
   el.f4 = { teams: top, final: [f1, f2], champion: champ };
   el.champion = champ;
@@ -509,9 +539,17 @@ export const canRest = (C) => !!C.cur && C.cur.phase === "regular" && !C.injury 
 /** Advance one round of the regular season. Returns what happened (your game, cup game, all-star…). rest: you sit this one out. */
 export function playRound(C, { rest = false } = {}) {
   const S = C.cur;
-  const rnd = seededRng(`mc-${C.seedBase}-${S.label}-r${S.round}`);
   const rounds = S.schedule;
   const out = { games: [] };
+  // a EuroLeague game (or the Final Four) due before this league round: it's the next game
+  if (euroDue(S)) {
+    const rnd = seededRng(`mc-${C.seedBase}-${S.label}-eu${S.el.round}-${S.el.ff ? "f" : "s"}`);
+    if (S.el.round < S.el.schedule.length) playEuroRound(C, rnd, out, rest);
+    else euroFinalFour(C, rnd, out);
+    if (S.round >= rounds.length && !euroDue(S)) { S.phase = "playoffs"; S.playoffs = seedPlayoffs(S); }
+    return out;
+  }
+  const rnd = seededRng(`mc-${C.seedBase}-${S.label}-r${S.round}`);
   for (const [h, a] of rounds[S.round]) {
     if (h === S.team || a === S.team) {
       const g = playGame(C, S, h === S.team ? a : h, h === S.team, rnd, { label: `Round ${S.round + 1}`, rest: rest && canRest(C), gleague: onAssignment(C, S) });
@@ -528,12 +566,8 @@ export function playRound(C, { rest = false } = {}) {
   S.round++;
   S.prevRanks = S.ranks || null;
   S.ranks = table(S).map((t) => t.id);
-  // EuroLeague rounds are spread over the league season; the Final Four comes when the league's regular season ends
-  if (S.el && !S.el.f4) {
-    const due = S.round >= rounds.length ? S.el.schedule.length : Math.floor((S.round * S.el.schedule.length) / rounds.length);
-    while (S.el.round < due) playEuroRound(C, rnd, out);
-    if (S.round >= rounds.length) euroFinalFour(C, rnd, out);
-  }
+  // EuroLeague games are spread over the league season (their own fixtures, see euroDue); the Final Four comes
+  // when the league's regular season ends, and the league playoffs start after it
   out.coach = maybeFireCoach(C, rnd);
   // State Cup rounds
   const cupRounds = CUP_AT(rounds.length);
@@ -541,7 +575,7 @@ export function playRound(C, { rest = false } = {}) {
   if (ci >= 0 && S.cup.round === ci && !S.cup.none) out.cup = playCupRound(C, rnd);
   // All-Star break at the halfway point (a Winner League event)
   if (S.round === Math.floor(rounds.length / 2) && !S.allStar && S.league !== "el") out.allStar = allStar(C, rnd);
-  if (S.round >= rounds.length) { S.phase = "playoffs"; S.playoffs = seedPlayoffs(S); }
+  if (S.round >= rounds.length && !euroDue(S)) { S.phase = "playoffs"; S.playoffs = seedPlayoffs(S); }
   return out;
 }
 /** Losing teams fire coaches. A new coach re-evaluates everyone: trust moves toward neutral, plus your recent form. */
