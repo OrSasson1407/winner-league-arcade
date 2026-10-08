@@ -85,10 +85,11 @@ export function scheduleGrid(S) {
 // ---------------------------------------------------------------- standings with movement
 export function standings(S) {
   const rows = table(S);
+  const cut = S.league === "nba" ? 16 : 8; // playoff places
   return `<table class="stat-table mc-table2"><thead><tr><th>#</th><th><span class="sr-only">Movement</span></th><th>Team</th><th>W</th><th>L</th><th>+/-</th></tr></thead><tbody>${rows.map((r, i) => {
     const prev = S.prevRanks ? S.prevRanks.indexOf(r.id) : -1;
     const mv = prev < 0 ? 0 : prev - i;
-    return `<tr class="${r.id === S.team ? "me-row" : ""} ${i < 8 ? "po" : ""} ${i === 7 ? "cut" : ""}">
+    return `<tr class="${r.id === S.team ? "me-row" : ""} ${i < cut ? "po" : ""} ${i === cut - 1 ? "cut" : ""}">
       <td>${i + 1}</td><td class="mv ${mv > 0 ? "up" : mv < 0 ? "down" : ""}">${mv > 0 ? `▲${mv}` : mv < 0 ? `▼${-mv}` : "–"}</td>
       <td><span class="tm">${crestSvg(r.id, r.name, 22)} ${esc(r.name)}</span></td><td><b>${r.w}</b></td><td>${r.l}</td><td>${r.diff > 0 ? "+" : ""}${r.diff}</td></tr>`;
   }).join("")}</tbody></table>`;
@@ -101,14 +102,17 @@ export function bracket(S, roundNames = null) {
   const rounds = [...(P.history || [])];
   if (!P.champion && P.series?.length && !(P.history || []).some((r) => r === P.series)) rounds.push(P.series);
   const names = roundNames || ["Quarter-finals", "Semi-finals", "Final"];
+  const first = (P.history?.[0] || P.series || []).length || 4; // series in the first round: 4 (8 teams) or 8 (the NBA's 16)
+  const nRounds = Math.round(Math.log2(first)) + 1;
+  const needOf = (ri) => P.need?.[ri] ?? (S.league === "el" && ri > 0 ? 1 : 2);
   const team = (id, wins, won) => `<div class="bk-team ${id === S.team ? "me" : ""} ${won ? "won" : ""}">${id ? crestSvg(id, teamName(id), 20) : `<i class="bk-tbd" aria-hidden="true"></i>`}<span>${id ? esc(teamName(id)) : "TBD"}</span><b>${wins ?? ""}</b></div>`;
-  return `<div class="mc-bracket" role="group" aria-label="Playoff bracket">${[0, 1, 2].map((ri) => {
+  return `<div class="mc-bracket ${nRounds > 3 ? "wide" : ""}" role="group" aria-label="Playoff bracket">${Array.from({ length: nRounds }, (_, ri) => {
     const r = rounds[ri];
-    const count = [4, 2, 1][ri];
-    return `<div class="bk-col"><small>${names[ri]}</small>${Array.from({ length: count }, (_, j) => {
+    const count = first >> ri, need = needOf(ri);
+    return `<div class="bk-col"><small>${names[ri] ?? ""}</small>${Array.from({ length: count }, (_, j) => {
       const s = r?.[j];
-      const done = s && (s.w[0] >= 2 || s.w[1] >= 2);
-      return `<div class="bk-match">${team(s?.a, s?.w[0], done && s.w[0] >= 2)}${team(s?.b, s?.w[1], done && s.w[1] >= 2)}</div>`;
+      const done = s && (s.w[0] >= need || s.w[1] >= need);
+      return `<div class="bk-match">${team(s?.a, s?.w[0], done && s.w[0] >= need)}${team(s?.b, s?.w[1], done && s.w[1] >= need)}</div>`;
     }).join("")}</div>`;
   }).join("")}<div class="bk-col champ"><small>Champion</small><div class="bk-trophy">${icon("trophy", { size: 34 })}<b>${P.champion ? esc(teamName(P.champion)) : "?"}</b></div></div></div>`;
 }
@@ -124,6 +128,10 @@ export function contractHtml(C, o, money, jerseyAvatar, season) {
         <li><span>Salary</span><b>${money(o.salary)} per season (gross)</b></li>
         <li><span>Role</span><b>${ROLE_NAMES[o.promised || o.role] || o.role}${o.promised ? " (promised)" : ""}</b></li>
         ${o.homeGrown ? `<li><span>Note</span><b>Home-grown player</b></li>` : ""}
+        ${o.rookie ? `<li><span>Draft</span><b>Pick #${o.rookie}</b></li>` : ""}
+        ${o.twoWay ? `<li><span>Type</span><b>Two-way contract</b></li>` : ""}
+        ${o.option ? `<li><span>Last year</span><b>${o.option === "player" ? "Player option" : "Team option"}</b></li>` : ""}
+        ${o.nbaOut ? `<li><span>Clause</span><b>NBA-out</b></li>` : ""}
       </ul>
       <div class="ct-sign"><span class="ct-line"></span><span class="ct-name" aria-label="Signed: ${esc(C.name)}">${esc(C.name)}</span><small>Player's signature</small></div>
     </div>

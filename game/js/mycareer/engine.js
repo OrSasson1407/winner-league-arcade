@@ -338,19 +338,19 @@ export function simFor(C, S, g, events = true) {
   return simulateGame(h, a, { rnd: seededRng("mc-g-" + g.seed), neutral: !!g.neutral, events, quarter: S.league === "nba" ? 720 : 600 });
 }
 /** Play one of your games through the game engine: your line comes from the game itself. */
-export function playGame(C, S, oppId, home, rnd, { neutral = false, big = false, label = "", teams = S.teams, eu = false, rest = false } = {}) {
+export function playGame(C, S, oppId, home, rnd, { neutral = false, big = false, label = "", teams = S.teams, eu = false, rest = false, gleague = false } = {}) {
   const role = C.cur.role;
   const meT = teams.find((t) => t.id === C.cur.team), opp = teams.find((t) => t.id === oppId);
   // a bench player sometimes doesn't get off the bench
   const dnp = !C.injury && role === "bench" && rnd() < 0.25 + Math.max(0, (35 - C.trust) / 100);
   const g = { opp: oppId, home, neutral, label, seed: Math.floor(rnd() * 1e9), sim: 1, st: [meT.strength, opp.strength - badgeLv(C, "lockdown") * 0.2],
-    me: C.injury || dnp || rest ? null : meSnapshot(C, role, big, rnd), ...(eu ? { eu: true } : {}) };
+    me: C.injury || dnp || rest || gleague ? null : meSnapshot(C, role, big, rnd), ...(eu ? { eu: true } : {}) };
   if (g.me && C.fatigue > 0) C.fatigue--;
   const r = simFor(C, S, g, false);
   const mySide = home ? 0 : 1;
   const my = r.score[mySide], their = r.score[1 - mySide];
   const b = r.box[mySide].find((l) => l.id === ME);
-  const line = !g.me ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pf: 0, tov: 0, dnp: true, ...(C.injury ? { injured: true } : rest ? { rested: true } : {}) }
+  const line = !g.me ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pf: 0, tov: 0, dnp: true, ...(C.injury ? { injured: true } : gleague ? { gleague: true } : rest ? { rested: true } : {}) }
     : b.min === 0 ? { min: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pf: 0, tov: 0, dnp: true }
     : { min: b.min, pts: b.pts, reb: b.reb, ast: b.ast, stl: b.stl, blk: b.blk, fgm: b.fgm, fga: b.fga, tpm: b.tpm, tpa: b.tpa, ftm: b.ftm, fta: b.fta, pf: Math.min(5, b.pf), tov: b.tov, pm: b.pm, fouledOut: b.pf >= 5 };
   return { ...g, my, their, won: my > their, line, q: [r.quarters[mySide], r.quarters[1 - mySide]], ot: r.ot };
@@ -503,6 +503,8 @@ function euroFinalFour(C, rnd, out) {
 const CUP_AT = (n) => [Math.floor(n * 0.3), Math.floor(n * 0.55), Math.floor(n * 0.8)];
 
 /** Can you sit out your next league game? (starters and rotation players, healthy, regular season) */
+/** A two-way contract in the NBA: every other game with the team's G League affiliate (not simulated here). */
+export const onAssignment = (C, S) => S.league === "nba" && !!C.contract?.twoWay && S.round % 2 === 1;
 export const canRest = (C) => !!C.cur && C.cur.phase === "regular" && !C.injury && C.cur.role !== "bench";
 /** Advance one round of the regular season. Returns what happened (your game, cup game, all-star…). rest: you sit this one out. */
 export function playRound(C, { rest = false } = {}) {
@@ -512,7 +514,7 @@ export function playRound(C, { rest = false } = {}) {
   const out = { games: [] };
   for (const [h, a] of rounds[S.round]) {
     if (h === S.team || a === S.team) {
-      const g = playGame(C, S, h === S.team ? a : h, h === S.team, rnd, { label: `Round ${S.round + 1}`, rest: rest && canRest(C) });
+      const g = playGame(C, S, h === S.team ? a : h, h === S.team, rnd, { label: `Round ${S.round + 1}`, rest: rest && canRest(C), gleague: onAssignment(C, S) });
       S.games.push({ ...g, round: S.round });
       out.games.push(g);
       record(S, h, a, g.home ? g.my : g.their, g.home ? g.their : g.my);
@@ -588,6 +590,7 @@ function afterGame(C, g) {
     C.trust = clamp(C.trust - 1.5 * n, 0, 100); C.pop = clamp(C.pop - 0.3, 0, 100); C.fresh = 3;
     trackGame(C, l); return;
   }
+  if (l.gleague) { trackGame(C, l); return; } // a two-way assignment: no NBA minutes, no lost trust
   if (l.dnp) { C.trust = clamp(C.trust - 0.5, 0, 100); trackGame(C, l); return; }
   C.chem[C.cur.team] = clamp((C.chem[C.cur.team] || 0) + (l.min / 36) * 1.1, 0, 100);
   const gs = gameScore(l);
@@ -716,26 +719,36 @@ function allStar(C, rnd) {
 }
 
 // ---------------------------------------------------------------- playoffs
+// Series formats: wins needed per round. The Winner League here: best of three. The EuroLeague: best-of-five
+// playoffs, then a one-game Final Four. The NBA: 16 teams, best of seven in every round.
+const PO_FORMAT = { wl: { teams: 8, need: [2, 2, 2] }, el: { teams: 8, need: [3, 1, 1] }, nba: { teams: 16, need: [4, 4, 4, 4] } };
+// bracket order: 1-8, 4-5, 2-7, 3-6 (and 1-16, 8-9, 5-12, 4-13, 2-15, 7-10, 3-14, 6-11 for sixteen)
+const PAIRS = { 8: [[0, 7], [3, 4], [1, 6], [2, 5]], 16: [[0, 15], [7, 8], [4, 11], [3, 12], [1, 14], [6, 9], [2, 13], [5, 10]] };
 function seedPlayoffs(S) {
-  const top = table(S).slice(0, 8).map((t) => t.id);
+  const F = PO_FORMAT[S.league] || PO_FORMAT.wl;
+  const top = table(S).slice(0, F.teams).map((t) => t.id);
   const inIt = top.includes(S.team);
-  return { round: 0, series: [[top[0], top[7]], [top[3], top[4]], [top[1], top[6]], [top[2], top[5]]].map(([a, b]) => ({ a, b, w: [0, 0], games: [] })), champion: null, out: !inIt, outAt: inIt ? null : -1, history: [], seeds: top };
+  return { round: 0, need: F.need, series: PAIRS[F.teams].map(([a, b]) => ({ a: top[a], b: top[b], w: [0, 0], games: [] })), champion: null, out: !inIt, outAt: inIt ? null : -1, history: [], seeds: top };
 }
+/** Wins needed in the current round (older saves: best of three, the Final Four one game). */
+export const poNeed = (S, round = S.playoffs.round) => S.playoffs.need?.[round] ?? (S.league === "el" && round > 0 ? 1 : 2);
+/** The higher seed's home games: 2-2-1-1-1 in a best of seven, 2-2-1 in a best of five, games 1 and 3 in a best of three. */
+const HIGH_HOME = { 4: [0, 1, 4, 6], 3: [0, 1, 4], 2: [0, 2], 1: [0] };
 const PO_NAMES = ["Quarter-finals", "Semi-finals", "Final"];
-const NBA_PO = ["NBA playoffs, first round", "NBA semi-finals", "NBA Finals"];
+const NBA_PO = ["NBA playoffs, first round", "NBA second round", "NBA semi-finals", "NBA Finals"];
 /** Play the next playoff game day (every series in the round plays one game). */
 export function playPlayoffDay(C) {
   const S = C.cur, P = S.playoffs;
   const rnd = seededRng(`mc-${C.seedBase}-${S.label}-po${P.round}-${P.series.reduce((a, s) => a + s.games.length, 0)}`);
   const ff = S.league === "el" && P.round > 0; // EuroLeague Final Four: one game, neutral court
-  const need = ff ? 1 : 2; // best of 3
+  const need = poNeed(S);
   const out = [];
   for (const s of P.series) {
     if (s.w[0] >= need || s.w[1] >= need) continue;
-    const homeA = s.games.length !== 1; // higher seed hosts games 1 and 3
+    const homeA = (HIGH_HOME[need] || HIGH_HOME[2]).includes(s.games.length);
     if (s.a === S.team || s.b === S.team) {
       const meA = s.a === S.team;
-      const g = playGame(C, S, meA ? s.b : s.a, meA ? homeA : !homeA, rnd, { big: true, neutral: ff, label: ff ? `Final Four ${P.round === 1 ? "semi-final" : "final"}` : `${S.league === "el" ? "EuroLeague playoffs" : S.league === "nba" ? NBA_PO[P.round] : PO_NAMES[P.round]}, game ${s.games.length + 1}` });
+      const g = playGame(C, S, meA ? s.b : s.a, meA ? homeA : !homeA, rnd, { gleague: S.league === "nba" && !!C.contract?.twoWay, big: true, neutral: ff, label: ff ? `Final Four ${P.round === 1 ? "semi-final" : "final"}` : `${S.league === "el" ? "EuroLeague playoffs" : S.league === "nba" ? NBA_PO[P.round] : PO_NAMES[P.round]}, game ${s.games.length + 1}` });
       S.games.push({ ...g, round: S.round, playoff: true });
       afterGame(C, g);
       s.games.push(g);
@@ -752,7 +765,7 @@ export function playPlayoffDay(C) {
     (P.history ||= []).push(P.series.map((s) => ({ a: s.a, b: s.b, w: s.w.slice() })));
     const winners = P.series.map((s) => (s.w[0] >= need ? s.a : s.b));
     if (!winners.includes(S.team) && !P.out) { P.out = true; P.outAt = P.round; }
-    if (P.round === 2) {
+    if (P.series.length === 1) {
       P.champion = winners[0];
       if (winners[0] === S.team) C.trophies.push({ type: S.league === "el" ? "euroleague" : S.league === "nba" ? "nba" : "title", season: S.label, team: S.team });
       S.phase = "done";
@@ -765,7 +778,7 @@ export function playPlayoffDay(C) {
   return out;
 }
 /** Skip to the end of the playoffs (used when you're already out). */
-export function simPlayoffs(C) { let guard = 0; while (C.cur.phase === "playoffs" && guard++ < 40) playPlayoffDay(C); }
+export function simPlayoffs(C) { let guard = 0; while (C.cur.phase === "playoffs" && guard++ < 60) playPlayoffDay(C); }
 
 /** End-of-season awards, compared with the real players of that season. */
 export function seasonAwards(C) {
@@ -815,6 +828,8 @@ function nbaAwards(C, S, reg, avg, standing) {
 }
 
 // ---------------------------------------------------------------- contracts & agents
+/** Two-way contract salary: a game estimate (about half an NBA minimum deal). */
+export const TWO_WAY_PAY = 580000;
 export const AGENTS = {
   rookie: { name: "Rookie agent", fee: 0.03, money: 0, accept: 0, extra: 0, desc: "Cheap, no extras." },
   shark: { name: "The Shark", fee: 0.1, money: 0.12, accept: -0.06, extra: 0, desc: "Squeezes more money; teams are warier." },
@@ -865,6 +880,11 @@ export function makeOffers(C, { homeGrown = null } = {}) {
   // training-camp deal from a weak team when you're close. NBA salaries are several times the Winner League's
   if (nbaReady()) {
     const ready = ov >= 90 || (ov >= 88 && C.nbaWatch);
+    // close but not there yet after a Summer League invite: a two-way contract from a weaker team
+    if (!ready && C.nbaWatch && ov >= 85) {
+      const t = nbaTeams(label).sort((a, b) => a.strength - b.strength)[Math.floor(Math.random() * 8)];
+      if (t) picks.push({ ...t, abroad: true, nba: true, twoWay: true, pay: 0 });
+    }
     if (ready) {
       const nba = nbaTeams(label).map((t) => ({ ...t, dc: depthChart(C, label, t.id) }));
       let fit = nba.filter((t) => t.dc.role !== "bench").sort(() => Math.random() - 0.5).slice(0, ov >= 94 ? 2 : 1);
@@ -874,22 +894,33 @@ export function makeOffers(C, { homeGrown = null } = {}) {
   }
   return picks.map((t) => {
     const loyal = (C.yearsAt[t.id] || 0) >= 3;
-    const v = value(C) * budget(t) * (0.85 + Math.random() * 0.25) * (1 + ag.money) * (homeGrown === t.id ? 0.8 : 1) * (loyal ? 0.95 : 1);
+    const v = t.twoWay ? TWO_WAY_PAY : value(C) * budget(t) * (0.85 + Math.random() * 0.25) * (1 + ag.money) * (homeGrown === t.id ? 0.8 : 1) * (loyal ? 0.95 : 1);
     const dc = depthChart(C, label, t.id);
-    return { team: t.id, name: t.name, salary: Math.round(v / 1000) * 1000, years: 1 + Math.floor(Math.random() * 3), role: dc.role,
+    const years = t.twoWay ? 2 : 1 + Math.floor(Math.random() * 3);
+    // an option on the last year of a longer deal: the player's (he can leave a year early) or the club's
+    const r = Math.random();
+    const option = years >= 2 && !t.twoWay ? (r < 0.25 ? "player" : r < 0.45 ? "team" : null) : null;
+    return { team: t.id, name: t.name, salary: Math.round(v / 1000) * 1000, years, option, twoWay: !!t.twoWay, role: t.twoWay ? "bench" : dc.role,
       homeGrown: homeGrown === t.id, loyal, own: C.contract?.team === t.id, foreigners: dc.foreigners, fam: dc.fam, rank: dc.rank, abroad: !!t.abroad, nba: !!t.nba || isNba(label, t.id) };
   });
 }
 /** Ask for more (salary +x, a better role). Returns accepted offer or null (offer withdrawn). */
-export function negotiate(C, offer, { more = 0, years = offer.years, role = offer.role }) {
+export function negotiate(C, offer, { more = 0, years = offer.years, role = offer.role, nbaOut = false }) {
   const ag = AGENTS[C.agent];
+  // an NBA-out clause: the club lets you leave for the NBA at no cost, and pays a little less for it
+  if (nbaOut) {
+    if (Math.random() > clamp(0.8 + ag.accept, 0.4, 0.95)) return null;
+    return { ...offer, salary: Math.round((offer.salary * 0.95) / 1000) * 1000, nbaOut: true };
+  }
   const roleUp = ["bench", "rotation", "starter"].indexOf(role) - ["bench", "rotation", "starter"].indexOf(offer.role);
   const p = clamp(0.95 - more * 1.7 - Math.max(0, roleUp) * 0.3 + ag.accept + (offer.loyal ? 0.1 + (C.agent === "loyal" ? 0.08 : 0) : 0) - Math.abs(years - offer.years) * 0.05, 0.05, 0.98);
   if (Math.random() > p) return null;
   return { ...offer, salary: Math.round((offer.salary * (1 + more)) / 1000) * 1000, years, role, promised: roleUp > 0 ? role : null };
 }
 export function sign(C, offer) {
-  C.contract = { team: offer.team, salary: offer.salary, years: offer.years, left: offer.years, role: offer.role, promised: offer.promised || null };
+  C.contract = { team: offer.team, salary: offer.salary, years: offer.years, left: offer.years, role: offer.role, promised: offer.promised || null,
+    option: offer.option || null, nbaOut: !!offer.nbaOut, twoWay: !!offer.twoWay, rookie: offer.rookie || null };
+  C.optionPending = false;
   C.club = offer.team;
   C.trustBy ??= {};
   if (offer.promised) C.trustBy[offer.team] = Math.max(C.trustBy[offer.team] ?? 50, offer.promised === "starter" ? 62 : 52);
@@ -916,7 +947,10 @@ export function endSeason(C) {
     po: averages(S.games.filter((g) => g.playoff)), income, attrs: { ...C.attrs }, league: S.league || "wl",
     euro: S.el ? { rank: euroTable(S.el).findIndex((t) => t.id === club) + 1, of: S.el.teams.length, f4: !!S.el.f4?.teams.includes(club), champion: S.el.champion === club, avg: averages(S.games.filter((g) => g.eu)) } : null,
   };
-  if (S.league === "nba") summary.playoffs = !S.playoffs ? null : title ? "NBA champions" : S.playoffs.outAt === -1 ? "Missed the playoffs" : S.playoffs.outAt === 0 ? "Out in the first round" : S.playoffs.outAt === 1 ? "Lost in the NBA semi-finals" : "Lost in the NBA Finals";
+  if (S.league === "nba") { // four rounds now (three in older saves)
+    const last = (S.playoffs?.need?.length ?? 3) - 1, o = S.playoffs?.outAt;
+    summary.playoffs = !S.playoffs ? null : title ? "NBA champions" : o === -1 ? "Missed the playoffs" : o === last ? "Lost in the NBA Finals" : o === last - 1 ? "Lost in the NBA semi-finals" : o === 0 ? "Out in the first round" : "Out in the second round";
+  }
   // NBA scouts: a strong season in Europe brings a Summer League invite, and NBA offers come sooner
   if (S.league !== "nba" && !C.nbaWatch && nbaReady() && bestOverall(C) >= 86 && C.age <= 28) {
     C.nbaWatch = S.label;
@@ -929,6 +963,13 @@ export function endSeason(C) {
   const dev = seasonDevelopment(C, S, { potential: (DIFFICULTY[C.diff] || DIFFICULTY.star).potential });
   summary.dev = { ch: dev.ch, breakout: dev.breakout, slump: dev.slump };
   if (C.contract) C.contract.left--;
+  if (C.contract?.left === 1 && C.contract.option === "team") { // the club decides on its option year
+    const keep = depthChart(C, seasonLabel(C.debut, C.seasonNo + 1), C.contract.team).role !== "bench" && value(C) * 1.2 >= C.contract.salary * (isNba(seasonLabel(C.debut, C.seasonNo + 1), C.contract.team) ? 0.25 : 1);
+    summary.option = { type: "team", kept: keep };
+    if (!keep) C.contract.left = 0;
+    C.log.unshift({ t: "contract", text: keep ? `${teamName(C.contract.team)} picked up the team option: one more season.` : `${teamName(C.contract.team)} declined the team option. ${C.name} is a free agent.` });
+    C.contract.option = null;
+  } else if (C.contract?.left === 1 && C.contract.option === "player") C.optionPending = true; // you decide in the summer
   if (C.loan) C.loan = null;
   C.seasonNo++;
   C.cur = null;

@@ -91,6 +91,7 @@ export function trackGame(C, line, { injured = false, gs = 0 } = {}) {
   const d = (C.cur.dev ||= newSeasonLog());
   if (injured) { d.missed++; return; }
   if (line.rested) { d.rested = (d.rested || 0) + 1; return; }
+  if (line.gleague) { d.gleague = (d.gleague || 0) + 1; return; } // two-way assignment: not simulated here
   if (line.dnp) { d.dnp++; return; }
   d.gp++; d.min += line.min; d.gs += gs;
   d.tpa += line.tpa || 0; d.fga2 += (line.fga || 0) - (line.tpa || 0); d.fta += line.fta || 0;
