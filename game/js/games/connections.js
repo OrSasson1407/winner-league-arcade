@@ -1,5 +1,5 @@
 // Connections: 16 players, four hidden groups of four (a club, a team-season, a stat, a birth year…).
-// Pick four that belong together. Four mistakes allowed. Daily puzzle (same for everyone) or Unlimited.
+// Pick four that belong together. Four mistakes allowed (or ten, if the player chooses). Daily puzzle (same for everyone) or Unlimited.
 import { LEAGUE, playersById, seededRng, shuffle } from "../data.js";
 import { esc, html, localDate, store, toast, track } from "../ui.js";
 import { icon } from "../lib/icons.js";
@@ -12,7 +12,7 @@ import { makeConnections } from "../shared/leagueFacts.js";
 import { recordAnswer } from "../lib/knowledge.js";
 import { arrowGrid, gameKeys, press } from "../lib/shortcuts.js";
 
-const MISTAKES = 4;
+const LIVES = [4, 10]; // mistakes allowed: the classic four, or a relaxed ten
 const LEVEL_NAMES = ["Easiest", "Medium", "Hard", "Trickiest"];
 const EMOJI = ["🟨", "🟩", "🟦", "🟪"];
 const STATS_KEY = "conn:stats";
@@ -23,6 +23,8 @@ const MAX_HINTS = 2; // each one costs a mistake
 export function renderConnections(root, signal, params, query = {}) {
   let mode = ["daily", "free"].includes(query.mode) ? query.mode : store.get("conn:mode", "daily");
   let diff = DIFFS[store.get("conn:level", "normal")] ? store.get("conn:level", "normal") : "normal";
+  let lives = LIVES.includes(store.get("conn:lives", 4)) ? store.get("conn:lives", 4) : 4;
+  const MAXM = () => S?.max || 4; // this puzzle's allowance (games saved before the option had four)
   let puzzle, S;
 
   function load(fresh = false) {
@@ -33,7 +35,7 @@ export function renderConnections(root, signal, params, query = {}) {
     else {
       const rnd = mode === "daily" ? seededRng("connections-" + localDate()) : Math.random;
       puzzle = makeConnections(rnd, { level: mode === "daily" ? "normal" : diff });
-      S = { order: shuffle(puzzle.flatMap((g) => g.players), rnd), selected: [], solved: [], mistakes: 0, guesses: [], over: false, won: false, hints: [], level: mode === "daily" ? "normal" : diff };
+      S = { order: shuffle(puzzle.flatMap((g) => g.players), rnd), selected: [], solved: [], mistakes: 0, guesses: [], over: false, won: false, hints: [], level: mode === "daily" ? "normal" : diff, max: lives };
       track("connections");
     }
     draw();
@@ -62,9 +64,9 @@ export function renderConnections(root, signal, params, query = {}) {
       sound.play("bad");
       const msg = best === 3 ? "One away…" : "Not a group";
       toast(msg);
-      announce(`${msg}. ${MISTAKES - S.mistakes} mistakes left.`);
+      announce(`${msg}. ${MAXM() - S.mistakes} mistakes left.`);
       root.querySelector(".cn-board")?.classList.add("shake");
-      if (S.mistakes >= MISTAKES) finish(false);
+      if (S.mistakes >= MAXM()) finish(false);
     }
     save();
     draw();
@@ -73,7 +75,7 @@ export function renderConnections(root, signal, params, query = {}) {
   /** A hint (costs a mistake): first the topic of the easiest group still hidden, then one of its players. */
   function hint() {
     S.hints ||= [];
-    if (S.over || S.hints.length >= MAX_HINTS || S.mistakes >= MISTAKES - 1) return;
+    if (S.over || S.hints.length >= MAX_HINTS || S.mistakes >= MAXM() - 1) return;
     const g = puzzle.find((x) => !S.solved.includes(x.level));
     if (!g) return;
     const told = S.hints.find((h) => h.level === g.level && h.type === "topic");
@@ -103,7 +105,7 @@ export function renderConnections(root, signal, params, query = {}) {
 
   function shareText() {
     const rows = S.guesses.map((g) => g.map((p) => EMOJI[groupOf(p).level]).join(""));
-    const extra = [mode === "free" && S.level !== "normal" ? DIFFS[S.level] : "", S.hints?.length ? `💡×${S.hints.length}` : ""].filter(Boolean).join(" · ");
+    const extra = [mode === "free" && S.level !== "normal" ? DIFFS[S.level] : "", MAXM() !== 4 ? `${MAXM()} mistakes allowed` : "", S.hints?.length ? `💡×${S.hints.length}` : ""].filter(Boolean).join(" · ");
     return `Winner League Arcade · Connections${mode === "daily" ? ` ${localDate()}` : ""}${extra ? ` · ${extra}` : ""}\n${rows.join("\n")}`;
   }
 
@@ -111,10 +113,11 @@ export function renderConnections(root, signal, params, query = {}) {
     const st = store.get(STATS_KEY, { played: 0, wins: 0, streak: 0, best: 0, perfect: 0 });
     root.innerHTML = html`
       <div class="game-head"><div><a class="back" href="#/">← Home</a><h1>Connections</h1>
-        <p>${LEAGUE === "el" ? "Find four groups of four players who share something: a club, a team-season, a long career… Every player fits exactly one group." : "Find four groups of four players who share something: a club, a team-season, a stat, a birth year… Every player fits exactly one group."}</p></div>
+        <p>${LEAGUE === "el" ? "Find four groups of four players who share something: a club, a team-season, a long career… Every player fits exactly one group." : "Find four groups of four players who share something: a club, a team-season, a stat, a position… Every player fits exactly one group."}</p></div>
         <div class="row"><div class="seg" id="mode" role="radiogroup" aria-label="Puzzle">
           <button role="radio" data-m="daily" aria-checked="${mode === "daily"}" class="${mode === "daily" ? "on" : ""}">Daily</button>
           <button role="radio" data-m="free" aria-checked="${mode === "free"}" class="${mode === "free" ? "on" : ""}">Unlimited</button></div>
+          <div class="seg sm" id="lives" role="radiogroup" aria-label="Mistakes allowed" title="Mistakes allowed (a puzzle you've started keeps its number)">${LIVES.map((n) => `<button role="radio" data-l="${n}" aria-checked="${lives === n}" class="${lives === n ? "on" : ""}">${n} mistakes</button>`).join("")}</div>
           ${mode === "free" ? `<div class="seg sm" id="diff" role="radiogroup" aria-label="Difficulty">${Object.entries(DIFFS).map(([k, l]) => `<button role="radio" data-d="${k}" aria-checked="${diff === k}" class="${diff === k ? "on" : ""}">${l}</button>`).join("")}</div>` : ""}</div>
       </div>
       <div class="cn-wrap">
@@ -127,12 +130,12 @@ export function renderConnections(root, signal, params, query = {}) {
           return `<button class="cn-tile ${on ? "on" : ""} ${hinted ? `hinted lv${groupOf(p).level}` : ""}" data-p="${p}" aria-pressed="${on}" ${S.over ? "disabled" : ""}>${esc(name(p))}${hinted ? ` <span class="sr-only">(hint)</span>` : ""}</button>`;
         }).join("")}</div>` : ""}
         <div class="cn-bar">
-          <span class="cn-mistakes" role="img" aria-label="${MISTAKES - S.mistakes} mistakes left">Mistakes left ${Array.from({ length: MISTAKES }, (_, i) => `<i class="${i < MISTAKES - S.mistakes ? "" : "used"}"></i>`).join("")}</span>
+          <span class="cn-mistakes" role="img" aria-label="${MAXM() - S.mistakes} mistakes left">Mistakes left ${Array.from({ length: MAXM() }, (_, i) => `<i class="${i < MAXM() - S.mistakes ? "" : "used"}"></i>`).join("")}</span>
           ${S.over ? html`<span class="spacer"></span>
             <button class="btn" id="share">${icon("link", { size: 15 })} Copy result</button>
             ${mode === "free" ? `<button class="btn primary" id="again">${icon("refresh", { size: 15 })} New puzzle</button>` : `<span class="muted">New daily puzzle tomorrow · try Unlimited</span>`}`
           : html`<span class="spacer"></span>
-            <button class="btn ghost" id="hint" ${(S.hints?.length || 0) >= MAX_HINTS || S.mistakes >= MISTAKES - 1 ? "disabled" : ""} title="The topic of the easiest group still hidden, then one of its players. Each hint costs a mistake.">${icon("bulb", { size: 15 })} Hint <small>(${MAX_HINTS - (S.hints?.length || 0)} left · costs a mistake)</small></button>
+            <button class="btn ghost" id="hint" ${(S.hints?.length || 0) >= MAX_HINTS || S.mistakes >= MAXM() - 1 ? "disabled" : ""} title="The topic of the easiest group still hidden, then one of its players. Each hint costs a mistake.">${icon("bulb", { size: 15 })} Hint <small>(${MAX_HINTS - (S.hints?.length || 0)} left · costs a mistake)</small></button>
             <button class="btn ghost" id="shuffle">${icon("refresh", { size: 15 })} Shuffle</button>
             <button class="btn ghost" id="clear" ${S.selected.length ? "" : "disabled"}>Deselect</button>
             <button class="btn primary" id="submit" ${S.selected.length === 4 ? "" : "disabled"}>${icon("check", { size: 15 })} Submit</button>`}
@@ -141,6 +144,14 @@ export function renderConnections(root, signal, params, query = {}) {
           <pre class="cn-share" aria-label="Your guesses">${S.guesses.map((g) => g.map((p) => EMOJI[groupOf(p).level]).join("")).join("\n")}</pre></div>` : ""}
         <p class="muted cn-legend">${EMOJI.map((e, i) => `${e} ${LEVEL_NAMES[i]}`).join(" · ")} · Played ${st.played} · Won ${st.wins} · Streak ${st.streak} · Perfect ${st.perfect}</p>
       </div>`;
+    root.querySelector("#lives")?.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-l]"); if (!b || Number(b.dataset.l) === lives) return;
+      lives = Number(b.dataset.l); store.set("conn:lives", lives);
+      // a puzzle not started yet takes it now; one in progress keeps its number (the next one gets the new choice)
+      if (!S.over && !S.guesses.length && !S.hints?.length) { S.max = lives; save(); }
+      else toast(`${lives} mistakes from the next puzzle`);
+      draw();
+    }, { signal });
     root.querySelector("#diff")?.addEventListener("click", (e) => { const b = e.target.closest("[data-d]"); if (b && b.dataset.d !== diff) { diff = b.dataset.d; store.set("conn:level", diff); load(true); } }, { signal });
     root.querySelector("#hint")?.addEventListener("click", hint, { signal });
     root.querySelector("#mode").addEventListener("click", (e) => { const b = e.target.closest("[data-m]"); if (b && b.dataset.m !== mode) { mode = b.dataset.m; load(); } }, { signal });

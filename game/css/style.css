@@ -1544,7 +1544,7 @@ dialog.confirm-modal p { margin: 8px 0 0; line-height: 1.5; }
 .cn-tile:hover:not([disabled]) { transform: translateY(-2px); border-color: var(--accent); }
 .cn-tile.on { background: var(--text); color: var(--bg); border-color: var(--text); transform: scale(.97); }
 .cn-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.cn-mistakes { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); font-weight: 700; }
+.cn-mistakes { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); font-weight: 700; }
 .cn-mistakes i { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
 .cn-mistakes i.used { background: var(--bg2); border: 1px solid var(--line); }
 .cn-end { display: grid; gap: 6px; justify-items: center; text-align: center; }

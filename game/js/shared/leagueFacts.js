@@ -102,11 +102,11 @@ export function makeLeagueFacts(D) {
 
   // ---------------------------------------------------------------- Connections categories
   // kind sets the difficulty colour order (easiest first)
-  const KIND_ORDER = LEAGUE === "el" ? ["club", "teamseason", "career", "twoclubs", "seasons"] : ["club", "nat", "teamseason", "stat", "career", "height", "twoclubs", "born", "jersey"];
+  const KIND_ORDER = LEAGUE === "el" ? ["club", "teamseason", "career", "twoclubs", "seasons"] : ["club", "nat", "pos", "teamseason", "stat", "career", "height", "twoclubs"];
   const CLUBISH = ["club", "teamseason", "twoclubs"]; // groups built on clubs (at most two of them in a board)
   // what each difficulty uses: easy boards stick to clear groups and well-known players
   const LEVELS = {
-    easy: { kinds: ["club", "nat", "stat", "career", "height", "seasons"], minGames: LEAGUE === "el" ? 150 : 120, traps: 0 },
+    easy: { kinds: ["club", "nat", "pos", "stat", "career", "height", "seasons"], minGames: LEAGUE === "el" ? 150 : 120, traps: 0 },
     normal: { kinds: KIND_ORDER, minGames: 30, traps: 0 },
     expert: { kinds: KIND_ORDER, minGames: 10, traps: 3 },
   };
@@ -126,6 +126,7 @@ export function makeLeagueFacts(D) {
     // career milestones
     if (LEAGUE !== "el") add("career", "300+ games", F.filter((f) => f.games >= 300));
     add("career", "Played for 5+ clubs", F.filter((f) => f.clubs.size >= 5));
+    add("career", LEAGUE === "wl" ? "One-club player: 5+ seasons in the league, all with one club" : "One-club player: 5+ seasons, all with one club", F.filter((f) => f.clubs.size === 1 && f.seasons >= 5));
     if (LEAGUE !== "el") add("stat", "40%+ from three in a season (8+ PPG)", F.filter((f) => f.tp >= 40));
     for (const n of new Set(F.flatMap((f) => [...f.nats]))) if (n !== "Israel" && n !== "United States") add("nat", `From ${n}`, F.filter((f) => f.nats.has(n)));
     const ts = new Map();
@@ -134,11 +135,11 @@ export function makeLeagueFacts(D) {
     add("stat", "20+ PPG in a season", F.filter((f) => f.ppg >= 20));
     add("stat", "10+ RPG in a season", F.filter((f) => f.rpg >= 10));
     add("stat", "7+ APG in a season", F.filter((f) => f.apg >= 7));
-    add(LEAGUE === "el" ? "seasons" : "stat", `10+ seasons${IN_LEAGUE}`, F.filter((f) => f.seasons >= 10));
+    if (LEAGUE === "el") add("seasons", "10+ seasons", F.filter((f) => f.seasons >= 10)); // the EuroLeague has few kinds of group: kept there
+    add("pos", "Point guards", F.filter((f) => f.pos === "PG"));
+    add("pos", "Centers", F.filter((f) => f.pos === "C"));
     add("height", "2.10 m or taller", F.filter((f) => (f.height ?? 0) >= 210));
     add("height", "1.83 m or shorter", F.filter((f) => f.height != null && f.height <= 183));
-    for (const y of new Set(F.map((f) => f.born).filter(Boolean))) add("born", `Born in ${y}`, F.filter((f) => f.born === y));
-    for (const j of new Set(F.map((f) => f.jersey).filter((x) => x != null))) add("jersey", `Most often wore #${j}`, F.filter((f) => f.jersey === j));
     return cats;
   }
   let _cats = null;
